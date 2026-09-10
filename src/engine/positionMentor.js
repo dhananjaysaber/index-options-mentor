@@ -6,9 +6,14 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
   const rMultiple = movePoints / riskPoints;
 
   const plannedRR = Math.max(1, Number(position.rr || 1));
-  const currentScore = Number(snapshot?.decision?.score ?? position.score ?? 0);
-  const entryScore = Number(position.score ?? currentScore);
-  const scoreDrop = Math.max(0, entryScore - currentScore);
+  const entryScore = Number(position.score ?? 0);
+  const directionalSnapshotReady = Boolean(snapshot?.decision?.side);
+  // When the live engine has no CE/PE bias, several directional checks are not
+  // assessable. Do not treat their placeholder values as a real confluence crash.
+  const currentScore = directionalSnapshotReady
+    ? Number(snapshot?.decision?.score ?? entryScore)
+    : entryScore;
+  const scoreDrop = directionalSnapshotReady ? Math.max(0, entryScore - currentScore) : 0;
 
   const stopHit = position.side === 'CE'
     ? currentUnderlying <= position.underlyingStop
@@ -24,8 +29,8 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
 
   const params = Array.isArray(snapshot?.parameters) ? snapshot.parameters : [];
   const regime = params.find(row => row.id === 'chop');
-  const trend = params.find(row => row.id === 'trend');
-  const vwap = params.find(row => row.id === 'vwap');
+  const trend = directionalSnapshotReady ? params.find(row => row.id === 'trend') : null;
+  const vwap = directionalSnapshotReady ? params.find(row => row.id === 'vwap') : null;
   const coreRows = [regime, trend, vwap].filter(Boolean);
   const coreGateFails = coreRows.filter(row => row.mandatory && !row.gatePassed).length;
   const coreRed = coreRows.filter(row => row.status === 'red').length;
