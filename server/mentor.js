@@ -90,8 +90,17 @@ export function marketPhase(now = new Date(), latestSessionDate = null) {
   if (!businessDay) return { phase: 'CLOSED', today, minute };
   if (minute < 9 * 60 + 15) return { phase: 'PREMARKET', today, minute };
   if (minute >= 15 * 60 + 30) return { phase: 'CLOSED', today, minute };
-  if (latestSessionDate !== today) return { phase: 'CLOSED', today, minute };
+
+  // From 09:15-09:30 the opening range is forming even if FYERS has not yet
+  // published the first completed 5-minute candle. Do not mislabel this window
+  // as CLOSED simply because the latest completed candle is still yesterday's.
   if (minute < 9 * 60 + 30) return { phase: 'OPENING_RANGE', today, minute };
+
+  // After 09:30 we require at least one completed candle from today's session.
+  // If FYERS history is momentarily delayed, stay locked rather than reusing a
+  // previous-session analysis as if it were live.
+  if (latestSessionDate !== today) return { phase: 'DATA_PENDING', today, minute };
+
   return { phase: 'LIVE', today, minute };
 }
 
@@ -544,13 +553,123 @@ export async function buildMentorSnapshot({ quoteResponse, historyResponse, chai
   const sessions = groupSessions(allCandles);
   if (!sessions.length) throw new Error('No regular-session 5-minute candles were returned.');
 
-  const current = sessions.at(-1);
-  const previous = sessions.length > 1 ? sessions.at(-2) : null;
+  const today = dateKeyIST(now);
+  const latestSession = sessions.at(-1);
+  const clockPhase = marketPhase(now, latestSession?.date || null);
+  const todaySession = sessions.find(session => session.date === today) || null;
+  const priorSessions = sessions.filter(session => session.date < today);
+  const priorSession = priorSessions.at(-1) || null;
+  const quoteNode = quoteResponse?.d?.[0]?.v;
+  const fallbackClose = latestSession?.rows?.at(-1)?.close || 0;
+  const spot = Number(quoteNode?.lp || fallbackClose || 0);
+
+  // Before the first three completed 5-minute candles are available, do not
+  // calculate a live score from yesterday's candles mixed with today's quote.
+  // We only expose today's live spot plus genuine prior-day reference levels.
+  if (clockPhase.phase === 'PREMARKET' || clockPhase.phase === 'OPENING_RANGE' || clockPhase.phase === 'DATA_PENDING') {
+    const todayRows = todaySession?.rows || [];
+    const opening = todayRows.slice(0, 3);
+    const latestToday = todayRows.at(-1) || null;
+    const priorHigh = priorSession ? Math.max(...priorSession.rows.map(c => c.high)) : null;
+    const priorLow = priorSession ? Math.min(...priorSession.rows.map(c => c.low)) : null;
+    const openingHigh = opening.length ? Math.max(...opening.map(c => c.high)) : null;
+    const openingLow = opening.length ? Math.min(...opening.map(c => c.low)) : null;
+    const currentVwap = todayRows.length ? sessionVWAP(todayRows) : null;
+    const currentAtr = todayRows.length ? atr(todayRows, 14) : null;
+    const phase = clockPhase.phase;
+    const headline = phase === 'PREMARKET'
+      ? 'Pre-market — no trade'
+      : phase === 'OPENING_RANGE'
+        ? 'Opening range forming — wait'
+        : 'Live data pending — trading locked';
+    const reason = phase === 'PREMARKET'
+      ? 'The regular session has not opened yet.'
+      : phase === 'OPENING_RANGE'
+        ? `Opening range is forming (${opening.length}/3 completed 5-minute candles).`
+        : 'FYERS has not yet returned a completed candle from today. The mentor will not reuse yesterday’s setup as a live signal.';
+
+    return {
+      ok: true,
+      live: false,
+      generatedAt: new Date().toISOString(),
+      market: {
+        phase,
+        sessionDate: today,
+        lastCandleTime: latestToday?.hm || null,
+        lastCompleteClose: latestToday ? round(latestToday.close, 2) : null,
+        spot: round(spot, 2),
+        change: round(Number(quoteNode?.ch || 0), 2),
+        changePct: round(Number(quoteNode?.chp || 0), 2),
+        vwap: currentVwap != null ? round(currentVwap, 2) : null,
+        atr5: currentAtr != null ? round(currentAtr, 2) : null,
+        orh: openingHigh != null ? round(openingHigh, 2) : null,
+        orl: openingLow != null ? round(openingLow, 2) : null,
+        pdh: priorHigh != null ? round(priorHigh, 2) : null,
+        pdl: priorLow != null ? round(priorLow, 2) : null,
+        vix: round(Number(chainResponse?.data?.indiavixData?.ltp || chainResponse?.indiavixData?.ltp || 0), 2),
+        vixChangePct: round(Number(chainResponse?.data?.indiavixData?.ltpchp || chainResponse?.indiavixData?.ltpchp || 0), 2),
+        putCallOiRatio: round(
+          Number(chainResponse?.data?.putOi || chainResponse?.putOi || 0) /
+          Math.max(1, Number(chainResponse?.data?.callOi || chainResponse?.callOi || 0)),
+          2
+        )
+      },
+      decision: {
+        state: phase,
+        headline,
+        tone: 'yellow',
+        reviewState: phase,
+        reviewHeadline: headline,
+        reviewTone: 'yellow',
+        stage: phase,
+        side: null,
+        score: null,
+        rr: 0,
+        availableRR: 0,
+        canSuggestTrade: false,
+        reasons: [reason]
+      },
+      parameters: [],
+      structure: {
+        breakoutDetected: false,
+        closeConfirmed: false,
+        spotBeyondTrigger: false,
+        trigger: null,
+        retestFound: false,
+        retestFailed: false,
+        underlyingStop: null,
+        underlyingTarget: null,
+        riskPoints: 0,
+        roomPoints: 0
+      },
+      setup: {
+        openingRangeReady: opening.length >= 3,
+        biasReady: false,
+        mandatoryReady: false,
+        breakoutDetected: false,
+        closeConfirmed: false,
+        retestStatus: 'NOT_STARTED',
+        approvalReady: false,
+        currentStage: phase,
+        reviewStage: phase
+      },
+      option: null,
+      diagnostics: {
+        rawCandleCount: Array.isArray(historyResponse?.candles) ? historyResponse.candles.length : 0,
+        cleanedCandleCount: allCandles.length,
+        currentSessionCandles: todayRows.length,
+        duplicateOrPreopenRowsRemoved: Math.max(0, (historyResponse?.candles?.length || 0) - allCandles.length),
+        lotSizeSource: 'Not requested while entry is locked'
+      }
+    };
+  }
+
+  const current = clockPhase.phase === 'LIVE' ? todaySession : latestSession;
+  const currentIndex = sessions.findIndex(session => session.date === current.date);
+  const previous = currentIndex > 0 ? sessions[currentIndex - 1] : null;
   const rows = current.rows;
 
   const latest = rows.at(-1);
-  const quoteNode = quoteResponse?.d?.[0]?.v;
-  const spot = Number(quoteNode?.lp || latest?.close || 0);
 
   const vwapValue = sessionVWAP(rows);
   const atrValue = atr(rows, 14);
