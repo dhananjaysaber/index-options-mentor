@@ -11,25 +11,29 @@ export default function History({ history }) {
 
       {history.length === 0 ? (
         <div className="empty-state">
-          <p>No simulated trades yet. Completed trades are stored in this browser for review.</p>
+          <p>No simulated trades are saved in this browser profile yet.</p>
+          <p className="history-storage-note">Trade history is stored locally on this browser/profile. Private browsing, another browser, another device, or cleared site data uses a separate history.</p>
         </div>
       ) : (
-        <div className="history-list">
-          {history.map(trade => (
-            <div className="history-row history-row-v06" key={trade.id}>
-              <div className="history-main">
-                <strong>{trade.side} · {trade.symbol}</strong>
-                <span>{new Date(trade.closedAt).toLocaleString('en-IN')}</span>
+        <>
+          <div className="history-list">
+            {history.map(trade => (
+              <div className="history-row history-row-v06" key={trade.id}>
+                <div className="history-main">
+                  <strong>{trade.side} · {trade.symbol}</strong>
+                  <span>{new Date(trade.closedAt).toLocaleString('en-IN')}</span>
+                </div>
+                <div><span>Score</span><strong>{trade.score ?? '—'}</strong></div>
+                <div><span>Entry</span><strong>₹{Number(trade.entry).toFixed(2)}</strong></div>
+                <div><span>Exit</span><strong>₹{Number(trade.exit).toFixed(2)}</strong></div>
+                <div><span>R</span><strong className={Number(trade.rAchieved) >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatR(trade.rAchieved)}</strong></div>
+                <div><span>P&amp;L</span><strong className={trade.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>₹{Number(trade.pnl).toFixed(0)}</strong></div>
+                <div className="history-reason"><span>Exit reason</span><strong>{humanReason(trade.exitReasonCode)}</strong></div>
               </div>
-              <div><span>Score</span><strong>{trade.score ?? '—'}</strong></div>
-              <div><span>Entry</span><strong>₹{Number(trade.entry).toFixed(2)}</strong></div>
-              <div><span>Exit</span><strong>₹{Number(trade.exit).toFixed(2)}</strong></div>
-              <div><span>R</span><strong className={Number(trade.rAchieved) >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatR(trade.rAchieved)}</strong></div>
-              <div><span>P&amp;L</span><strong className={trade.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>₹{Number(trade.pnl).toFixed(0)}</strong></div>
-              <div className="history-reason"><span>Exit reason</span><strong>{humanReason(trade.exitReasonCode)}</strong></div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          <p className="history-storage-note">Saved on this browser/profile only. Private browsing and other devices keep separate simulated histories.</p>
+        </>
       )}
     </section>
   );
