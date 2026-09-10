@@ -5,6 +5,7 @@ import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import './styles.css';
 import './pwa.css';
 import './mobile-fixes.css';
+import './dark-theme-fixes.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
