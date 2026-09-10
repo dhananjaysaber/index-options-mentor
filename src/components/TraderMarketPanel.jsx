@@ -4,7 +4,7 @@ function fmt(value) {
 
 export default function TraderMarketPanel({ snapshot }) {
   if (!snapshot) return null;
-  const { market, decision } = snapshot;
+  const { market, decision, parameters = [] } = snapshot;
 
   const metrics = [
     ['VWAP', market.vwap],
@@ -16,6 +16,8 @@ export default function TraderMarketPanel({ snapshot }) {
     ['India VIX', market.vix],
     ['OI PCR', market.putCallOiRatio]
   ];
+
+  const reasons = simpleReasons({ market, decision, parameters });
 
   return (
     <section className="panel trader-market-panel">
@@ -37,13 +39,29 @@ export default function TraderMarketPanel({ snapshot }) {
       </div>
 
       <div className="mentor-reasoning">
-        <div className="mentor-reasoning-title">Why now</div>
+        <div className="mentor-reasoning-title">Mentor view</div>
         <div className="mentor-reasoning-list">
-          {(decision.reasons || []).slice(0, 3).map((reason, index) => (
+          {reasons.slice(0, 3).map((reason, index) => (
             <span key={index}>{reason}</span>
           ))}
         </div>
       </div>
     </section>
   );
+}
+
+function simpleReasons({ market, decision, parameters }) {
+  if (market.phase === 'LIVE' && !decision.side) {
+    const regime = parameters.find(row => row.id === 'chop');
+    const notes = ['I do not have a clear CE or PE direction yet.'];
+    if (regime && Number(regime.value) < 0.58) notes.push('Price action is choppy, so I am protecting capital instead of forcing a trade.');
+    notes.push('I am waiting for trend and VWAP to agree before I choose an option.');
+    return notes;
+  }
+
+  if (decision.state === 'RETEST_FAILED') {
+    return ['The latest breakout failed its retest.', 'That setup is cancelled.', 'I am waiting for a completely fresh breakout and retest sequence.'];
+  }
+
+  return decision.reasons || [];
 }
