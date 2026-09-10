@@ -1,0 +1,10 @@
+@media (max-width: 560px) {
+  /* Keep the FYERS OAuth action readable on narrow screens. */
+  .topbar-actions a.secondary-btn {
+    font-size: 10px !important;
+  }
+
+  .topbar-actions a.secondary-btn::after {
+    content: none !important;
+  }
+}
