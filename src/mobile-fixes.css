@@ -19,6 +19,18 @@
   .topbar-actions .refresh-btn > span:last-child {
     font-size: 10px !important;
   }
+
+  .topbar-actions .theme-toggle {
+    display: inline-flex !important;
+    width: 40px;
+    min-width: 40px;
+    padding: 0 !important;
+    font-size: 10px !important;
+  }
+
+  .topbar-actions .theme-toggle::after {
+    content: none !important;
+  }
 }
 
 /* Direction-dependent checks wait for a real CE/PE bias instead of showing
@@ -106,6 +118,25 @@
   border-top-color: #fff;
   border-radius: 50%;
   animation: mentorSpin .75s linear infinite;
+}
+
+.theme-toggle {
+  width: 40px;
+  min-width: 40px;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle svg {
+  display: block;
+}
+
+.theme-toggle.active {
+  border-color: rgba(125,211,252,.34) !important;
+  background: rgba(56,189,248,.13) !important;
+  color: #bae6fd !important;
 }
 
 /* Always-visible mentor strip. It explains the current market in plain language. */
@@ -239,6 +270,205 @@
   color: #c8d5e5;
   font-size: 9px;
   font-weight: 720;
+}
+
+/* Dark theme: preserve the same signal colours while reducing glare. */
+html[data-theme="dark"] {
+  color-scheme: dark;
+  background: #070d18;
+}
+
+html[data-theme="dark"] body {
+  color: #e7edf6;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(37,99,235,.17), transparent 30%),
+    radial-gradient(circle at 94% 4%, rgba(14,165,233,.12), transparent 28%),
+    linear-gradient(180deg, #0b1220 0%, #0c1422 50%, #09111d 100%);
+}
+
+html[data-theme="dark"] .topbar {
+  border-bottom-color: rgba(148,163,184,.13);
+  background: linear-gradient(135deg, rgba(5,10,20,.99), rgba(12,24,42,.98));
+  box-shadow: 0 10px 30px rgba(0,0,0,.30);
+}
+
+html[data-theme="dark"] .trader-toolbar,
+html[data-theme="dark"] .mentor-workflow,
+html[data-theme="dark"] .quick-checklist,
+html[data-theme="dark"] .panel,
+html[data-theme="dark"] .trade-focus-card,
+html[data-theme="dark"] .decision-banner {
+  border-color: #233249 !important;
+  background: rgba(15,24,39,.94) !important;
+  color: #e5edf7;
+  box-shadow: 0 10px 30px rgba(0,0,0,.20);
+}
+
+html[data-theme="dark"] .decision-banner-main h1,
+html[data-theme="dark"] .panel-heading h2,
+html[data-theme="dark"] .position-empty-left h2,
+html[data-theme="dark"] .position-live-head h2,
+html[data-theme="dark"] .trade-focus-head h2,
+html[data-theme="dark"] .trade-focus-card strong,
+html[data-theme="dark"] .panel strong,
+html[data-theme="dark"] .workflow-step strong,
+html[data-theme="dark"] .quick-chip,
+html[data-theme="dark"] .loss-lock strong,
+html[data-theme="dark"] .toolbar-live strong {
+  color: #eef4fb;
+}
+
+html[data-theme="dark"] .decision-banner-main p,
+html[data-theme="dark"] .muted,
+html[data-theme="dark"] .panel p,
+html[data-theme="dark"] .mentor-reasoning-list span,
+html[data-theme="dark"] .position-guidance,
+html[data-theme="dark"] .premium-guide small {
+  color: #9badc2 !important;
+}
+
+html[data-theme="dark"] .segmented {
+  background: #111c2d;
+  border-color: #26364d;
+}
+
+html[data-theme="dark"] .segmented button {
+  color: #9fb0c5;
+}
+
+html[data-theme="dark"] .toolbar-input input {
+  color: #eef4fb;
+  border-color: #2c3d55;
+  background: #0c1625;
+}
+
+html[data-theme="dark"] .hero-metric,
+html[data-theme="dark"] .hero-score,
+html[data-theme="dark"] .hero-gate,
+html[data-theme="dark"] .hero-confirm,
+html[data-theme="dark"] .market-metric,
+html[data-theme="dark"] .trade-plan-grid > div,
+html[data-theme="dark"] .option-health-row > div,
+html[data-theme="dark"] .position-live-grid > div,
+html[data-theme="dark"] .position-r-strip > div,
+html[data-theme="dark"] .session-stat-row > div,
+html[data-theme="dark"] .premium-guide,
+html[data-theme="dark"] .next-checkpoint {
+  border-color: #293950 !important;
+  background: linear-gradient(180deg, #111d2e, #0c1726) !important;
+  color: #e8eef7;
+}
+
+html[data-theme="dark"] .workflow-step,
+html[data-theme="dark"] .quick-chip,
+html[data-theme="dark"] .evidence-tile,
+html[data-theme="dark"] .evidence-detail {
+  border-color: #293950;
+  background: #101b2b;
+  color: #dfe8f4;
+}
+
+html[data-theme="dark"] .workflow-step.done,
+html[data-theme="dark"] .quick-chip.green,
+html[data-theme="dark"] .evidence-tile.green,
+html[data-theme="dark"] .evidence-detail.green {
+  border-color: rgba(52,211,153,.30) !important;
+  background: linear-gradient(180deg, rgba(12,55,46,.72), rgba(10,38,35,.72)) !important;
+}
+
+html[data-theme="dark"] .workflow-step.failed,
+html[data-theme="dark"] .quick-chip.red,
+html[data-theme="dark"] .evidence-tile.red,
+html[data-theme="dark"] .evidence-detail.red {
+  border-color: rgba(251,113,133,.30) !important;
+  background: linear-gradient(180deg, rgba(62,28,37,.76), rgba(43,23,32,.76)) !important;
+}
+
+html[data-theme="dark"] .workflow-step.active,
+html[data-theme="dark"] .quick-chip.yellow,
+html[data-theme="dark"] .evidence-tile.yellow,
+html[data-theme="dark"] .evidence-detail.yellow {
+  border-color: rgba(251,191,36,.30) !important;
+  background: linear-gradient(180deg, rgba(61,48,22,.70), rgba(42,35,20,.70)) !important;
+}
+
+html[data-theme="dark"] .hero-gate.pending,
+html[data-theme="dark"] .hero-confirm.pending,
+html[data-theme="dark"] .hero-score.pending,
+html[data-theme="dark"] .quick-chip.pending,
+html[data-theme="dark"] .evidence-tile.pending,
+html[data-theme="dark"] .evidence-detail.pending {
+  border-color: #33445c !important;
+  background: linear-gradient(180deg, #121f31, #0e1928) !important;
+  color: #9fb0c5 !important;
+}
+
+html[data-theme="dark"] .hero-gate.pending strong,
+html[data-theme="dark"] .hero-confirm.pending strong,
+html[data-theme="dark"] .hero-score.pending span,
+html[data-theme="dark"] .evidence-tile.pending .evidence-score {
+  color: #a9bad0 !important;
+}
+
+html[data-theme="dark"] .quick-summary.pending {
+  border-color: #33445c;
+  background: #121f31;
+  color: #a9bad0;
+}
+
+html[data-theme="dark"] .mentor-reasoning-list span {
+  border-color: #2a3a50;
+  background: #0d1827;
+}
+
+html[data-theme="dark"] .candidate-label,
+html[data-theme="dark"] .simulation-pill,
+html[data-theme="dark"] .phase-pill {
+  border-color: #304158;
+  background: #111d2d;
+  color: #aec0d5;
+}
+
+html[data-theme="dark"] .focus-action.stop {
+  border-color: rgba(248,113,113,.35);
+  background: rgba(69,27,35,.55);
+}
+
+html[data-theme="dark"] .focus-action.wait {
+  border-color: rgba(251,191,36,.30);
+  background: rgba(61,48,22,.48);
+}
+
+html[data-theme="dark"] .focus-action.go {
+  border-color: rgba(52,211,153,.30);
+  background: rgba(10,64,52,.48);
+}
+
+html[data-theme="dark"] .mega-trade-button.locked,
+html[data-theme="dark"] .exit-position-button:disabled {
+  border-color: #2b3b50;
+  background: #152132;
+  color: #72839a;
+}
+
+html[data-theme="dark"] .pwa-install-card {
+  border-color: #2a3a50;
+  background: rgba(12,21,34,.985);
+  box-shadow: 0 24px 60px rgba(0,0,0,.34);
+}
+
+html[data-theme="dark"] .pwa-install-copy strong {
+  color: #edf4fc;
+}
+
+html[data-theme="dark"] .pwa-install-copy span {
+  color: #9badc2;
+}
+
+html[data-theme="dark"] .pwa-install-secondary {
+  border-color: #32435a;
+  background: #111d2e;
+  color: #d8e3f0;
 }
 
 @keyframes mentorSpin {
