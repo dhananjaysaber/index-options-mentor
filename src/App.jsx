@@ -8,6 +8,7 @@ import LivePositionPanel from './components/LivePositionPanel.jsx';
 import ParameterGrid from './components/ParameterGrid.jsx';
 import History from './components/History.jsx';
 import PositionAlertBanner from './components/PositionAlertBanner.jsx';
+import MentorFooter from './components/MentorFooter.jsx';
 import { derivePositionMentor } from './engine/positionMentor.js';
 
 const STORAGE_KEY = 'index-options-mentor-history-v05';
@@ -19,6 +20,7 @@ export default function App() {
   const [brokerStatus, setBrokerStatus] = useState({ configured: false, authenticated: false });
   const [snapshot, setSnapshot] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [liveError, setLiveError] = useState('');
   const [position, setPosition] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POSITION_KEY) || 'null'); }
@@ -45,7 +47,9 @@ export default function App() {
     }
   }
 
-  async function refreshSnapshot() {
+  async function refreshSnapshot(options = {}) {
+    const manual = options?.manual === true;
+    if (manual) setRefreshing(true);
     try {
       const response = await fetch('/api/fyers/mentor-snapshot');
       if (!response.ok) {
@@ -61,6 +65,7 @@ export default function App() {
       return null;
     } finally {
       setLoading(false);
+      if (manual) setRefreshing(false);
     }
   }
 
@@ -114,7 +119,6 @@ export default function App() {
     if (position) localStorage.setItem(POSITION_KEY, JSON.stringify(position));
     else localStorage.removeItem(POSITION_KEY);
   }, [position]);
-
 
   useEffect(() => {
     localStorage.setItem(ALERTS_KEY, alertsEnabled ? '1' : '0');
@@ -254,7 +258,16 @@ export default function App() {
             {alertsEnabled ? (notificationPermission === 'granted' ? 'Alerts on' : 'Sound alerts on') : 'Enable alerts'}
           </button>
           {brokerStatus.authenticated && (
-            <button className="secondary-btn" onClick={refreshSnapshot} title="Automatic updates are already active; this forces an immediate snapshot.">Refresh now</button>
+            <button
+              className={`secondary-btn refresh-btn ${refreshing ? 'refreshing' : ''}`}
+              onClick={() => refreshSnapshot({ manual: true })}
+              disabled={refreshing}
+              aria-busy={refreshing}
+              title="Automatic updates are already active; this forces an immediate snapshot."
+            >
+              {refreshing && <span className="refresh-spinner" aria-hidden="true" />}
+              <span>{refreshing ? 'Checking…' : 'Refresh now'}</span>
+            </button>
           )}
         </div>
       </header>
@@ -288,7 +301,7 @@ export default function App() {
 
         <TraderDecisionBanner snapshot={snapshot} loading={loading} />
         <MentorWorkflow snapshot={snapshot} />
-        <QuickChecklist rows={snapshot?.parameters || []} />
+        <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
 
         {mode === 'simple' ? (
           <section className="trader-workspace simple-workspace">
@@ -302,13 +315,20 @@ export default function App() {
         ) : (
           <section className="trader-workspace advanced-workspace">
             <div className="workspace-left advanced-left">
-              {snapshot && <ParameterGrid rows={snapshot.parameters} />}
+              {snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}
               <History history={history} />
             </div>
             {positionCard}
           </section>
         )}
       </main>
+
+      <MentorFooter
+        snapshot={snapshot}
+        brokerStatus={brokerStatus}
+        refreshing={refreshing}
+        positionMentor={positionMentor}
+      />
     </div>
   );
 }
@@ -325,7 +345,6 @@ function inferExitReason(position, underlyingExit) {
   if (targetHit) return 'TARGET_REACHED';
   return 'MANUAL_EXIT';
 }
-
 
 function primeAlertAudio(audioRef) {
   try {
