@@ -7,4 +7,312 @@
   .topbar-actions a.secondary-btn::after {
     content: none !important;
   }
+
+  .topbar-actions .refresh-btn {
+    font-size: 10px !important;
+  }
+
+  .topbar-actions .refresh-btn::after {
+    content: none !important;
+  }
+
+  .topbar-actions .refresh-btn > span:last-child {
+    font-size: 10px !important;
+  }
+}
+
+/* Direction-dependent checks wait for a real CE/PE bias instead of showing
+   placeholder values as if the market suddenly deteriorated. */
+.hero-gate.pending,
+.hero-confirm.pending,
+.hero-score.pending,
+.quick-chip.pending,
+.evidence-tile.pending,
+.evidence-detail.pending {
+  border-color: #cbd8e8 !important;
+  background: linear-gradient(180deg, #f8fbff, #f1f5f9) !important;
+  color: #607086 !important;
+}
+
+.hero-gate.pending strong,
+.hero-confirm.pending strong,
+.hero-score.pending span {
+  color: #52657d !important;
+}
+
+.quick-summary.pending {
+  border-color: #cbd8e8;
+  background: #f1f5f9;
+  color: #52657d;
+}
+
+.quick-summary small {
+  display: block;
+  margin-top: 2px;
+  font-size: 6px;
+  font-weight: 900;
+  letter-spacing: .06em;
+}
+
+.quick-gate.pending,
+.tile-gate.pending,
+.detail-gate.pending,
+.status-pill.pending {
+  border-color: #cbd8e8 !important;
+  background: #e9eff6 !important;
+  color: #52657d !important;
+}
+
+.evidence-dot.pending {
+  background: #94a3b8;
+}
+
+.evidence-mini-bar span.pending {
+  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+  animation: mentorPendingSweep 1.8s ease-in-out infinite;
+}
+
+.evidence-tile.pending .evidence-score {
+  color: #64748b;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+/* Manual refresh gives immediate visual feedback. */
+.refresh-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 92px;
+}
+
+.refresh-btn:disabled {
+  cursor: wait;
+  opacity: .82;
+}
+
+.refresh-btn.refreshing {
+  border-color: rgba(56,189,248,.38) !important;
+  background: rgba(14,165,233,.16) !important;
+  box-shadow: 0 0 0 1px rgba(14,165,233,.08), 0 0 22px rgba(14,165,233,.16) !important;
+}
+
+.refresh-spinner {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border: 2px solid rgba(255,255,255,.30);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: mentorSpin .75s linear infinite;
+}
+
+/* Always-visible mentor strip. It explains the current market in plain language. */
+.app-shell {
+  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.mentor-footer {
+  position: fixed;
+  z-index: 70;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 54px;
+  padding: 8px max(18px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: #dce8f7;
+  border-top: 1px solid rgba(148,163,184,.22);
+  background: linear-gradient(115deg, rgba(10,18,32,.98), rgba(15,31,53,.98));
+  box-shadow: 0 -10px 30px rgba(15,23,42,.16);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+  overflow: hidden;
+}
+
+.mentor-footer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 10%, rgba(56,189,248,.08) 45%, transparent 80%);
+  transform: translateX(-100%);
+  animation: mentorLightSweep 5.5s ease-in-out infinite;
+}
+
+.mentor-footer.good {
+  background: linear-gradient(115deg, rgba(7,45,38,.98), rgba(11,54,55,.98));
+}
+
+.mentor-footer.danger {
+  background: linear-gradient(115deg, rgba(53,20,29,.98), rgba(40,25,39,.98));
+}
+
+.mentor-footer.checking {
+  background: linear-gradient(115deg, rgba(9,35,61,.99), rgba(11,54,72,.99));
+}
+
+.mentor-footer-status,
+.mentor-footer-copy,
+.mentor-footer-meta {
+  position: relative;
+  z-index: 1;
+}
+
+.mentor-footer-status {
+  display: grid;
+  place-items: center;
+}
+
+.mentor-live-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #38bdf8;
+  box-shadow: 0 0 0 0 rgba(56,189,248,.42);
+  animation: mentorPulse 1.7s ease-out infinite;
+}
+
+.mentor-live-dot.good {
+  background: #34d399;
+  box-shadow: 0 0 0 0 rgba(52,211,153,.42);
+}
+
+.mentor-live-dot.danger {
+  background: #fb7185;
+  box-shadow: 0 0 0 0 rgba(251,113,133,.42);
+}
+
+.mentor-live-dot.checking {
+  background: #7dd3fc;
+  animation-duration: .85s;
+}
+
+.mentor-footer-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+
+.mentor-footer-copy strong {
+  color: #7dd3fc;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+
+.mentor-footer.good .mentor-footer-copy strong { color: #6ee7b7; }
+.mentor-footer.danger .mentor-footer-copy strong { color: #fda4af; }
+
+.mentor-footer-copy span {
+  min-width: 0;
+  color: #e5edf7;
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.mentor-footer-meta {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(148,163,184,.18);
+  white-space: nowrap;
+}
+
+.mentor-footer-meta span {
+  color: #8ea2ba;
+  font-size: 7px;
+  font-weight: 850;
+  letter-spacing: .10em;
+}
+
+.mentor-footer-meta strong {
+  color: #c8d5e5;
+  font-size: 9px;
+  font-weight: 720;
+}
+
+@keyframes mentorSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes mentorPulse {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: .95; transform: scale(1); }
+  55% { box-shadow: 0 0 0 8px transparent; opacity: 1; transform: scale(1.08); }
+  100% { box-shadow: 0 0 0 10px transparent; opacity: .82; transform: scale(1); }
+}
+
+@keyframes mentorLightSweep {
+  0%, 55% { transform: translateX(-100%); }
+  75%, 100% { transform: translateX(100%); }
+}
+
+@keyframes mentorPendingSweep {
+  0%, 100% { opacity: .55; transform: translateX(-12%); }
+  50% { opacity: 1; transform: translateX(10%); }
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .mentor-footer {
+    min-height: 78px;
+    padding: 9px max(10px, env(safe-area-inset-right, 0px)) calc(9px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 7px 8px;
+  }
+
+  .mentor-footer-copy {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .mentor-footer-copy strong {
+    font-size: 8px;
+  }
+
+  .mentor-footer-copy span {
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .mentor-footer-meta {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    justify-content: space-between;
+    justify-items: stretch;
+    padding: 0;
+    border: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .mentor-footer-copy span {
+    font-size: 10.5px;
+  }
+
+  .mentor-footer-meta strong {
+    font-size: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mentor-live-dot,
+  .mentor-footer::before,
+  .refresh-spinner,
+  .evidence-mini-bar span.pending {
+    animation: none !important;
+  }
 }
