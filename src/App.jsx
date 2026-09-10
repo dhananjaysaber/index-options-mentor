@@ -14,6 +14,7 @@ import { derivePositionMentor } from './engine/positionMentor.js';
 const STORAGE_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
 const ALERTS_KEY = 'index-options-mentor-alerts-enabled-v07';
+const THEME_KEY = 'index-options-mentor-theme-v1';
 
 export default function App() {
   const [mode, setMode] = useState('simple');
@@ -22,6 +23,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [liveError, setLiveError] = useState('');
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'; }
+    catch { return 'light'; }
+  });
   const [position, setPosition] = useState(() => {
     try { return JSON.parse(localStorage.getItem(POSITION_KEY) || 'null'); }
     catch { return null; }
@@ -35,6 +40,13 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
     catch { return []; }
   });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#ffffff');
+  }, [theme]);
 
   async function refreshStatus() {
     try {
@@ -251,6 +263,14 @@ export default function App() {
             <a className="secondary-btn" href="/api/fyers/login">Connect FYERS</a>
           )}
           <button
+            className={`secondary-btn theme-toggle ${theme === 'dark' ? 'active' : ''}`}
+            onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          >
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <button
             className={`secondary-btn alert-toggle ${alertsEnabled ? 'active' : ''}`}
             onClick={toggleAlerts}
             title={notificationPermission === 'denied' ? 'Browser notifications are blocked; sound/visual alerts can still work while this page is open.' : 'Enable sound and browser exit alerts.'}
@@ -330,6 +350,23 @@ export default function App() {
         positionMentor={positionMentor}
       />
     </div>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.2 15.1A8.4 8.4 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3.7" />
+      <path d="M12 2.3v2M12 19.7v2M4.1 4.1l1.4 1.4M18.5 18.5l1.4 1.4M2.3 12h2M19.7 12h2M4.1 19.9l1.4-1.4M18.5 5.5l1.4-1.4" />
+    </svg>
   );
 }
 
