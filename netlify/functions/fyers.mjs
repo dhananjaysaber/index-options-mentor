@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
-import { fyersModel } from 'fyers-api-v3';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
 const COOKIE_NAME = 'iom_fyers_session';
+const API_BASE = 'https://api-t1.fyers.in/api/v3';
+const DATA_BASE = 'https://api-t1.fyers.in/data';
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -37,12 +38,65 @@ function configured(request) {
   return Boolean(appId() && appSecret() && sessionSecret() && redirectUri(request));
 }
 
-function fyersClient(request, accessToken = '') {
-  const fyers = new fyersModel({ path: '', enableLogging: false });
-  fyers.setAppId(appId());
-  fyers.setRedirectUrl(redirectUri(request));
-  if (accessToken) fyers.setAccessToken(accessToken);
-  return fyers;
+function authHeader(accessToken) {
+  return `${appId()}:${accessToken}`;
+}
+
+async function fyersGet(path, params, accessToken) {
+  const url = new URL(`${DATA_BASE}${path}`);
+  for (const [key, value] of Object.entries(params || {})) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      Authorization: authHeader(accessToken),
+      'Content-Type': 'application/json',
+      version: '3'
+    }
+  });
+
+  const data = await response.json().catch(() => ({
+    s: 'error',
+    code: response.status,
+    message: 'FYERS returned an unreadable response.'
+  }));
+
+  if (!response.ok && data?.s !== 'error') {
+    data.s = 'error';
+    data.code = response.status;
+  }
+  return data;
+}
+
+function loginUrl(request) {
+  const url = new URL(`${API_BASE}/generate-authcode`);
+  url.searchParams.set('client_id', appId());
+  url.searchParams.set('redirect_uri', redirectUri(request));
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('state', crypto.randomBytes(12).toString('hex'));
+  return url.toString();
+}
+
+async function exchangeAuthCode(authCode) {
+  const appIdHash = crypto
+    .createHash('sha256')
+    .update(`${appId()}:${appSecret()}`)
+    .digest('hex');
+
+  const response = await fetch(`${API_BASE}/validate-authcode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      grant_type: 'authorization_code',
+      appIdHash,
+      code: authCode
+    })
+  });
+
+  return response.json();
 }
 
 function cookieMap(request) {
@@ -126,7 +180,7 @@ async function handleStatus(request) {
     configured: configured(request),
     authenticated: Boolean(accessTokenFromRequest(request)),
     redirectUri: redirectUri(request),
-    runtime: 'netlify-functions'
+    runtime: 'netlify-functions-rest'
   });
 }
 
@@ -134,8 +188,7 @@ async function handleLogin(request) {
   if (!configured(request)) {
     return json({ error: 'FYERS environment variables are not configured on Netlify.' }, 400);
   }
-  const fyers = fyersClient(request);
-  return Response.redirect(fyers.generateAuthCode(), 302);
+  return Response.redirect(loginUrl(request), 302);
 }
 
 async function handleCallback(request) {
@@ -144,12 +197,7 @@ async function handleCallback(request) {
   if (!authCode) return new Response('FYERS did not return an auth code.', { status: 400 });
 
   try {
-    const fyers = fyersClient(request);
-    const response = await fyers.generate_access_token({
-      client_id: appId(),
-      secret_key: appSecret(),
-      auth_code: authCode
-    });
+    const response = await exchangeAuthCode(authCode);
 
     if (response?.s !== 'ok' || !response?.access_token) {
       console.error('FYERS token response:', response);
@@ -188,11 +236,10 @@ async function handleQuote(request) {
   if (auth.error) return auth.error;
 
   const raw = new URL(request.url).searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
-  const symbols = raw.split(',').map(s => s.trim()).filter(Boolean);
+  const symbols = raw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);
 
   try {
-    const fyers = fyersClient(request, auth.token);
-    return json(await fyers.getQuotes(symbols));
+    return json(await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token));
   } catch (error) {
     console.error('Quote failed:', error);
     return json({ error: 'Could not load quote.' }, 500);
@@ -209,15 +256,14 @@ async function handleHistory(request) {
   const today = dateKeyIST();
 
   try {
-    const fyers = fyersClient(request, auth.token);
-    return json(await fyers.getHistory({
+    return json(await fyersGet('/history', {
       symbol,
       resolution,
       date_format: '1',
       range_from: url.searchParams.get('from') || today,
       range_to: url.searchParams.get('to') || today,
       cont_flag: '1'
-    }));
+    }, auth.token));
   } catch (error) {
     console.error('History failed:', error);
     return json({ error: 'Could not load historical candles.' }, 500);
@@ -233,13 +279,12 @@ async function handleOptionChain(request) {
   const strikecount = Number(url.searchParams.get('strikecount') || 10);
 
   try {
-    const fyers = fyersClient(request, auth.token);
-    return json(await fyers.getOptionChain({
+    return json(await fyersGet('/options-chain-v3', {
       symbol,
       strikecount,
       timestamp: url.searchParams.get('timestamp') || '',
       greeks: '1'
-    }));
+    }, auth.token));
   } catch (error) {
     console.error('Option chain failed:', error);
     return json({ error: 'Could not load option chain.' }, 500);
@@ -251,26 +296,24 @@ async function handleMentorSnapshot(request) {
   if (auth.error) return auth.error;
 
   try {
-    const fyers = fyersClient(request, auth.token);
     const today = dateKeyIST();
     const from = dateDaysAgoIST(8);
 
     const [quoteResponse, historyResponse, chainResponse] = await Promise.all([
-      fyers.getQuotes(['NSE:NIFTY50-INDEX']),
-      fyers.getHistory({
+      fyersGet('/quotes', { symbols: 'NSE:NIFTY50-INDEX' }, auth.token),
+      fyersGet('/history', {
         symbol: 'NSE:NIFTY50-INDEX',
         resolution: '5',
         date_format: '1',
         range_from: from,
         range_to: today,
         cont_flag: '1'
-      }),
-      fyers.getOptionChain({
+      }, auth.token),
+      fyersGet('/options-chain-v3', {
         symbol: 'NSE:NIFTY50-INDEX',
         strikecount: 12,
-        timestamp: '',
         greeks: '1'
-      })
+      }, auth.token)
     ]);
 
     return json(await buildMentorSnapshot({
@@ -304,4 +347,3 @@ export default async (request) => {
     default: return json({ error: 'Unknown FYERS route.' }, 404);
   }
 };
-
