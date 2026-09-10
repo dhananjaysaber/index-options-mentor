@@ -4,6 +4,7 @@ import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/me
 const COOKIE_NAME = 'iom_fyers_session';
 const API_BASE = 'https://api-t1.fyers.in/api/v3';
 const DATA_BASE = 'https://api-t1.fyers.in/data';
+const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -175,6 +176,56 @@ function routeName(request) {
   return '';
 }
 
+function normalisePendingDirection(snapshot) {
+  if (!snapshot?.decision || snapshot.decision.side || !Array.isArray(snapshot.parameters) || !snapshot.parameters.length) {
+    return snapshot;
+  }
+
+  const regime = snapshot.parameters.find(row => row.id === 'chop');
+  const regimeWeak = regime && Number(regime.value) < 0.58;
+
+  return {
+    ...snapshot,
+    decision: {
+      ...snapshot.decision,
+      score: null,
+      rr: 0,
+      availableRR: 0,
+      canSuggestTrade: false,
+      reasons: [
+        'Direction is not clear enough yet, so directional checks are waiting rather than failing.',
+        ...(regimeWeak ? ['Market movement is also choppy, so the mentor is protecting capital.'] : []),
+        'Wait for trend and VWAP to agree before judging a CE or PE setup.'
+      ]
+    },
+    parameters: snapshot.parameters.map(row => DIRECTIONAL_PARAMETER_IDS.has(row.id)
+      ? { ...row, assessable: false, weighted: 0, status: 'pending', gatePassed: row.mandatory ? null : row.gatePassed }
+      : { ...row, assessable: true }),
+    structure: {
+      ...snapshot.structure,
+      breakoutDetected: false,
+      closeConfirmed: false,
+      spotBeyondTrigger: false,
+      trigger: null,
+      retestFound: false,
+      retestFailed: false,
+      underlyingStop: null,
+      underlyingTarget: null,
+      riskPoints: 0
+    },
+    setup: {
+      ...snapshot.setup,
+      biasReady: false,
+      mandatoryReady: false,
+      breakoutDetected: false,
+      closeConfirmed: false,
+      retestStatus: 'NOT_STARTED',
+      approvalReady: false
+    },
+    option: null
+  };
+}
+
 async function handleStatus(request) {
   return json({
     configured: configured(request),
@@ -316,12 +367,14 @@ async function handleMentorSnapshot(request) {
       }, auth.token)
     ]);
 
-    return json(await buildMentorSnapshot({
+    const snapshot = await buildMentorSnapshot({
       quoteResponse,
       historyResponse,
       chainResponse,
       now: new Date()
-    }));
+    });
+
+    return json(normalisePendingDirection(snapshot));
   } catch (error) {
     console.error('Mentor snapshot failed:', error);
     return json({
