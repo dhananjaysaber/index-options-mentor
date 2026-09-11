@@ -82,6 +82,8 @@ html[data-theme="dark"] .mobile-menu-toggle {
   .topbar-actions .secondary-btn,
   .topbar-actions a.secondary-btn {
     width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
     min-height: 42px !important;
     display: flex !important;
     align-items: center;
@@ -95,9 +97,12 @@ html[data-theme="dark"] .mobile-menu-toggle {
     justify-content: center;
   }
 
-  .topbar-actions .theme-toggle {
+  .topbar-actions .theme-toggle,
+  .topbar-actions .alert-toggle,
+  .topbar-actions .refresh-btn {
     width: 100% !important;
     min-width: 0 !important;
+    max-width: none !important;
   }
 
   .mobile-action-label {
