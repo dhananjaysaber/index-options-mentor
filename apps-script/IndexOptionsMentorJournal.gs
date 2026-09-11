@@ -1,5 +1,6 @@
 const TRADES_SHEET = 'Trades';
 const JOURNEY_SHEET = 'TradeJourney';
+const SETUPS_SHEET = 'SetupDecisions';
 
 const TRADE_HEADERS = [
   'trade_id','mode','status','session_date','opened_at','closed_at','held_minutes','side','symbol','strike','expiry',
@@ -16,11 +17,24 @@ const JOURNEY_HEADERS = [
   'mentor_state','reason_code','score','current_bias','regime_pct','trend_pct','vwap_pct','payload_json','source','synced_at'
 ];
 
+const SETUP_HEADERS = [
+  'setup_id','session_date','first_seen_at','updated_at','status','side','initial_decision_state','latest_state','approved_at_capture','rejection_reason',
+  'initial_score','latest_score','planned_rr','available_rr','option_symbol','option_strike','option_ltp','nifty_entry','nifty_latest','trigger','breakout_time','retest_time',
+  'structural_stop','planned_target','risk_points','stop_atr_ratio','room_points','atr5','vwap','orh','orl','pdh','pdl','distance_from_trigger','distance_from_trigger_atr',
+  'mandatory_pass_count','mandatory_fail_ids',
+  'p01_regime_pct','p02_trend_pct','p03_vwap_pct','p04_risk_room_pct','p05_liquidity_pct','p06_orb_pct','p07_close_5m_pct','p08_retest_pct','p09_pdh_pdl_pct',
+  'p10_volume_pct','p11_momentum_pct','p12_htf_15m_pct','p13_time_of_day_pct',
+  'best_favourable_points','worst_adverse_points','best_hypothetical_r','worst_hypothetical_r',
+  'nifty_5m','move_5m','r_5m','nifty_10m','move_10m','r_10m','nifty_15m','move_15m','r_15m','nifty_30m','move_30m','r_30m',
+  'setup_json'
+];
+
 function setupJournalSheets() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   PropertiesService.getScriptProperties().setProperty('SPREADSHEET_ID', ss.getId());
   ensureSheet_(ss, TRADES_SHEET, TRADE_HEADERS);
   ensureSheet_(ss, JOURNEY_SHEET, JOURNEY_HEADERS);
+  ensureSheet_(ss, SETUPS_SHEET, SETUP_HEADERS);
   return `Journal ready: ${ss.getName()}`;
 }
 
@@ -40,6 +54,7 @@ function doPost(e) {
     if (payload.action === 'health') return health_();
     if (payload.action === 'list_trades') return json_({ ok: true, trades: listTrades_(payload.limit || 500) });
     if (payload.action === 'journal_event') return saveJournalEvent_(payload.event);
+    if (payload.action === 'setup_decision') return saveSetupDecision_(payload.setup);
     return json_({ ok: false, error: 'Unknown journal action.' });
   } catch (error) {
     return json_({ ok: false, error: error && error.message ? error.message : 'Journal error.' });
@@ -50,11 +65,13 @@ function health_() {
   const ss = getSpreadsheet_();
   const trades = ss.getSheetByName(TRADES_SHEET);
   const journey = ss.getSheetByName(JOURNEY_SHEET);
+  const setups = ss.getSheetByName(SETUPS_SHEET);
   return json_({
     ok: true,
     spreadsheet: ss.getName(),
     trades: Math.max(0, (trades ? trades.getLastRow() : 1) - 1),
-    events: Math.max(0, (journey ? journey.getLastRow() : 1) - 1)
+    events: Math.max(0, (journey ? journey.getLastRow() : 1) - 1),
+    setups: Math.max(0, (setups ? setups.getLastRow() : 1) - 1)
   });
 }
 
@@ -75,6 +92,104 @@ function saveJournalEvent_(event) {
   } finally {
     lock.releaseLock();
   }
+}
+
+function saveSetupDecision_(setup) {
+  if (!setup || !setup.id || !setup.sessionDate || !setup.side) {
+    return json_({ ok: false, error: 'Setup decision is incomplete.' });
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = getSpreadsheet_();
+    const sheet = ensureSheet_(ss, SETUPS_SHEET, SETUP_HEADERS);
+    upsertSetup_(sheet, setup);
+    return json_({ ok: true, setupId: setup.id });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function upsertSetup_(sheet, setup) {
+  const params = Array.isArray(setup.parameters) ? setup.parameters : [];
+  const outcomes = setup.outcomes || {};
+  const patch = {
+    setup_id: setup.id,
+    session_date: setup.sessionDate || '',
+    first_seen_at: setup.firstSeenAt || '',
+    updated_at: setup.updatedAt || new Date().toISOString(),
+    status: setup.status || 'WATCHING',
+    side: setup.side || '',
+    initial_decision_state: setup.initialDecisionState || '',
+    latest_state: setup.latestState || '',
+    approved_at_capture: setup.approvedAtCapture === true,
+    rejection_reason: setup.rejectionReason || '',
+    initial_score: number_(setup.initialScore),
+    latest_score: number_(setup.latestScore),
+    planned_rr: number_(setup.plannedRR),
+    available_rr: number_(setup.availableRR),
+    option_symbol: setup.optionSymbol || '',
+    option_strike: number_(setup.optionStrike),
+    option_ltp: number_(setup.optionLtp),
+    nifty_entry: number_(setup.entrySpot),
+    nifty_latest: number_(setup.latestSpot),
+    trigger: number_(setup.trigger),
+    breakout_time: setup.breakoutTime || '',
+    retest_time: setup.retestTime || '',
+    structural_stop: number_(setup.structuralStop),
+    planned_target: number_(setup.plannedTarget),
+    risk_points: number_(setup.riskPoints),
+    stop_atr_ratio: number_(setup.stopAtrRatio),
+    room_points: number_(setup.roomPoints),
+    atr5: number_(setup.atr5),
+    vwap: number_(setup.vwap),
+    orh: number_(setup.orh),
+    orl: number_(setup.orl),
+    pdh: number_(setup.pdh),
+    pdl: number_(setup.pdl),
+    distance_from_trigger: number_(setup.distanceFromTrigger),
+    distance_from_trigger_atr: number_(setup.distanceFromTriggerAtr),
+    mandatory_pass_count: number_(setup.mandatoryPassCount),
+    mandatory_fail_ids: Array.isArray(setup.mandatoryFailIds) ? setup.mandatoryFailIds.join(',') : (setup.mandatoryFailIds || ''),
+    p01_regime_pct: pct_(paramValue_(params, 'chop')),
+    p02_trend_pct: pct_(paramValue_(params, 'trend')),
+    p03_vwap_pct: pct_(paramValue_(params, 'vwap')),
+    p04_risk_room_pct: pct_(paramValue_(params, 'risk')),
+    p05_liquidity_pct: pct_(paramValue_(params, 'liquidity')),
+    p06_orb_pct: pct_(paramValue_(params, 'orb')),
+    p07_close_5m_pct: pct_(paramValue_(params, 'close')),
+    p08_retest_pct: pct_(paramValue_(params, 'retest')),
+    p09_pdh_pdl_pct: pct_(paramValue_(params, 'pd')),
+    p10_volume_pct: pct_(paramValue_(params, 'volume')),
+    p11_momentum_pct: pct_(paramValue_(params, 'momentum')),
+    p12_htf_15m_pct: pct_(paramValue_(params, 'htf')),
+    p13_time_of_day_pct: pct_(paramValue_(params, 'time')),
+    best_favourable_points: number_(setup.bestFavourablePoints),
+    worst_adverse_points: number_(setup.worstAdversePoints),
+    best_hypothetical_r: number_(setup.bestHypotheticalR),
+    worst_hypothetical_r: number_(setup.worstHypotheticalR),
+    nifty_5m: number_(outcomeValue_(outcomes, '5', 'nifty')),
+    move_5m: number_(outcomeValue_(outcomes, '5', 'movePoints')),
+    r_5m: number_(outcomeValue_(outcomes, '5', 'hypotheticalR')),
+    nifty_10m: number_(outcomeValue_(outcomes, '10', 'nifty')),
+    move_10m: number_(outcomeValue_(outcomes, '10', 'movePoints')),
+    r_10m: number_(outcomeValue_(outcomes, '10', 'hypotheticalR')),
+    nifty_15m: number_(outcomeValue_(outcomes, '15', 'nifty')),
+    move_15m: number_(outcomeValue_(outcomes, '15', 'movePoints')),
+    r_15m: number_(outcomeValue_(outcomes, '15', 'hypotheticalR')),
+    nifty_30m: number_(outcomeValue_(outcomes, '30', 'nifty')),
+    move_30m: number_(outcomeValue_(outcomes, '30', 'movePoints')),
+    r_30m: number_(outcomeValue_(outcomes, '30', 'hypotheticalR')),
+    setup_json: safeJson_(setup)
+  };
+
+  const row = findSetupRow_(sheet, setup.id);
+  const existing = row > 1 ? objectFromRow_(SETUP_HEADERS, sheet.getRange(row, 1, 1, SETUP_HEADERS.length).getValues()[0]) : {};
+  const merged = SETUP_HEADERS.map(header => hasValue_(patch[header]) ? patch[header] : (existing[header] !== undefined ? existing[header] : ''));
+
+  if (row > 1) sheet.getRange(row, 1, 1, SETUP_HEADERS.length).setValues([merged]);
+  else sheet.appendRow(merged);
 }
 
 function upsertTrade_(sheet, event) {
@@ -267,6 +382,12 @@ function findEventRow_(sheet, eventId) {
   return match ? match.getRow() : -1;
 }
 
+function findSetupRow_(sheet, setupId) {
+  if (sheet.getLastRow() < 2) return -1;
+  const match = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).createTextFinder(String(setupId)).matchEntireCell(true).findNext();
+  return match ? match.getRow() : -1;
+}
+
 function objectFromRow_(headers, values) {
   const obj = {};
   headers.forEach((header, index) => obj[header] = values[index]);
@@ -276,6 +397,11 @@ function objectFromRow_(headers, values) {
 function paramValue_(rows, id) {
   const row = Array.isArray(rows) ? rows.find(item => item && item.id === id) : null;
   return row ? row.value : '';
+}
+
+function outcomeValue_(outcomes, minute, field) {
+  const row = outcomes && outcomes[String(minute)] ? outcomes[String(minute)] : null;
+  return row && row[field] !== undefined ? row[field] : '';
 }
 
 function pct_(value) {
