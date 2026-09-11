@@ -57,11 +57,21 @@ export default async (request) => {
       return jsonResponse({ ok: false, error: 'Invalid journal request.' }, 400);
     }
 
-    if (body?.action !== 'journal_event' || !body?.event?.trade?.id || !body?.event?.type) {
-      return jsonResponse({ ok: false, error: 'Journal event is incomplete.' }, 400);
+    if (body?.action === 'journal_event') {
+      if (!body?.event?.trade?.id || !body?.event?.type) {
+        return jsonResponse({ ok: false, error: 'Journal event is incomplete.' }, 400);
+      }
+      return forwardToSheet({ action: 'journal_event', event: body.event });
     }
 
-    return forwardToSheet({ action: 'journal_event', event: body.event });
+    if (body?.action === 'setup_decision') {
+      if (!body?.setup?.id || !body?.setup?.sessionDate || !body?.setup?.side) {
+        return jsonResponse({ ok: false, error: 'Setup decision is incomplete.' }, 400);
+      }
+      return forwardToSheet({ action: 'setup_decision', setup: body.setup });
+    }
+
+    return jsonResponse({ ok: false, error: 'Unknown journal action.' }, 400);
   }
 
   return jsonResponse({ ok: false, error: 'Method not allowed.' }, 405);
