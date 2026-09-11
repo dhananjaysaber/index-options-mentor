@@ -14,6 +14,7 @@ import './mentor-shell-v2.css';
 import './premium-responsive-v3.css';
 import './premium-responsive-v4.css';
 import './premium-responsive-v5.css';
+import './premium-desktop-v6.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
