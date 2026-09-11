@@ -6,6 +6,7 @@ import './styles.css';
 import './pwa.css';
 import './mobile-fixes.css';
 import './dark-theme-fixes.css';
+import './trader-polish.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
