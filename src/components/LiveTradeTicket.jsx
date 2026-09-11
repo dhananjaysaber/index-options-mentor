@@ -51,6 +51,7 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
   const riskLots = lotRisk && lotRisk > 0 ? Math.floor(riskBudget / lotRisk) : 0;
   const lots = option.lotSize ? Math.max(0, Math.min(settings.lotCap, riskLots)) : 0;
   const canTake = approved && !blocked && lots > 0 && isLive;
+  const rrViable = Number(decision.rr) >= 1;
 
   let actionTitle = actionTitleForState(decision.state, option.optionType);
   let actionCopy = actionCopyForState(decision.state);
@@ -84,7 +85,7 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
     ['NIFTY entry', fmtNumber(market.spot)],
     ['Invalidation', fmtNumber(structure.underlyingStop)],
     ['Target', fmtNumber(structure.underlyingTarget)],
-    ['R:R', decision.rr >= 1 ? `1 : ${decision.rr.toFixed(1)}` : 'Not viable']
+    ['R:R', rrViable ? `1 : ${decision.rr.toFixed(1)}` : 'Not viable']
   ];
 
   return (
@@ -113,12 +114,20 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
       </div>
 
       <div className="trade-plan-grid">
-        {tradeRows.map(([label, value]) => (
-          <div key={label}>
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </div>
-        ))}
+        {tradeRows.map(([label, value]) => {
+          const isRr = label === 'R:R';
+          return (
+            <div key={label} className={isRr ? `rr-card ${rrViable ? 'viable' : 'not-viable'}` : ''}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+              {isRr && (
+                <small className="rr-card-note">
+                  {rrViable ? 'REWARD ROOM OK' : 'SKIP — REWARD TOO LOW'}
+                </small>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="option-health-row">
