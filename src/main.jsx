@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
+import AppV2 from './AppV2.jsx';
 import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
@@ -10,6 +10,7 @@ import './mobile-fixes.css';
 import './dark-theme-fixes.css';
 import './trader-polish.css';
 import './mobile-menu-runner.css';
+import './mentor-shell-v2.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -25,7 +26,7 @@ installSetupDecisionObserver();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <AppV2 />
     <PWAInstallPrompt />
   </React.StrictMode>
 );
