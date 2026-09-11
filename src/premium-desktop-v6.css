@@ -1,0 +1,206 @@
+/* Desktop cockpit v6 — explicit three-card presentation matching the Trade Box visual language. */
+
+@media (min-width: 821px) {
+  /* The deployment was correct; this layer makes the requested layout materially different rather than merely restyling the old strips. */
+  .mentor-v2-content:has(> .mentor-workflow) {
+    grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow,
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist,
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .trade-focus-card {
+    position: relative;
+    align-self: stretch !important;
+    min-height: 560px !important;
+    height: 100% !important;
+    border: 1px solid #d5e1ec !important;
+    border-radius: 20px !important;
+    background: #ffffff !important;
+    box-shadow: 0 14px 34px rgba(25, 55, 95, .075) !important;
+    overflow: hidden !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow {
+    grid-column: 1 / 5 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow::before {
+    content: "MENTOR WORKFLOW";
+    display: block;
+    padding: 16px 18px 8px;
+    color: #72849a;
+    font-size: 10px;
+    font-weight: 950;
+    letter-spacing: .14em;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-label {
+    margin: 0 !important;
+    padding: 0 18px 16px !important;
+    border-bottom: 1px solid #e3eaf1;
+    display: block !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-label span {
+    display: none !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-label strong {
+    display: block;
+    overflow: visible !important;
+    white-space: normal !important;
+    color: #17324f !important;
+    font-size: 21px !important;
+    line-height: 1.15 !important;
+    letter-spacing: -.025em;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-track {
+    flex: 1 1 auto;
+    height: auto !important;
+    padding: 15px 16px 17px;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: repeat(7, minmax(54px, 1fr));
+    gap: 9px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-step {
+    min-height: 54px !important;
+    height: 100% !important;
+    padding: 11px 12px !important;
+    border-radius: 13px !important;
+    grid-template-columns: 30px minmax(0,1fr) auto !important;
+    gap: 9px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-number {
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 9px !important;
+    font-size: 13px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-step strong {
+    font-size: 14px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-step small {
+    font-size: 9px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist {
+    grid-column: 5 / 9 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist::before {
+    content: "13-POINT CHECKLIST";
+    display: block;
+    padding: 16px 18px 8px;
+    color: #72849a;
+    font-size: 10px;
+    font-weight: 950;
+    letter-spacing: .14em;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-summary {
+    margin: 0 16px 13px !important;
+    width: calc(100% - 32px) !important;
+    min-height: 78px !important;
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+    display: grid !important;
+    place-items: center !important;
+    align-content: center !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-summary span {
+    font-size: 10px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-summary strong {
+    font-size: 30px !important;
+    line-height: 1 !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-summary small {
+    margin-top: 3px;
+    font-size: 9px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-section {
+    padding: 0 16px;
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    gap: 9px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-divider {
+    margin: 12px 16px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-chip {
+    min-height: 55px !important;
+    padding: 10px 11px !important;
+    border-radius: 13px !important;
+    grid-template-columns: auto minmax(0,1fr) auto auto !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-index {
+    font-size: 11px !important;
+  }
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-name {
+    font-size: 12.5px !important;
+    font-weight: 900 !important;
+  }
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-value {
+    font-size: 14px !important;
+  }
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist .quick-gate {
+    font-size: 8px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .trade-focus-card {
+    grid-column: 9 / 13 !important;
+    padding: 17px !important;
+  }
+
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .trade-focus-card .trade-focus-head .eyebrow {
+    font-size: 10px !important;
+  }
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .trade-focus-card .trade-focus-head h2 {
+    font-size: 20px !important;
+  }
+
+  /* Supporting analysis starts cleanly below the three-card cockpit. */
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .workspace-left {
+    grid-column: 1 / -1 !important;
+    margin-top: 0 !important;
+  }
+
+  /* The idle research sentence is duplicated information on desktop and no longer gets its own band. */
+  .mentor-v2-content > .research-status:not(.ready):not(.active) {
+    display: none !important;
+  }
+
+  html[data-theme="dark"] .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow,
+  html[data-theme="dark"] .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist,
+  html[data-theme="dark"] .mentor-v2-content:has(> .mentor-workflow) > .mentor-v2-workspace > .trade-focus-card {
+    border-color: #2b3d54 !important;
+    background: #0f1a2a !important;
+    box-shadow: 0 14px 34px rgba(0,0,0,.28) !important;
+  }
+
+  html[data-theme="dark"] .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-label {
+    border-color: #29394d !important;
+  }
+  html[data-theme="dark"] .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow .workflow-label strong {
+    color: #f2f7fd !important;
+  }
+}
