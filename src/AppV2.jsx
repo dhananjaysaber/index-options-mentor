@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import TraderDecisionBanner from './components/TraderDecisionBanner.jsx';
-import MentorWorkflow from './components/MentorWorkflow.jsx';
-import QuickChecklist from './components/QuickChecklist.jsx';
-import TraderMarketPanel from './components/TraderMarketPanel.jsx';
 import LiveTradeTicket from './components/LiveTradeTicket.jsx';
 import LivePositionPanel from './components/LivePositionPanel.jsx';
-import ParameterGrid from './components/ParameterGrid.jsx';
+import VaultDashboard from './components/VaultDashboard.jsx';
 import History from './components/History.jsx';
 import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
@@ -55,7 +51,7 @@ export default function AppV2() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#ffffff');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#14181d' : '#edf2f6');
   }, [theme]);
 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
@@ -322,32 +318,27 @@ export default function AppV2() {
           <>
             <section className="trader-toolbar mentor-v2-toolbar">
               <div className="segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div>
-              <div className="toolbar-live"><span>DATA</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
+              <div className="toolbar-live"><span>Data</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
               <ToolbarStat label="Capital" value={`₹${Number(settings.capital).toLocaleString('en-IN')}`} />
               <ToolbarStat label="Risk" value={`${settings.riskPct}%`} />
               <ToolbarStat label="Sim lots" value={settings.defaultLots} />
-              <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
+              <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>Auto mode</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
             </section>
 
             {liveError && <div className="alert-bar">{liveError} Reconnect FYERS if the daily session has expired.</div>}
             {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
             <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
-            <TraderDecisionBanner snapshot={snapshot} loading={loading} />
             <ResearchStatus classification={setupClassification} position={position} settings={settings} />
-            <MentorWorkflow snapshot={snapshot} />
-            <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
 
-            {mode === 'simple' ? (
-              <section className="trader-workspace simple-workspace mentor-v2-workspace">
-                <div className="workspace-left"><TraderMarketPanel snapshot={snapshot} />{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
-                {positionCard}
-              </section>
-            ) : (
-              <section className="trader-workspace advanced-workspace mentor-v2-workspace">
-                <div className="workspace-left advanced-left">{snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
-                {positionCard}
-              </section>
-            )}
+            <VaultDashboard
+              snapshot={snapshot}
+              loading={loading}
+              mode={mode}
+              positionCard={positionCard}
+              position={position}
+              history={history}
+              onExit={exitTrade}
+            />
           </>
         )}
 
@@ -398,7 +389,7 @@ function MobileDrawer({ view, navigate, onClose, brokerStatus, mode, setMode, se
 
 function ResearchStatus({ classification, position, settings }) {
   if (position) return <section className={`research-status active tier-${String(position.strategyTier || '').toLowerCase()}`}><div><span>OPEN RESEARCH POSITION</span><strong>{position.strategyTierLabel || position.strategyTier}</strong></div><div><span>Initiated by</span><strong>{position.initiatedBy || 'USER'}</strong></div><div><span>Entry gates</span><strong>{position.entryMandatoryPassCount ?? '—'}/5 · {position.entryConfirmationPassCount ?? '—'}/8</strong></div><div><span>Opened</span><strong>{formatTime(position.openedAt)}</strong></div></section>;
-  if (!classification?.eligible) return <section className="research-status"><div><span>AUTOMATED RESEARCH</span><strong>Watching</strong></div><div className="research-status-reason">{classification?.reason || 'Waiting for a completed setup.'}</div></section>;
+  if (!classification?.eligible) return null;
   return <section className={`research-status ready tier-${classification.tier.toLowerCase()}`}><div><span>SETUP COHORT</span><strong>{classification.label}</strong></div><div><span>Mandatory</span><strong>{classification.mandatoryPassCount}/5</strong></div><div><span>Confirmations</span><strong>{classification.confirmationPassCount}/8</strong></div><div><span>Automation</span><strong>{settings.mentorAutoOpen ? 'Will open' : 'Manual'}</strong></div></section>;
 }
 
