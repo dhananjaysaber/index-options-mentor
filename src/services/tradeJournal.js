@@ -1,0 +1,399 @@
+const HISTORY_KEY = 'index-options-mentor-history-v05';
+const POSITION_KEY = 'index-options-mentor-open-position-v07';
+const METRICS_KEY = 'index-options-mentor-journal-metrics-v1';
+const DB_NAME = 'index-options-mentor-journal-v1';
+const STORE_NAME = 'outbox';
+const API_URL = '/api/journal';
+
+let dbPromise = null;
+let flushPromise = null;
+let watchTimer = null;
+let syncTimer = null;
+let knownHistoryIds = new Set();
+let currentPositionId = null;
+let onlineHandler = null;
+let pageHideHandler = null;
+
+export async function prepareJournalHistory({ maxWaitMs = 1800 } = {}) {
+  const local = readJson(HISTORY_KEY, []);
+  try {
+    const remote = await withTimeout(loadRemoteTrades(1000), maxWaitMs);
+    const merged = mergeHistory(local, remote);
+    if (merged.length !== local.length || remote.length) {
+      writeJson(HISTORY_KEY, merged);
+    }
+    return { localCount: local.length, remoteCount: remote.length, mergedCount: merged.length };
+  } catch {
+    return { localCount: local.length, remoteCount: 0, mergedCount: local.length };
+  }
+}
+
+export function startTradeJournalBridge() {
+  if (watchTimer || syncTimer) return stopTradeJournalBridge;
+
+  const history = readJson(HISTORY_KEY, []);
+  knownHistoryIds = new Set(history.map(trade => trade?.id).filter(Boolean));
+  const existingPosition = readJson(POSITION_KEY, null);
+  currentPositionId = existingPosition?.id || null;
+
+  // Migrate any browser-only completed trades into the permanent journal.
+  for (const trade of history) {
+    if (!trade?.id || !trade?.closedAt) continue;
+    void queueJournalEvent({
+      eventId: `close:${trade.id}`,
+      type: 'TRADE_CLOSED',
+      trade: withStoredMetrics(trade),
+      source: 'browser_migration'
+    });
+  }
+
+  if (existingPosition?.id) {
+    const tracked = updateMetrics(existingPosition);
+    void queueJournalEvent({
+      eventId: `open:${existingPosition.id}`,
+      type: 'TRADE_OPENED',
+      trade: tracked,
+      source: 'browser_resume'
+    });
+  }
+
+  watchTick();
+  watchTimer = window.setInterval(watchTick, 1000);
+  syncTimer = window.setInterval(() => { void flushJournalQueue(); }, 20000);
+
+  onlineHandler = () => { void flushJournalQueue(); };
+  pageHideHandler = () => { void flushJournalQueue({ keepalive: true }); };
+  window.addEventListener('online', onlineHandler);
+  window.addEventListener('pagehide', pageHideHandler);
+  void flushJournalQueue();
+
+  return stopTradeJournalBridge;
+}
+
+export function stopTradeJournalBridge() {
+  if (watchTimer) window.clearInterval(watchTimer);
+  if (syncTimer) window.clearInterval(syncTimer);
+  watchTimer = null;
+  syncTimer = null;
+  if (onlineHandler) window.removeEventListener('online', onlineHandler);
+  if (pageHideHandler) window.removeEventListener('pagehide', pageHideHandler);
+  onlineHandler = null;
+  pageHideHandler = null;
+}
+
+export async function loadRemoteTrades(limit = 500) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 7000);
+  try {
+    const response = await fetch(`${API_URL}?limit=${Math.max(1, Math.min(1000, Number(limit) || 500))}`, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data?.trades) ? data.trades.filter(trade => trade?.id && trade?.closedAt) : [];
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+async function watchTick() {
+  const position = readJson(POSITION_KEY, null);
+  const history = readJson(HISTORY_KEY, []);
+
+  if (position?.id) {
+    const tracked = updateMetrics(position);
+    const metrics = getMetrics(position.id);
+
+    if (position.id !== currentPositionId) {
+      currentPositionId = position.id;
+      void queueJournalEvent({
+        eventId: `open:${position.id}`,
+        type: 'TRADE_OPENED',
+        trade: tracked,
+        source: 'mentor'
+      });
+    }
+
+    const minuteBucket = Math.floor(Date.now() / 60000);
+    if (metrics?.lastCheckpointBucket !== minuteBucket) {
+      setMetricFields(position.id, { lastCheckpointBucket: minuteBucket });
+      void queueJournalEvent({
+        eventId: `checkpoint:${position.id}:${minuteBucket}`,
+        type: 'POSITION_CHECKPOINT',
+        trade: tracked,
+        source: 'mentor'
+      });
+    }
+  } else {
+    currentPositionId = null;
+  }
+
+  for (const trade of history) {
+    if (!trade?.id || !trade?.closedAt || knownHistoryIds.has(trade.id)) continue;
+    knownHistoryIds.add(trade.id);
+    void queueJournalEvent({
+      eventId: `close:${trade.id}`,
+      type: 'TRADE_CLOSED',
+      trade: withStoredMetrics(trade),
+      source: 'mentor'
+    });
+  }
+}
+
+function updateMetrics(position) {
+  const id = position?.id;
+  if (!id) return position;
+
+  const underlying = numberOrNull(position.underlyingCurrent);
+  const entryUnderlying = numberOrNull(position.underlyingEntry);
+  const stopUnderlying = numberOrNull(position.underlyingStop);
+  const optionPrice = numberOrNull(position.currentPrice);
+  const optionEntry = numberOrNull(position.entry);
+  const stored = getMetrics(id) || {};
+
+  let currentR = numberOrNull(stored.currentR) ?? 0;
+  if (underlying != null && entryUnderlying != null && stopUnderlying != null) {
+    const risk = Math.max(0.01, Math.abs(entryUnderlying - stopUnderlying));
+    const move = position.side === 'CE'
+      ? underlying - entryUnderlying
+      : entryUnderlying - underlying;
+    currentR = move / risk;
+  }
+
+  const bestR = Math.max(numberOrNull(stored.bestR) ?? 0, currentR);
+  const worstR = Math.min(numberOrNull(stored.worstR) ?? 0, currentR);
+  const bestOptionPrice = optionPrice == null
+    ? (numberOrNull(stored.bestOptionPrice) ?? optionEntry)
+    : Math.max(numberOrNull(stored.bestOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
+  const worstOptionPrice = optionPrice == null
+    ? (numberOrNull(stored.worstOptionPrice) ?? optionEntry)
+    : Math.min(numberOrNull(stored.worstOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
+
+  setMetricFields(id, {
+    currentR,
+    bestR,
+    worstR,
+    bestOptionPrice,
+    worstOptionPrice,
+    lastSeenAt: new Date().toISOString()
+  });
+
+  return {
+    ...position,
+    currentR,
+    bestR,
+    worstR,
+    bestOptionPrice,
+    worstOptionPrice
+  };
+}
+
+function withStoredMetrics(trade) {
+  if (!trade?.id) return trade;
+  const stored = getMetrics(trade.id) || {};
+  return {
+    ...trade,
+    currentR: trade.currentR ?? stored.currentR,
+    bestR: trade.bestR ?? stored.bestR,
+    worstR: trade.worstR ?? stored.worstR,
+    bestOptionPrice: trade.bestOptionPrice ?? stored.bestOptionPrice,
+    worstOptionPrice: trade.worstOptionPrice ?? stored.worstOptionPrice
+  };
+}
+
+async function queueJournalEvent({ eventId, type, trade, source }) {
+  if (!trade?.id || !type) return;
+  const event = {
+    id: eventId || makeId(),
+    type,
+    queuedAt: new Date().toISOString(),
+    source: source || 'mentor',
+    trade: compactTrade(trade)
+  };
+  await putOutbox(event);
+  void flushJournalQueue();
+}
+
+async function flushJournalQueue({ keepalive = false } = {}) {
+  if (flushPromise) return flushPromise;
+  flushPromise = (async () => {
+    const events = await getOutbox();
+    events.sort((a, b) => String(a.queuedAt).localeCompare(String(b.queuedAt)));
+
+    for (const event of events) {
+      try {
+        const response = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'journal_event', event }),
+          cache: 'no-store',
+          keepalive
+        });
+        if (!response.ok) break;
+        const data = await response.json().catch(() => ({}));
+        if (!data?.ok) break;
+        await deleteOutbox(event.id);
+      } catch {
+        break;
+      }
+    }
+  })();
+
+  try {
+    await flushPromise;
+  } finally {
+    flushPromise = null;
+  }
+}
+
+function compactTrade(trade) {
+  const entrySnapshot = {
+    market: trade.entryMarket || null,
+    structure: trade.entryStructure || null,
+    decision: trade.entryDecision || null,
+    option: trade.entryOption || null,
+    parameters: trade.parameterSnapshot || null
+  };
+
+  return {
+    ...trade,
+    entrySnapshot,
+    exitSnapshot: trade.exitSnapshot || null
+  };
+}
+
+function mergeHistory(local, remote) {
+  const map = new Map();
+  for (const trade of local || []) {
+    if (trade?.id) map.set(trade.id, trade);
+  }
+  for (const trade of remote || []) {
+    if (!trade?.id) continue;
+    map.set(trade.id, { ...(map.get(trade.id) || {}), ...trade });
+  }
+  return [...map.values()]
+    .filter(trade => trade?.closedAt)
+    .sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime())
+    .slice(0, 1000);
+}
+
+function getMetrics(id) {
+  const all = readJson(METRICS_KEY, {});
+  return all?.[id] || null;
+}
+
+function setMetricFields(id, patch) {
+  const all = readJson(METRICS_KEY, {});
+  all[id] = { ...(all[id] || {}), ...patch };
+  const ids = Object.keys(all);
+  if (ids.length > 100) {
+    ids
+      .sort((a, b) => String(all[a]?.lastSeenAt || '').localeCompare(String(all[b]?.lastSeenAt || '')))
+      .slice(0, ids.length - 100)
+      .forEach(oldId => delete all[oldId]);
+  }
+  writeJson(METRICS_KEY, all);
+  return all[id];
+}
+
+function readJson(key, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+function numberOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function makeId() {
+  try { return crypto.randomUUID(); } catch { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => window.setTimeout(() => reject(new Error('timeout')), ms))
+  ]);
+}
+
+function openDb() {
+  if (!('indexedDB' in window)) return Promise.resolve(null);
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise(resolve => {
+    try {
+      const request = indexedDB.open(DB_NAME, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return dbPromise;
+}
+
+async function putOutbox(event) {
+  const db = await openDb();
+  if (!db) return putFallback(event);
+  await transact(db, 'readwrite', store => store.put(event));
+}
+
+async function getOutbox() {
+  const db = await openDb();
+  if (!db) return getFallback();
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const request = tx.objectStore(STORE_NAME).getAll();
+      request.onsuccess = () => resolve(Array.isArray(request.result) ? request.result : []);
+      request.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+async function deleteOutbox(id) {
+  const db = await openDb();
+  if (!db) return deleteFallback(id);
+  await transact(db, 'readwrite', store => store.delete(id));
+}
+
+function transact(db, mode, action) {
+  return new Promise(resolve => {
+    try {
+      const tx = db.transaction(STORE_NAME, mode);
+      action(tx.objectStore(STORE_NAME));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+const FALLBACK_KEY = 'index-options-mentor-journal-outbox-v1';
+function getFallback() { return readJson(FALLBACK_KEY, []); }
+function putFallback(event) {
+  const rows = getFallback().filter(row => row?.id !== event.id);
+  rows.push(event);
+  writeJson(FALLBACK_KEY, rows.slice(-500));
+}
+function deleteFallback(id) {
+  writeJson(FALLBACK_KEY, getFallback().filter(row => row?.id !== id));
+}
