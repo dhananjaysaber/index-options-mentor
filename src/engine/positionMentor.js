@@ -15,14 +15,14 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
     : entryScore;
   const scoreDrop = directionalSnapshotReady ? Math.max(0, entryScore - currentScore) : 0;
 
+  const bestR = Math.max(Number.isFinite(Number(position.bestR)) ? Number(position.bestR) : rMultiple, rMultiple);
+  const worstR = Math.min(Number.isFinite(Number(position.worstR)) ? Number(position.worstR) : rMultiple, rMultiple);
+  const oneRReached = bestR >= 1;
+  const givebackR = Math.max(0, bestR - rMultiple);
+
   const stopHit = position.side === 'CE'
     ? currentUnderlying <= position.underlyingStop
     : currentUnderlying >= position.underlyingStop;
-  const targetHit = position.side === 'CE'
-    ? currentUnderlying >= position.underlyingTarget
-    : currentUnderlying <= position.underlyingTarget;
-
-  const targetZone = !targetHit && rMultiple >= Math.max(0.8, plannedRR - 0.2);
 
   const currentBias = snapshot?.decision?.side || null;
   const oppositeBias = Boolean(currentBias && currentBias !== position.side);
@@ -35,6 +35,7 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
   const coreGateFails = coreRows.filter(row => row.mandatory && !row.gatePassed).length;
   const coreRed = coreRows.filter(row => row.status === 'red').length;
   const trendVwapStrongOpposite = oppositeBias && trend?.gatePassed && vwap?.gatePassed;
+  const runnerWeakening = oppositeBias || coreGateFails >= 1 || coreRed >= 1;
 
   if (stopHit) {
     return {
@@ -46,6 +47,10 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
       reason: `NIFTY has reached the original structural invalidation at ${fmt(position.underlyingStop)}.`,
       copy: 'The original thesis is invalid. Exit the broker position and mirror the exit here. Do not widen the stop or average the losing option.',
       rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
       currentScore,
       scoreDrop,
       oppositeBias,
@@ -53,9 +58,9 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
     };
   }
 
-  // Strategy deterioration is intentionally stricter than a simple fall in the
-  // 13-point score. Entry-only items such as ORB/retest can naturally weaken
-  // after entry, so an early exit needs fresh directional evidence as well.
+  // Strategy deterioration remains stricter than a simple score fall. Entry-only
+  // checks such as ORB/retest can naturally weaken after entry, so an early exit
+  // still needs fresh directional evidence.
   const strongDeterioration =
     (trendVwapStrongOpposite && rMultiple <= -0.15) ||
     (oppositeBias && scoreDrop >= 20 && rMultiple <= 0) ||
@@ -69,8 +74,12 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
       alertLevel: 'exit',
       reasonCode: 'STRATEGY_DETERIORATION',
       reason: deteriorationReason({ oppositeBias, currentBias, coreGateFails, coreRed, scoreDrop, rMultiple }),
-      copy: 'The trade has not necessarily touched the hard stop, but the live directional evidence has deteriorated enough to recommend an early exit.',
+      copy: 'The hard stop has not necessarily been touched, but the live directional evidence has deteriorated enough to recommend an early exit.',
       rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
       currentScore,
       scoreDrop,
       oppositeBias,
@@ -78,16 +87,72 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
     };
   }
 
-  if (targetHit) {
+  // Once +1R has been genuinely achieved it becomes a milestone, not an automatic
+  // exit. Protect the runner only after a meaningful give-back AND weakening live
+  // evidence, so a normal +1.08R -> +0.98R fluctuation does not force an exit.
+  const profitProtectionExit =
+    oneRReached &&
+    bestR >= 1.1 &&
+    rMultiple <= 0.8 &&
+    givebackR >= 0.3 &&
+    runnerWeakening;
+
+  if (profitProtectionExit) {
     return {
-      title: 'TARGET REACHED',
-      shortTitle: 'TARGET',
+      title: 'EXIT — PROTECT PROFIT',
+      shortTitle: 'PROFIT EXIT',
+      tone: 'stop',
+      alertLevel: 'exit',
+      reasonCode: 'PROFIT_PROTECTION_EXIT',
+      reason: `The runner reached ${formatR(bestR)}, has given back ${givebackR.toFixed(2)}R, and live structure is weakening.`,
+      copy: 'The 1R milestone was achieved, but enough of the move has now been surrendered alongside weakening evidence. Protect the winner rather than allowing it to turn into a failed trade.',
+      rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
+      currentScore,
+      scoreDrop,
+      oppositeBias,
+      coreGateFails
+    };
+  }
+
+  if (oneRReached) {
+    if (rMultiple < 1) {
+      return {
+        title: '1R ACHIEVED — PROTECT WINNER',
+        shortTitle: 'PROTECT',
+        tone: 'protect',
+        alertLevel: 'caution',
+        reasonCode: 'RUNNER_PULLBACK',
+        reason: `The trade previously reached ${formatR(bestR)} and is now ${formatR(rMultiple)}. The original hard structure is still intact.`,
+        copy: 'Do not exit only because price slipped back below 1R. Hold while structure remains valid, but treat this as a profit-protection warning and do not add to the position.',
+        rMultiple,
+        bestR,
+        worstR,
+        givebackR,
+        oneRReached,
+        currentScore,
+        scoreDrop,
+        oppositeBias,
+        coreGateFails
+      };
+    }
+
+    return {
+      title: '1R+ ACHIEVED — HOLD RUNNER',
+      shortTitle: 'HOLD RUNNER',
       tone: 'go',
       alertLevel: 'none',
-      reasonCode: 'TARGET_REACHED',
-      reason: `NIFTY has reached the planned target area around ${fmt(position.underlyingTarget)}.`,
-      copy: 'The planned move has been delivered. Review the broker exit or a disciplined trail rather than giving the move back.',
+      reasonCode: 'RUNNER_HOLD',
+      reason: `The trade is ${formatR(rMultiple)} with a best move of ${formatR(bestR)} and the original structure remains intact.`,
+      copy: 'The planned 1:1 reward is now a milestone, not an automatic exit. Continue to hold the runner while structure and directional evidence remain healthy.',
       rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
       currentScore,
       scoreDrop,
       oppositeBias,
@@ -95,33 +160,21 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
     };
   }
 
-  if (targetZone) {
+  const approachingOneR = rMultiple >= 0.8;
+  if (approachingOneR) {
     return {
-      title: 'TARGET ZONE',
-      shortTitle: 'TARGET ZONE',
+      title: 'APPROACHING 1R — HOLD',
+      shortTitle: 'HOLD',
       tone: 'go',
       alertLevel: 'none',
-      reasonCode: 'TARGET_APPROACHING',
-      reason: `The trade is ${formatR(rMultiple)} and is approaching the planned ${plannedRR.toFixed(1)}R target zone.`,
-      copy: 'Prepare the exit plan. Avoid turning a strong winner into a small win by giving back the final part of the move.',
+      reasonCode: 'APPROACHING_ONE_R',
+      reason: `The trade is ${formatR(rMultiple)} and is approaching the first +1R milestone.`,
+      copy: 'Stay with the original structure. Do not front-run the milestone just because the option premium fluctuates.',
       rMultiple,
-      currentScore,
-      scoreDrop,
-      oppositeBias,
-      coreGateFails
-    };
-  }
-
-  if (rMultiple >= 1) {
-    return {
-      title: 'PROTECT PROFIT',
-      shortTitle: 'PROTECT',
-      tone: 'protect',
-      alertLevel: 'none',
-      reasonCode: 'ONE_R_REACHED',
-      reason: `The trade is approximately ${formatR(rMultiple)} in favour while the original structure remains intact.`,
-      copy: 'Capital protection now matters more. Do not widen risk; continue to respect the original plan while watching the target.',
-      rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
       currentScore,
       scoreDrop,
       oppositeBias,
@@ -145,6 +198,10 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
       reason: cautionReason({ oppositeBias, currentBias, coreGateFails, coreRed, scoreDrop, rMultiple }),
       copy: 'Do not add to the position. Keep the original stop fixed and watch whether the evidence recovers or deteriorates into an exit condition.',
       rMultiple,
+      bestR,
+      worstR,
+      givebackR,
+      oneRReached,
       currentScore,
       scoreDrop,
       oppositeBias,
@@ -158,9 +215,13 @@ export function derivePositionMentor(position, snapshot, currentUnderlying) {
     tone: 'hold',
     alertLevel: 'none',
     reasonCode: 'STRUCTURE_INTACT',
-    reason: `NIFTY remains between the original stop ${fmt(position.underlyingStop)} and target ${fmt(position.underlyingTarget)} with no strong opposite-direction deterioration.`,
+    reason: `NIFTY remains above the original risk thesis with no strong opposite-direction deterioration. Current move: ${formatR(rMultiple)}.`,
     copy: 'Normal pullbacks are allowed inside the plan. Do not exit simply because one candle or the option premium fluctuates.',
     rMultiple,
+    bestR,
+    worstR,
+    givebackR,
+    oneRReached,
     currentScore,
     scoreDrop,
     oppositeBias,
@@ -181,7 +242,7 @@ function deteriorationReason({ oppositeBias, currentBias, coreGateFails, coreRed
 function cautionReason({ oppositeBias, currentBias, coreGateFails, coreRed, scoreDrop, rMultiple }) {
   if (oppositeBias) return `Live bias has shifted to ${currentBias}, opposite to the open position, but the early-exit evidence is not yet strong enough for EXIT RECOMMENDED.`;
   if (coreGateFails >= 1) return `${coreGateFails} core directional gate${coreGateFails > 1 ? 's are' : ' is'} currently failing while the hard structural stop remains intact.`;
-  if (coreRed >= 1) return `A core directional reading is red while the original hard stop remains intact.`;
+  if (coreRed >= 1) return 'A core directional reading is red while the original hard stop remains intact.';
   if (rMultiple <= -0.5) return `The position is around ${formatR(rMultiple)} against the entry, but the original structural stop has not yet been invalidated.`;
   if (scoreDrop >= 15) return `Confluence is down ${Math.round(scoreDrop)} points from entry; this is a warning only because score deterioration alone is not an exit trigger.`;
   return 'The position is weakening, but the original thesis has not yet been invalidated.';
