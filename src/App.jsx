@@ -10,6 +10,7 @@ import History from './components/History.jsx';
 import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
 import { derivePositionMentor } from './engine/positionMentor.js';
+import { syncJournalHistory } from './services/tradeJournal.js';
 
 const STORAGE_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
@@ -23,6 +24,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [liveError, setLiveError] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'; }
     catch { return 'light'; }
@@ -47,6 +49,34 @@ export default function App() {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#ffffff');
   }, [theme]);
+
+  // Restore the permanent Google Sheets journal after the UI is already usable.
+  // The network request never blocks FYERS quotes, mentor calculations or trading UI.
+  useEffect(() => {
+    let cancelled = false;
+    const applyHistory = event => {
+      const rows = event?.detail?.history;
+      if (!cancelled && Array.isArray(rows)) setHistory(rows);
+    };
+
+    window.addEventListener('mentor:journal-history', applyHistory);
+    syncJournalHistory().then(rows => {
+      if (!cancelled && Array.isArray(rows)) setHistory(rows);
+    }).catch(() => {});
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('mentor:journal-history', applyHistory);
+    };
+  }, []);
+
+  useEffect(() => {
+    const closeOnWideScreen = () => {
+      if (window.innerWidth > 820) setMobileMenuOpen(false);
+    };
+    window.addEventListener('resize', closeOnWideScreen);
+    return () => window.removeEventListener('resize', closeOnWideScreen);
+  }, []);
 
   async function refreshStatus() {
     try {
@@ -98,7 +128,9 @@ export default function App() {
     return () => clearInterval(timer);
   }, [brokerStatus.authenticated]);
 
-  // An open simulated position receives a faster exact option quote.
+  // An open simulated position receives a faster exact option quote. Runner
+  // excursion metrics are updated in the position itself so they survive reloads
+  // and are available to both the mentor and permanent journal.
   useEffect(() => {
     if (!position || !brokerStatus.authenticated) return undefined;
     const updatePosition = async () => {
@@ -111,11 +143,35 @@ export default function App() {
         const niftyNode = nodes.find(node => node?.n === 'NSE:NIFTY50-INDEX' || node?.v?.symbol === 'NSE:NIFTY50-INDEX');
         const liveOption = Number(optionNode?.v?.lp);
         const liveNifty = Number(niftyNode?.v?.lp);
-        setPosition(current => current ? {
-          ...current,
-          currentPrice: Number.isFinite(liveOption) ? liveOption : current.currentPrice,
-          underlyingCurrent: Number.isFinite(liveNifty) ? liveNifty : (snapshot?.market?.spot ?? current.underlyingCurrent)
-        } : current);
+
+        setPosition(current => {
+          if (!current) return current;
+          const currentPrice = Number.isFinite(liveOption) ? liveOption : Number(current.currentPrice);
+          const underlyingCurrent = Number.isFinite(liveNifty)
+            ? liveNifty
+            : Number(snapshot?.market?.spot ?? current.underlyingCurrent);
+          const riskPoints = Math.max(0.01, Math.abs(Number(current.underlyingEntry) - Number(current.underlyingStop)));
+          const movePoints = current.side === 'CE'
+            ? underlyingCurrent - Number(current.underlyingEntry)
+            : Number(current.underlyingEntry) - underlyingCurrent;
+          const currentR = Number.isFinite(movePoints) ? movePoints / riskPoints : Number(current.currentR || 0);
+          const bestR = Math.max(Number.isFinite(Number(current.bestR)) ? Number(current.bestR) : 0, currentR);
+          const worstR = Math.min(Number.isFinite(Number(current.worstR)) ? Number(current.worstR) : 0, currentR);
+          const bestOptionPrice = Math.max(Number.isFinite(Number(current.bestOptionPrice)) ? Number(current.bestOptionPrice) : Number(current.entry), currentPrice);
+          const worstOptionPrice = Math.min(Number.isFinite(Number(current.worstOptionPrice)) ? Number(current.worstOptionPrice) : Number(current.entry), currentPrice);
+
+          return {
+            ...current,
+            currentPrice,
+            underlyingCurrent,
+            currentR,
+            bestR,
+            worstR,
+            bestOptionPrice,
+            worstOptionPrice,
+            oneRReached: Boolean(current.oneRReached || bestR >= 1)
+          };
+        });
       } catch {}
     };
     updatePosition();
@@ -202,7 +258,15 @@ export default function App() {
 
   function takeTrade(ticket) {
     if (tradingBlocked || position || !ticket?.quantity) return;
-    setPosition(ticket);
+    setPosition({
+      ...ticket,
+      currentR: 0,
+      bestR: 0,
+      worstR: 0,
+      bestOptionPrice: ticket.entry,
+      worstOptionPrice: ticket.entry,
+      oneRReached: false
+    });
   }
 
   function exitTrade(meta = {}) {
@@ -255,24 +319,40 @@ export default function App() {
           </div>
         </div>
 
-        <div className="topbar-actions">
+        <button
+          className={`mobile-menu-toggle ${mobileMenuOpen ? 'open' : ''}`}
+          onClick={() => setMobileMenuOpen(open => !open)}
+          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={mobileMenuOpen}
+        >
+          {mobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+        </button>
+
+        <div className={`topbar-actions ${mobileMenuOpen ? 'mobile-open' : ''}`}>
           <span className={`connection-pill ${brokerStatus.authenticated ? 'connected' : ''}`}>
             FYERS {brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Not configured'}
           </span>
           {brokerStatus.configured && !brokerStatus.authenticated && (
-            <a className="secondary-btn" href="/api/fyers/login">Connect FYERS</a>
+            <a className="secondary-btn" href="/api/fyers/login" onClick={() => setMobileMenuOpen(false)}>Connect FYERS</a>
           )}
           <button
             className={`secondary-btn theme-toggle ${theme === 'dark' ? 'active' : ''}`}
-            onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}
+            onClick={() => {
+              setTheme(current => current === 'dark' ? 'light' : 'dark');
+              setMobileMenuOpen(false);
+            }}
             aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
             title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
           >
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+            <span className="mobile-action-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
           </button>
           <button
             className={`secondary-btn alert-toggle ${alertsEnabled ? 'active' : ''}`}
-            onClick={toggleAlerts}
+            onClick={() => {
+              setMobileMenuOpen(false);
+              void toggleAlerts();
+            }}
             title={notificationPermission === 'denied' ? 'Browser notifications are blocked; sound/visual alerts can still work while this page is open.' : 'Enable sound and browser exit alerts.'}
           >
             {alertsEnabled ? (notificationPermission === 'granted' ? 'Alerts on' : 'Sound alerts on') : 'Enable alerts'}
@@ -280,7 +360,10 @@ export default function App() {
           {brokerStatus.authenticated && (
             <button
               className={`secondary-btn refresh-btn ${refreshing ? 'refreshing' : ''}`}
-              onClick={() => refreshSnapshot({ manual: true })}
+              onClick={() => {
+                setMobileMenuOpen(false);
+                void refreshSnapshot({ manual: true });
+              }}
               disabled={refreshing}
               aria-busy={refreshing}
               title="Automatic updates are already active; this forces an immediate snapshot."
@@ -328,7 +411,7 @@ export default function App() {
             <div className="workspace-left">
               <TraderMarketPanel snapshot={snapshot} />
               {!position && <LivePositionPanel position={null} onExit={exitTrade} history={history} snapshot={snapshot} />}
-              {position && <History history={history} />}
+              <History history={history} />
             </div>
             {positionCard}
           </section>
@@ -353,6 +436,22 @@ export default function App() {
   );
 }
 
+function MenuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 function MoonIcon() {
   return (
     <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -374,12 +473,8 @@ function inferExitReason(position, underlyingExit) {
   const stopHit = position.side === 'CE'
     ? underlyingExit <= position.underlyingStop
     : underlyingExit >= position.underlyingStop;
-  const targetHit = position.side === 'CE'
-    ? underlyingExit >= position.underlyingTarget
-    : underlyingExit <= position.underlyingTarget;
 
   if (stopHit) return 'STRUCTURE_INVALIDATED';
-  if (targetHit) return 'TARGET_REACHED';
   return 'MANUAL_EXIT';
 }
 
@@ -426,7 +521,7 @@ function playExitTone(audioRef) {
 function sendBrowserExitNotification(position, mentor) {
   try {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-    const body = `${mentor.reason} NIFTY ${Number(position.underlyingCurrent).toLocaleString('en-IN', { maximumFractionDigits: 2 })}. Exit the real broker position, then mirror the exit in Mentor.`;
+    const body = `${mentor.reason} NIFTY ${Number(position.underlyingCurrent).toLocaleString('en-IN', { maximumFractionDigits: 2 })}. Exit the broker position, then mirror the exit in Mentor.`;
     const notification = new Notification(`Index Options Mentor — ${mentor.title}`, {
       body,
       tag: `mentor-exit-${position.id}-${mentor.reasonCode}`,
