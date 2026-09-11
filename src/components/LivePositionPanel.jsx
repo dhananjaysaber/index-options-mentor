@@ -46,8 +46,10 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <span>{mentor.copy}</span>
       </div>
 
-      <div className="position-r-strip">
+      <div className="position-r-strip runner-r-strip">
         <div><span>R now</span><strong className={mentor.rMultiple >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatR(mentor.rMultiple)}</strong></div>
+        <div><span>Best R</span><strong className="pnl-pos">{formatR(mentor.bestR)}</strong></div>
+        <div><span>Worst R</span><strong className={mentor.worstR < 0 ? 'pnl-neg' : ''}>{formatR(mentor.worstR)}</strong></div>
         <div><span>Sim P&amp;L</span><strong className={pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>₹{pnl.toFixed(0)}</strong></div>
         <div><span>NIFTY now</span><strong>{fmt(currentUnderlying)}</strong></div>
         <div><span>Option live</span><strong>₹{fmt(currentOption)}</strong></div>
@@ -56,7 +58,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
       <div className="trade-plan-grid position-plan-grid">
         <div><span>NIFTY entry</span><strong>{fmt(position.underlyingEntry)}</strong></div>
         <div><span>Structural stop</span><strong>{fmt(position.underlyingStop)}</strong></div>
-        <div><span>Target</span><strong>{fmt(position.underlyingTarget)}</strong></div>
+        <div><span>Original target</span><strong>{fmt(position.underlyingTarget)}</strong><small className="runner-note">Milestone, not auto-exit</small></div>
         <div><span>Entry score</span><strong>{position.score}/100</strong></div>
         <div><span>Current score</span><strong>{mentor.currentScore}/100</strong></div>
         <div><span>Score change</span><strong className={mentor.scoreDrop >= 15 ? 'pnl-neg' : ''}>{mentor.scoreDrop > 0 ? `-${Math.round(mentor.scoreDrop)}` : '0'}</strong></div>
@@ -69,7 +71,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
       <div className={`position-guidance ${mentor.tone}`}>
         <span>MENTOR REASONING</span>
         <strong>{mentor.reason}</strong>
-        <small>The original entry thesis is frozen; the mentor does not move the stop simply because one candle is uncomfortable.</small>
+        <small>The original structural stop remains the hard invalidation. Once +1R is reached, the Mentor manages the trade as a runner rather than forcing an automatic target exit.</small>
       </div>
 
       <button
