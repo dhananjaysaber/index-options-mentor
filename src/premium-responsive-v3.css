@@ -1,0 +1,452 @@
+/* Premium responsive pass: safe-area mobile header, larger typography, full-width desktop pages. */
+
+/* ---------- Desktop application scale ---------- */
+@media (min-width: 821px) {
+  .mentor-sidebar-v2 {
+    width: 232px;
+    top: 64px;
+    padding: 22px 14px 96px;
+  }
+
+  .mentor-v2-content {
+    margin-left: 232px;
+    width: calc(100% - 232px);
+    padding: 16px 22px 124px;
+  }
+
+  .mentor-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  .mentor-page-head,
+  .settings-page {
+    width: 100%;
+  }
+
+  .sidebar-section-label { font-size: 9px; }
+  .sidebar-nav-button { min-height: 48px; }
+  .sidebar-nav-button strong { font-size: 12.5px; }
+  .sidebar-auto-card > span,
+  .sidebar-auto-card > small { font-size: 9px; }
+  .sidebar-auto-card > strong { font-size: 14px; }
+  .sidebar-mini-grid span { font-size: 8px; }
+  .sidebar-mini-grid strong { font-size: 12px; }
+  .sidebar-settings-link { font-size: 10.5px; }
+
+  .mentor-page-head { padding: 22px 24px; }
+  .mentor-page-head h1 { font-size: 31px; }
+  .mentor-page-head p { max-width: 900px; font-size: 13px; line-height: 1.55; }
+  .mentor-page-head > span { font-size: 10px; }
+
+  .settings-page { padding: 22px !important; }
+  .settings-hero h1 { font-size: 32px; }
+  .settings-hero p { max-width: 900px; font-size: 13px; }
+  .settings-save-state { font-size: 10px; }
+  .settings-card-head { padding: 16px 17px 13px; }
+  .settings-card-head h2 { font-size: 17px; }
+  .settings-card-head p { font-size: 11px; }
+  .settings-card-body { padding: 10px 17px 17px; }
+  .settings-field,
+  .settings-toggle-row { min-height: 66px; }
+  .settings-field > span strong,
+  .settings-toggle-row > span strong { font-size: 12.5px; }
+  .settings-field > span small,
+  .settings-toggle-row > span small { max-width: 560px; font-size: 10.5px; line-height: 1.4; }
+  .settings-field input[type="number"] { width: 120px; min-height: 41px; font-size: 14px; }
+  .settings-note { padding: 11px 12px; font-size: 10.5px; }
+  .locked-rules span { padding: 11px; font-size: 10px; }
+  .settings-save-btn { min-height: 44px; font-size: 11.5px; }
+  .settings-actions > span { font-size: 10px; }
+
+  .history-card-v2 { padding: 15px; }
+  .history-card-head > div:first-child > strong { font-size: 14px; }
+  .history-card-head > div:first-child > small { font-size: 10px; }
+  .history-tier { font-size: 8.5px; }
+  .history-pnl span { font-size: 8.5px; }
+  .history-pnl strong { font-size: 17px; }
+  .history-pnl small { font-size: 9px; }
+  .history-metrics-v2 span,
+  .history-lifecycle-v2 span { font-size: 7.5px; }
+  .history-metrics-v2 strong,
+  .history-lifecycle-v2 strong { font-size: 10.5px; }
+
+  .research-status { padding: 10px 14px; }
+  .research-status > div span { font-size: 7.5px; }
+  .research-status > div strong { font-size: 11.5px; }
+  .research-status-reason { font-size: 10.5px; }
+}
+
+/* ---------- Mobile / PWA ---------- */
+@media (max-width: 820px) {
+  html, body, #root, .mentor-v2-shell {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden !important;
+  }
+
+  .mentor-v2-topbar {
+    position: sticky !important;
+    top: 0 !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+    min-height: calc(64px + env(safe-area-inset-top, 0px)) !important;
+    padding:
+      env(safe-area-inset-top, 0px)
+      max(12px, env(safe-area-inset-right, 0px))
+      0
+      max(12px, env(safe-area-inset-left, 0px)) !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  .mentor-v2-topbar .brand-button {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mentor-v2-topbar .brand-mark {
+    width: 42px !important;
+    height: 42px !important;
+    flex: 0 0 42px;
+    border-radius: 13px !important;
+    font-size: 17px !important;
+  }
+
+  .mentor-v2-topbar .brand-title {
+    max-width: min(58vw, 250px) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 18px !important;
+    line-height: 1.08 !important;
+    letter-spacing: -0.02em;
+  }
+
+  .mentor-v2-mobile-status {
+    flex: 0 0 26px;
+    width: 26px;
+    height: 42px;
+    margin-left: auto;
+  }
+
+  .mentor-v2-menu-button {
+    width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 44px;
+    margin-left: 0 !important;
+    border-radius: 14px !important;
+    box-shadow: 0 5px 16px rgba(15, 23, 42, .08);
+  }
+
+  /* Keep Simple / Advanced visible on phone. Hide only the desktop-only toolbar data. */
+  .mentor-v2-toolbar {
+    display: flex !important;
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 0 9px !important;
+    padding: 5px !important;
+    border-radius: 14px !important;
+    background: rgba(255,255,255,.9) !important;
+    box-shadow: 0 4px 16px rgba(15,23,42,.05);
+  }
+
+  .mentor-v2-toolbar > :not(.segmented) { display: none !important; }
+  .mentor-v2-toolbar .segmented {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    gap: 4px;
+  }
+  .mentor-v2-toolbar .segmented button {
+    width: 100%;
+    min-height: 42px;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+    border-radius: 10px !important;
+  }
+
+  html[data-theme="dark"] .mentor-v2-toolbar {
+    background: rgba(14,26,42,.96) !important;
+    border-color: #2a3d55 !important;
+  }
+
+  .mentor-v2-content {
+    width: 100% !important;
+    margin-left: 0 !important;
+    padding:
+      10px
+      max(9px, env(safe-area-inset-right, 0px))
+      calc(92px + env(safe-area-inset-bottom, 0px))
+      max(9px, env(safe-area-inset-left, 0px)) !important;
+  }
+
+  .mentor-v2-content > *,
+  .mentor-page,
+  .mentor-page-head,
+  .settings-page,
+  .mentor-v2-workspace,
+  .workspace-left,
+  .trade-focus-card,
+  .panel {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box;
+  }
+
+  .decision-banner {
+    padding: 16px !important;
+    gap: 13px !important;
+    border-radius: 18px !important;
+  }
+  .decision-banner-main h1 {
+    font-size: clamp(30px, 8vw, 38px) !important;
+    line-height: 1.02 !important;
+    letter-spacing: -0.035em !important;
+  }
+  .decision-banner-main p {
+    margin-top: 8px !important;
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+  }
+  .decision-banner .eyebrow,
+  .decision-banner-metrics span {
+    font-size: 10px !important;
+    letter-spacing: .12em !important;
+  }
+  .decision-banner-metrics {
+    gap: 8px !important;
+  }
+  .decision-banner-metrics > * {
+    min-height: 86px !important;
+    padding: 13px !important;
+    border-radius: 14px !important;
+  }
+  .decision-banner-metrics strong { font-size: 25px !important; }
+  .decision-banner-metrics small { font-size: 10px !important; line-height: 1.35 !important; }
+  .decision-banner-metrics > *:last-child { min-height: 76px !important; }
+  .decision-banner-metrics > *:last-child strong { font-size: 39px !important; }
+
+  .research-status {
+    margin: 9px 0 !important;
+    padding: 13px !important;
+    gap: 10px !important;
+    border-radius: 15px !important;
+  }
+  .research-status > div span { font-size: 9px !important; }
+  .research-status > div strong { font-size: 14px !important; }
+  .research-status-reason { font-size: 13px !important; line-height: 1.45 !important; }
+
+  /* No mini-desktop horizontal strips: wrap workflow and the 13 checks into the phone width. */
+  .mentor-workflow,
+  .quick-checklist {
+    width: 100% !important;
+    max-width: none !important;
+    overflow: visible !important;
+    border-radius: 15px !important;
+  }
+  .mentor-workflow { display: block !important; padding: 11px !important; }
+  .workflow-label { margin-bottom: 10px !important; }
+  .workflow-label span { font-size: 9px !important; }
+  .workflow-label strong { font-size: 13px !important; }
+  .workflow-track {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    gap: 8px !important;
+  }
+  .workflow-step {
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 54px !important;
+    padding: 9px !important;
+    border-radius: 11px !important;
+  }
+  .workflow-step:last-child { grid-column: 1 / -1; }
+  .workflow-number { font-size: 11px !important; }
+  .workflow-step strong { font-size: 12px !important; }
+  .workflow-step small { font-size: 8px !important; }
+
+  .quick-checklist { display: block !important; padding: 11px !important; }
+  .quick-summary {
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-bottom: 9px !important;
+    padding: 10px 12px !important;
+    border-radius: 11px !important;
+  }
+  .quick-summary span { font-size: 9px !important; }
+  .quick-summary strong { font-size: 20px !important; }
+  .quick-summary small { font-size: 8px !important; }
+  .quick-section {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    gap: 7px !important;
+  }
+  .quick-divider { display: block !important; height: 1px !important; margin: 9px 0 !important; }
+  .quick-chip {
+    width: auto !important;
+    min-width: 0 !important;
+    min-height: 47px !important;
+    padding: 8px !important;
+    border-radius: 11px !important;
+  }
+  .quick-index { font-size: 10px !important; }
+  .quick-name { min-width: 0; font-size: 11px !important; }
+  .quick-value { font-size: 12px !important; }
+  .quick-gate { font-size: 7px !important; }
+
+  .trade-focus-card,
+  .panel { border-radius: 16px !important; }
+  .trade-focus-card { padding: 15px !important; }
+  .trade-focus-head .eyebrow,
+  .panel .eyebrow { font-size: 9px !important; }
+  .trade-focus-head h2 {
+    max-width: calc(100vw - 155px) !important;
+    font-size: 18px !important;
+  }
+  .simulation-pill { font-size: 9px !important; }
+  .candidate-label { min-height: 39px; font-size: 10px !important; }
+  .focus-action { padding: 15px !important; border-radius: 15px !important; }
+  .focus-action small { font-size: 10px !important; }
+  .focus-action strong { font-size: 29px !important; line-height: 1.04 !important; }
+  .focus-action span { font-size: 13px !important; line-height: 1.45 !important; }
+  .next-checkpoint { padding: 12px !important; border-radius: 12px !important; }
+  .next-checkpoint span { font-size: 9px !important; }
+  .next-checkpoint strong { font-size: 13px !important; line-height: 1.4 !important; }
+
+  .trade-plan-grid,
+  .option-health-row,
+  .position-live-grid,
+  .session-stat-row,
+  .market-metric-grid,
+  .runner-r-strip {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+    gap: 8px !important;
+  }
+  .trade-plan-grid > div,
+  .option-health-row > div,
+  .position-live-grid > div,
+  .session-stat-row > div,
+  .market-metric-grid > div,
+  .runner-r-strip > div {
+    min-height: 64px !important;
+    padding: 11px !important;
+    border-radius: 12px !important;
+  }
+  .trade-plan-grid span,
+  .option-health-row span,
+  .position-live-grid span,
+  .session-stat-row span,
+  .market-metric-grid span,
+  .runner-r-strip span { font-size: 9px !important; }
+  .trade-plan-grid strong,
+  .option-health-row strong,
+  .position-live-grid strong,
+  .session-stat-row strong,
+  .market-metric-grid strong,
+  .runner-r-strip strong { font-size: 15px !important; }
+
+  .premium-guide,
+  .position-guidance,
+  .research-risk-card { font-size: 12px !important; }
+  .mega-trade-button,
+  .position-exit-button { min-height: 50px !important; font-size: 13px !important; }
+
+  .mentor-page-head {
+    margin: 0 0 10px !important;
+    padding: 16px !important;
+    border-radius: 16px !important;
+  }
+  .mentor-page-head h1 { font-size: 27px !important; }
+  .mentor-page-head p { font-size: 13px !important; line-height: 1.5 !important; }
+
+  .settings-page { padding: 14px !important; border-radius: 16px !important; }
+  .settings-hero h1 { font-size: 28px !important; }
+  .settings-hero p { font-size: 13px !important; line-height: 1.5 !important; }
+  .settings-save-state { font-size: 9px !important; }
+  .settings-card { border-radius: 14px !important; }
+  .settings-card-head { padding: 15px !important; }
+  .settings-card-head h2 { font-size: 17px !important; }
+  .settings-card-head p { font-size: 12px !important; line-height: 1.45 !important; }
+  .settings-card-body { padding: 10px 15px 15px !important; }
+  .settings-field,
+  .settings-toggle-row { min-height: 74px !important; }
+  .settings-field > span strong,
+  .settings-toggle-row > span strong { font-size: 13px !important; }
+  .settings-field > span small,
+  .settings-toggle-row > span small { font-size: 11px !important; line-height: 1.4 !important; }
+  .settings-field input[type="number"] { min-height: 44px !important; font-size: 16px !important; }
+  .settings-note { font-size: 11px !important; line-height: 1.45 !important; }
+  .locked-rules { grid-template-columns: 1fr !important; }
+  .locked-rules span { padding: 11px !important; font-size: 11px !important; }
+  .settings-save-btn { min-height: 50px !important; font-size: 13px !important; }
+  .settings-actions > span { font-size: 10px !important; }
+
+  .history-card-v2 { padding: 14px !important; border-radius: 14px !important; }
+  .history-card-head > div:first-child > strong { font-size: 13px !important; }
+  .history-card-head > div:first-child > small { font-size: 10px !important; }
+  .history-tier { font-size: 8px !important; }
+  .history-pnl strong { font-size: 17px !important; }
+  .history-metrics-v2,
+  .history-lifecycle-v2 { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 7px !important; }
+  .history-metrics-v2 > div,
+  .history-lifecycle-v2 > div { min-height: 57px; padding: 9px !important; }
+  .history-metrics-v2 span,
+  .history-lifecycle-v2 span { font-size: 8px !important; }
+  .history-metrics-v2 strong,
+  .history-lifecycle-v2 strong { font-size: 11px !important; }
+
+  .mentor-footer {
+    min-height: 64px !important;
+    padding: 9px 12px calc(9px + env(safe-area-inset-bottom,0px)) !important;
+  }
+  .mentor-footer-copy strong { font-size: 9px !important; }
+  .mentor-footer-copy span {
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    -webkit-line-clamp: 2;
+  }
+
+  .pwa-install-card {
+    left: 9px !important;
+    right: 9px !important;
+    bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important;
+    border-radius: 14px !important;
+  }
+  .pwa-install-copy strong { font-size: 11px !important; }
+
+  .mentor-mobile-drawer {
+    width: min(90vw, 390px) !important;
+    padding:
+      calc(16px + env(safe-area-inset-top,0px))
+      15px
+      calc(22px + env(safe-area-inset-bottom,0px)) !important;
+  }
+  .drawer-head span { font-size: 8px !important; }
+  .drawer-head strong { font-size: 19px !important; }
+  .drawer-connection { min-height: 46px; font-size: 12px !important; }
+  .drawer-nav .sidebar-nav-button { min-height: 50px !important; }
+  .drawer-nav .sidebar-nav-button strong { font-size: 13px !important; }
+  .drawer-label { font-size: 8px !important; }
+  .drawer-segmented button { min-height: 42px !important; font-size: 13px !important; }
+  .drawer-stats span { font-size: 7px !important; }
+  .drawer-stats strong { font-size: 12px !important; }
+  .drawer-actions button { min-height: 48px !important; font-size: 12px !important; }
+  .drawer-settings-cta { min-height: 50px !important; font-size: 12px !important; }
+}
+
+@media (max-width: 390px) {
+  .mentor-v2-topbar .brand-title { font-size: 16.5px !important; max-width: 54vw !important; }
+  .mentor-v2-topbar .brand-mark { width: 40px !important; height: 40px !important; flex-basis: 40px; }
+  .decision-banner-main h1 { font-size: 29px !important; }
+  .quick-section { grid-template-columns: 1fr 1fr !important; }
+}
