@@ -4,6 +4,7 @@ const METRICS_KEY = 'index-options-mentor-journal-metrics-v1';
 const DB_NAME = 'index-options-mentor-journal-v1';
 const STORE_NAME = 'outbox';
 const API_URL = '/api/journal';
+const HISTORY_EVENT = 'mentor:journal-history';
 
 let dbPromise = null;
 let flushPromise = null;
@@ -16,16 +17,28 @@ let pageHideHandler = null;
 
 export async function prepareJournalHistory({ maxWaitMs = 1800 } = {}) {
   const local = readJson(HISTORY_KEY, []);
+  const remotePromise = syncJournalHistory(1000).then(merged => ({
+    localCount: local.length,
+    remoteCount: Math.max(0, merged.length - local.length),
+    mergedCount: merged.length
+  }));
+
   try {
-    const remote = await withTimeout(loadRemoteTrades(1000), maxWaitMs);
-    const merged = mergeHistory(local, remote);
-    if (merged.length !== local.length || remote.length) {
-      writeJson(HISTORY_KEY, merged);
-    }
-    return { localCount: local.length, remoteCount: remote.length, mergedCount: merged.length };
+    return await withTimeout(remotePromise, maxWaitMs);
   } catch {
+    // The remote request deliberately continues and will dispatch HISTORY_EVENT
+    // when it completes. App startup must never wait indefinitely for Sheets.
     return { localCount: local.length, remoteCount: 0, mergedCount: local.length };
   }
+}
+
+export async function syncJournalHistory(limit = 1000) {
+  const remote = await loadRemoteTrades(limit);
+  const local = readJson(HISTORY_KEY, []);
+  const merged = mergeHistory(local, remote);
+  writeJson(HISTORY_KEY, merged);
+  dispatchHistory(merged);
+  return merged;
 }
 
 export function startTradeJournalBridge() {
@@ -61,7 +74,10 @@ export function startTradeJournalBridge() {
   watchTimer = window.setInterval(watchTick, 1000);
   syncTimer = window.setInterval(() => { void flushJournalQueue(); }, 20000);
 
-  onlineHandler = () => { void flushJournalQueue(); };
+  onlineHandler = () => {
+    void flushJournalQueue();
+    void syncJournalHistory(1000).catch(() => {});
+  };
   pageHideHandler = () => { void flushJournalQueue({ keepalive: true }); };
   window.addEventListener('online', onlineHandler);
   window.addEventListener('pagehide', pageHideHandler);
@@ -153,7 +169,7 @@ function updateMetrics(position) {
   const optionEntry = numberOrNull(position.entry);
   const stored = getMetrics(id) || {};
 
-  let currentR = numberOrNull(stored.currentR) ?? 0;
+  let currentR = numberOrNull(position.currentR) ?? numberOrNull(stored.currentR) ?? 0;
   if (underlying != null && entryUnderlying != null && stopUnderlying != null) {
     const risk = Math.max(0.01, Math.abs(entryUnderlying - stopUnderlying));
     const move = position.side === 'CE'
@@ -162,14 +178,14 @@ function updateMetrics(position) {
     currentR = move / risk;
   }
 
-  const bestR = Math.max(numberOrNull(stored.bestR) ?? 0, currentR);
-  const worstR = Math.min(numberOrNull(stored.worstR) ?? 0, currentR);
+  const bestR = Math.max(numberOrNull(position.bestR) ?? numberOrNull(stored.bestR) ?? 0, currentR);
+  const worstR = Math.min(numberOrNull(position.worstR) ?? numberOrNull(stored.worstR) ?? 0, currentR);
   const bestOptionPrice = optionPrice == null
-    ? (numberOrNull(stored.bestOptionPrice) ?? optionEntry)
-    : Math.max(numberOrNull(stored.bestOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
+    ? (numberOrNull(position.bestOptionPrice) ?? numberOrNull(stored.bestOptionPrice) ?? optionEntry)
+    : Math.max(numberOrNull(position.bestOptionPrice) ?? numberOrNull(stored.bestOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
   const worstOptionPrice = optionPrice == null
-    ? (numberOrNull(stored.worstOptionPrice) ?? optionEntry)
-    : Math.min(numberOrNull(stored.worstOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
+    ? (numberOrNull(position.worstOptionPrice) ?? numberOrNull(stored.worstOptionPrice) ?? optionEntry)
+    : Math.min(numberOrNull(position.worstOptionPrice) ?? numberOrNull(stored.worstOptionPrice) ?? optionEntry ?? optionPrice, optionPrice);
 
   setMetricFields(id, {
     currentR,
@@ -177,6 +193,7 @@ function updateMetrics(position) {
     worstR,
     bestOptionPrice,
     worstOptionPrice,
+    oneRReached: Boolean(position.oneRReached || bestR >= 1),
     lastSeenAt: new Date().toISOString()
   });
 
@@ -186,7 +203,8 @@ function updateMetrics(position) {
     bestR,
     worstR,
     bestOptionPrice,
-    worstOptionPrice
+    worstOptionPrice,
+    oneRReached: Boolean(position.oneRReached || bestR >= 1)
   };
 }
 
@@ -199,7 +217,8 @@ function withStoredMetrics(trade) {
     bestR: trade.bestR ?? stored.bestR,
     worstR: trade.worstR ?? stored.worstR,
     bestOptionPrice: trade.bestOptionPrice ?? stored.bestOptionPrice,
-    worstOptionPrice: trade.worstOptionPrice ?? stored.worstOptionPrice
+    worstOptionPrice: trade.worstOptionPrice ?? stored.worstOptionPrice,
+    oneRReached: trade.oneRReached ?? stored.oneRReached
   };
 }
 
@@ -277,6 +296,12 @@ function mergeHistory(local, remote) {
     .filter(trade => trade?.closedAt)
     .sort((a, b) => new Date(b.closedAt).getTime() - new Date(a.closedAt).getTime())
     .slice(0, 1000);
+}
+
+function dispatchHistory(history) {
+  try {
+    window.dispatchEvent(new CustomEvent(HISTORY_EVENT, { detail: { history } }));
+  } catch {}
 }
 
 function getMetrics(id) {
