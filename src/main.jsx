@@ -12,6 +12,7 @@ import './trader-polish.css';
 import './mobile-menu-runner.css';
 import './mentor-shell-v2.css';
 import './premium-responsive-v3.css';
+import './premium-responsive-v4.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
