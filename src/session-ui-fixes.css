@@ -148,6 +148,49 @@ html[data-theme="dark"] .drawer-fyers-connect {
     font-size: 11px !important;
     min-height: 38px !important;
   }
+
+  /* Larger premium toolbar typography: Simple/Advanced, data and account values
+     should be readable at normal desktop viewing distance. */
+  .trader-toolbar.mentor-v2-toolbar {
+    min-height: 68px !important;
+    padding: 9px 12px !important;
+    gap: 12px !important;
+  }
+
+  .trader-toolbar.mentor-v2-toolbar .segmented button {
+    min-height: 42px !important;
+    padding: 0 18px !important;
+    font-size: 14px !important;
+    font-weight: 900 !important;
+  }
+
+  .trader-toolbar.mentor-v2-toolbar .toolbar-live,
+  .trader-toolbar.mentor-v2-toolbar .toolbar-stat-v2 {
+    padding: 4px 12px !important;
+  }
+
+  .trader-toolbar.mentor-v2-toolbar .toolbar-live span,
+  .trader-toolbar.mentor-v2-toolbar .toolbar-stat-v2 span,
+  .trader-toolbar.mentor-v2-toolbar .automation-pill span {
+    font-size: 10px !important;
+    line-height: 1.1 !important;
+    letter-spacing: .11em !important;
+  }
+
+  .trader-toolbar.mentor-v2-toolbar .toolbar-live strong,
+  .trader-toolbar.mentor-v2-toolbar .toolbar-stat-v2 strong,
+  .trader-toolbar.mentor-v2-toolbar .automation-pill strong {
+    margin-top: 4px !important;
+    font-size: 15px !important;
+    line-height: 1.15 !important;
+    font-weight: 900 !important;
+  }
+
+  .trader-toolbar.mentor-v2-toolbar .automation-pill {
+    min-width: 150px !important;
+    padding: 8px 13px !important;
+    border-radius: 11px !important;
+  }
 }
 
 @media (max-width: 820px) {
