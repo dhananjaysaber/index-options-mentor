@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AppV2 from './AppV2.jsx';
 import PWAInstallPrompt from './PWAInstallPrompt.jsx';
+import FyersConnectButton from './FyersConnectButton.jsx';
 import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
 import './styles.css';
@@ -15,6 +16,7 @@ import './premium-responsive-v3.css';
 import './premium-responsive-v4.css';
 import './premium-responsive-v5.css';
 import './premium-desktop-v6.css';
+import './session-ui-fixes.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -31,6 +33,7 @@ installSetupDecisionObserver();
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AppV2 />
+    <FyersConnectButton />
     <PWAInstallPrompt />
   </React.StrictMode>
 );
