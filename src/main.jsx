@@ -11,7 +11,10 @@ import './dark-theme-fixes.css';
 import './trader-polish.css';
 import './mobile-menu-runner.css';
 import './mentor-shell-v2.css';
-import './mentor-vault-theme.css';
+import './premium-responsive-v3.css';
+import './premium-responsive-v4.css';
+import './premium-responsive-v5.css';
+import './premium-desktop-v6.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
