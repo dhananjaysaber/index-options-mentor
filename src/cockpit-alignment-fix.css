@@ -1,0 +1,28 @@
+/* Targeted desktop alignment fix for the restored three-column cockpit.
+   The trade card still inherited the old sticky top offset after the grid redesign,
+   which visually created empty space above it and made its bottom sit lower than
+   the workflow/checklist cards. Keep mobile sticky behaviour untouched. */
+
+@media (min-width: 821px) {
+  .mentor-v2-content:has(> .mentor-workflow)
+    > .mentor-v2-workspace
+    > .trade-focus-card.sticky-trade {
+    position: relative !important;
+    top: auto !important;
+    bottom: auto !important;
+    inset-block-start: auto !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    align-self: stretch !important;
+  }
+
+  /* Keep all three cockpit cards aligned to the same row edges. */
+  .mentor-v2-content:has(> .mentor-workflow) > .mentor-workflow,
+  .mentor-v2-content:has(> .mentor-workflow) > .quick-checklist,
+  .mentor-v2-content:has(> .mentor-workflow)
+    > .mentor-v2-workspace
+    > .trade-focus-card {
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
