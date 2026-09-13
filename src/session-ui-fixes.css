@@ -1,0 +1,79 @@
+/* Targeted session UI fixes: FYERS reconnect visibility and stable mandatory summary sizing. */
+
+.fyers-connect-cta {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px !important;
+  border-color: #18885c !important;
+  background: linear-gradient(135deg, #15966a, #0f7f58) !important;
+  color: #ffffff !important;
+  box-shadow: 0 7px 18px rgba(15,127,88,.18);
+  white-space: nowrap;
+}
+
+.fyers-connect-cta:hover {
+  filter: brightness(1.04);
+}
+
+/* QuickChecklist's original base style was a 50px horizontal strip. The current
+   component is a card with a summary + sections, so keep it card-sized even
+   before a live snapshot exists. */
+.quick-checklist {
+  height: auto !important;
+  min-height: 0 !important;
+  display: block !important;
+  align-items: stretch !important;
+  overflow: visible !important;
+}
+
+.quick-checklist .quick-summary {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 78px !important;
+  height: auto !important;
+  display: grid !important;
+  place-items: center !important;
+  align-content: center !important;
+  gap: 2px;
+  text-align: center;
+}
+
+.quick-checklist .quick-summary > span,
+.quick-checklist .quick-summary > strong,
+.quick-checklist .quick-summary > small {
+  display: block;
+  line-height: 1.05;
+}
+
+.drawer-fyers-connect {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #15966a;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #15966a, #0f7f58);
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(15,127,88,.16);
+}
+
+html[data-theme="dark"] .fyers-connect-cta,
+html[data-theme="dark"] .drawer-fyers-connect {
+  border-color: #35c893 !important;
+  background: linear-gradient(135deg, #147f5e, #0e674d) !important;
+  color: #effff8 !important;
+}
+
+@media (max-width: 820px) {
+  .quick-checklist .quick-summary {
+    min-height: 88px !important;
+    padding: 15px 14px !important;
+  }
+}
