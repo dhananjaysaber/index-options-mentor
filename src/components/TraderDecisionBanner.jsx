@@ -15,7 +15,10 @@ export default function TraderDecisionBanner({ snapshot, loading }) {
   const displayStage = isClosed ? decision.reviewState : decision.state;
   const label = stageLabel(displayStage);
   const directionReady = Boolean(decision.side);
-  const directionPending = market.phase === 'LIVE' && !directionReady;
+  const parameterDataReady = parameters.length > 0;
+  const openingRangePending = market.phase === 'LIVE' && decision.state === 'OPENING_RANGE' && !parameterDataReady;
+  const directionPending = market.phase === 'LIVE' && !directionReady && !openingRangePending;
+  const metricsPending = openingRangePending || directionPending;
   const mandatory = parameters.filter(row => row.mandatory);
   const mandatoryPassed = mandatory.filter(row => row.gatePassed === true).length;
   const mandatoryFailed = mandatory.filter(row => row.gatePassed === false).length;
@@ -61,19 +64,19 @@ export default function TraderDecisionBanner({ snapshot, loading }) {
           <strong>{decision.side || 'NONE'}</strong>
           <small>{label}</small>
         </div>
-        <div className={`hero-gate ${directionPending ? 'pending' : mandatoryFailed ? 'fail' : 'pass'}`}>
+        <div className={`hero-gate ${metricsPending ? 'pending' : mandatoryFailed ? 'fail' : 'pass'}`}>
           <span>MANDATORY</span>
-          <strong>{directionPending ? 'WAIT' : `${mandatoryPassed}/${mandatory.length || 5}`}</strong>
-          <small>{directionPending ? 'BIAS FIRST' : mandatoryFailed ? 'GATE FAILED' : 'ALL PASSED'}</small>
+          <strong>{metricsPending ? 'WAIT' : `${mandatoryPassed}/${mandatory.length || 5}`}</strong>
+          <small>{openingRangePending ? 'OPEN RANGE' : directionPending ? 'BIAS FIRST' : mandatoryFailed ? 'GATE FAILED' : 'ALL PASSED'}</small>
         </div>
-        <div className={`hero-confirm ${directionPending ? 'pending' : ''}`}>
+        <div className={`hero-confirm ${metricsPending ? 'pending' : ''}`}>
           <span>CONFIRM</span>
-          <strong>{directionPending ? '—' : `${confirmationsGreen}/${confirmations.length || 8}`}</strong>
-          <small>{directionPending ? 'PENDING' : 'GREEN'}</small>
+          <strong>{metricsPending ? '—' : `${confirmationsGreen}/${confirmations.length || 8}`}</strong>
+          <small>{openingRangePending ? 'OPEN RANGE' : directionPending ? 'PENDING' : 'GREEN'}</small>
         </div>
-        <div className={`hero-score ${directionPending ? 'pending' : ''}`}>
-          <span>{directionPending || decision.score == null ? '—' : decision.score}</span>
-          <small>{directionPending ? 'WAIT FOR BIAS' : 'CONFLUENCE'}</small>
+        <div className={`hero-score ${metricsPending ? 'pending' : ''}`}>
+          <span>{metricsPending || decision.score == null ? '—' : decision.score}</span>
+          <small>{openingRangePending ? 'WAIT FOR RANGE' : directionPending ? 'WAIT FOR BIAS' : 'CONFLUENCE'}</small>
         </div>
       </div>
     </section>
