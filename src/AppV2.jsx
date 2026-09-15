@@ -294,11 +294,7 @@ export default function AppV2() {
   }
 
   function showMobilePosition() {
-    setView('dashboard');
-    setMobileMenuOpen(false);
-    window.setTimeout(() => {
-      document.getElementById('mobile-position-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+    navigate('position');
   }
 
   const positionCard = position
@@ -374,6 +370,20 @@ export default function AppV2() {
           </>
         )}
 
+        {view === 'position' && (
+          <div className="mentor-page position-page-v22">
+            <div className="mentor-page-head position-page-head-v22">
+              <div>
+                <div className="eyebrow">POSITION</div>
+                <h1>{position ? 'Open simulated position' : 'No simulated position'}</h1>
+                <p>{position ? 'This page shows only the active position, live Mentor guidance and exit controls.' : 'There is no open simulated position. When you or the Mentor opens one, it will appear here automatically.'}</p>
+              </div>
+              <span className={position ? 'position-page-status open' : 'position-page-status'}>{position ? 'OPEN' : 'NO OPEN POSITION'}</span>
+            </div>
+            <LivePositionPanel position={position} onExit={exitTrade} history={history} snapshot={snapshot} sticky={false} />
+          </div>
+        )}
+
         {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>Mentor-opened and user-opened simulations share the same journal so entry quality, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><History history={history} /></div>}
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
@@ -409,7 +419,7 @@ function MobileDrawer({ view, navigate, onPosition, position, onClose, brokerSta
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
         <div className={`drawer-connection ${brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
-        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${position ? 'has-position' : ''}`} onClick={onPosition}><span>↗</span><span className="drawer-position-copy"><strong>Position</strong><small>{position ? `${position.side || ''} ${position.strike || ''} · OPEN` : 'Trade box / no open position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
+        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${position ? 'has-position' : ''}`} onClick={onPosition}><span>↗</span><span className="drawer-position-copy"><strong>Position</strong><small>{position ? `${position.side || ''} ${position.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
         <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /> <span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button></div>
