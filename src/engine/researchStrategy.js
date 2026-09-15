@@ -60,6 +60,36 @@ export function classifyResearchSetup(snapshot) {
   };
 }
 
+export function classifyManualResearchSetup(snapshot) {
+  const parameters = Array.isArray(snapshot?.parameters) ? snapshot.parameters : [];
+  const automatic = classifyResearchSetup(snapshot);
+  const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE';
+  const hasAllChecks = parameters.length >= 13;
+  const hasOption = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && Number(snapshot?.option?.ltp) > 0);
+  const hasDirection = Boolean(snapshot?.decision?.side || snapshot?.option?.optionType);
+  const hasStructure = Number.isFinite(Number(snapshot?.structure?.underlyingStop)) && Number.isFinite(Number(snapshot?.structure?.riskPoints)) && Number(snapshot?.structure?.riskPoints) > 0;
+  const eligible = live && hasAllChecks && hasOption && hasDirection && hasStructure;
+
+  let reason = 'Manual research is ready. The current 13-point snapshot will be frozen at entry for later comparison.';
+  if (!live) reason = 'Manual research is available only during the live regular session.';
+  else if (!hasAllChecks) reason = 'Wait until all 13 strategy checks are available.';
+  else if (!hasOption) reason = 'Wait until the Mentor has a live candidate option.';
+  else if (!hasDirection) reason = 'Wait until a CE or PE direction exists.';
+  else if (!hasStructure) reason = 'A defined structural invalidation is required so the research trade can be measured consistently.';
+
+  return {
+    eligible,
+    reason,
+    mandatoryPassCount: automatic.mandatoryPassCount,
+    confirmationPassCount: automatic.confirmationPassCount,
+    failedMandatoryIds: automatic.failedMandatoryIds,
+    score: automatic.score,
+    rr: automatic.rr,
+    automaticTier: automatic.tier,
+    automaticEligible: automatic.eligible
+  };
+}
+
 export function calculateSimulationSizing(snapshot, settings) {
   const option = snapshot?.option || {};
   const lots = clampInt(settings?.defaultLots, 1, Math.max(1, Number(settings?.lotCap) || 20));
@@ -91,21 +121,90 @@ export function buildSimulatedTicket(snapshot, settings, initiatedBy = 'USER') {
   const classification = classifyResearchSetup(snapshot);
   if (!classification.eligible) return null;
   const sizing = calculateSimulationSizing(snapshot, settings);
+  return buildTicket({
+    snapshot,
+    settings,
+    sizing,
+    initiatedBy,
+    strategyTier: classification.tier,
+    strategyTierLabel: classification.label,
+    classification,
+    autoManaged: true,
+    manualResearch: false
+  });
+}
+
+export function buildManualResearchTicket(snapshot, settings, overrides = {}) {
+  const manual = classifyManualResearchSetup(snapshot);
+  if (!manual.eligible) return null;
+
+  const requestedLots = clampInt(overrides.lots ?? settings?.defaultLots, 1, Math.max(1, Number(settings?.lotCap) || 20));
+  const referenceCapital = Math.max(10000, Number(overrides.capital ?? settings?.capital) || 50000);
+  const manualSettings = {
+    ...settings,
+    capital: referenceCapital,
+    defaultLots: requestedLots
+  };
+  const sizing = calculateSimulationSizing(snapshot, manualSettings);
+  const automatic = classifyResearchSetup(snapshot);
+
+  return buildTicket({
+    snapshot,
+    settings: manualSettings,
+    sizing,
+    initiatedBy: 'USER',
+    strategyTier: 'MANUAL',
+    strategyTierLabel: 'Manual research',
+    classification: automatic,
+    autoManaged: true,
+    manualResearch: true,
+    manualReferenceCapital: referenceCapital,
+    manualRequestedLots: requestedLots,
+    manualReason: manual.reason
+  });
+}
+
+function buildTicket({
+  snapshot,
+  settings,
+  sizing,
+  initiatedBy,
+  strategyTier,
+  strategyTierLabel,
+  classification,
+  autoManaged,
+  manualResearch,
+  manualReferenceCapital = null,
+  manualRequestedLots = null,
+  manualReason = ''
+}) {
   const { market, option, structure, decision } = snapshot;
   const now = new Date().toISOString();
+  const failedMandatoryIds = classification?.failedMandatoryIds || [];
+  const entryMandatoryPassCount = classification?.mandatoryPassCount ?? 0;
+  const entryConfirmationPassCount = classification?.confirmationPassCount ?? 0;
+  const mentorSuggestion = `${decision.headline || strategyTierLabel}${Array.isArray(decision.reasons) && decision.reasons.length ? ` — ${decision.reasons.join(' | ')}` : ''}`;
 
   return {
     id: crypto.randomUUID(),
     mode: 'SIMULATION',
-    setupId: classification.setupId,
+    setupId: manualResearch
+      ? `${classification?.setupId || market.sessionDate || 'session'}:manual:${Date.now()}`
+      : classification?.setupId,
     openedAt: now,
     initiatedBy,
-    strategyTier: classification.tier,
-    strategyTierLabel: classification.label,
-    autoManaged: true,
+    strategyTier,
+    strategyTierLabel,
+    autoManaged,
+    manualResearch,
+    manualReferenceCapital,
+    manualRequestedLots,
+    manualReason,
     approvalState: decision.state,
     mentorDecisionAtEntry: decision.state,
-    mentorSuggestionAtEntry: `${decision.headline || classification.label}${Array.isArray(decision.reasons) && decision.reasons.length ? ` — ${decision.reasons.join(' | ')}` : ''}`,
+    mentorSuggestionAtEntry: manualResearch
+      ? `MANUAL RESEARCH ENTRY — ${mentorSuggestion}`
+      : mentorSuggestion,
     score: decision.score,
     rr: decision.rr,
     side: option.optionType,
@@ -127,9 +226,9 @@ export function buildSimulatedTicket(snapshot, settings, initiatedBy = 'USER') {
     bestOptionPrice: option.ltp,
     worstOptionPrice: option.ltp,
     oneRReached: false,
-    entryMandatoryPassCount: classification.mandatoryPassCount,
-    entryConfirmationPassCount: classification.confirmationPassCount,
-    failedMandatoryIds: classification.failedMandatoryIds,
+    entryMandatoryPassCount,
+    entryConfirmationPassCount,
+    failedMandatoryIds,
     riskBudgetEligible: sizing.riskBudgetEligible,
     requiredRiskAmount: sizing.requiredRiskAmount,
     requiredRiskPct: sizing.requiredRiskPct,
