@@ -352,21 +352,21 @@ export default function AppV2() {
               onExit={exitTrade}
             />
 
-            {liveError && <div className="alert-bar desktop-dashboard-only">{liveError} Reconnect FYERS if the daily session has expired.</div>}
-            {position && <div className="position-lock-bar desktop-dashboard-only">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
-            <div className="desktop-dashboard-only"><PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} /></div>
-            <div className="desktop-dashboard-only"><TraderDecisionBanner snapshot={snapshot} loading={loading} /></div>
-            <div className="desktop-dashboard-only"><ResearchStatus classification={setupClassification} position={position} settings={settings} /></div>
-            <div className="desktop-dashboard-only desktop-workflow-slot"><MentorWorkflow snapshot={snapshot} /></div>
-            <div className="desktop-dashboard-only desktop-checklist-slot"><QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} /></div>
+            {liveError && <div className="alert-bar">{liveError} Reconnect FYERS if the daily session has expired.</div>}
+            {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
+            <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
+            <TraderDecisionBanner snapshot={snapshot} loading={loading} />
+            <ResearchStatus classification={setupClassification} position={position} settings={settings} />
+            <MentorWorkflow snapshot={snapshot} />
+            <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
 
             {mode === 'simple' ? (
-              <section className="trader-workspace simple-workspace mentor-v2-workspace desktop-dashboard-only desktop-workspace-slot">
+              <section className="trader-workspace simple-workspace mentor-v2-workspace">
                 <div className="workspace-left"><TraderMarketPanel snapshot={snapshot} />{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
                 {positionCard}
               </section>
             ) : (
-              <section className="trader-workspace advanced-workspace mentor-v2-workspace desktop-dashboard-only desktop-workspace-slot">
+              <section className="trader-workspace advanced-workspace mentor-v2-workspace">
                 <div className="workspace-left advanced-left">{snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
                 {positionCard}
               </section>
