@@ -23,29 +23,32 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
   const pnlPct = livePnl != null && entryOption > 0 && quantity > 0 ? (livePnl / (entryOption * quantity)) * 100 : null;
   const mentor = derivePositionMentor(position, snapshot, currentUnderlying ?? Number(position.underlyingEntry));
   const pnlTone = livePnl == null ? '' : livePnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+  const positionLabel = position.manualResearch ? 'MANUAL RESEARCH' : (position.strategyTierLabel || position.strategyTier || 'SIMULATION');
 
   return (
     <aside className={`trade-focus-card position-mentor-card position-essential-card ${sticky ? 'sticky-trade' : ''} ${mentor.tone}`}>
       <div className="trade-focus-head position-essential-head">
         <div>
-          <div className="eyebrow">OPEN POSITION</div>
+          <div className="eyebrow">OPEN POSITION · {positionLabel}</div>
           <h2>{position.symbol}</h2>
-          <small>{position.side} · {position.lots} lot{Number(position.lots) === 1 ? '' : 's'} · {position.quantity} qty · opened {formatOpened(position.openedAt)}</small>
+          <small>{position.side} · {position.lots} lot{Number(position.lots) === 1 ? '' : 's'} · {position.quantity} qty · opened {formatOpened(position.openedAt)} · {formatDuration(position.openedAt)}</small>
         </div>
-        <span className="simulation-pill open">OPEN</span>
+        <span className="simulation-pill open">LIVE</span>
       </div>
 
       <div className="position-live-hero">
         <div className={`position-pnl-hero ${livePnl == null ? '' : livePnl >= 0 ? 'positive' : 'negative'}`}>
           <span>LIVE SIM P&amp;L</span>
           <strong className={pnlTone}>{livePnl == null ? '—' : `${livePnl >= 0 ? '+' : '-'}₹${Math.abs(livePnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}</strong>
-          <small>{pnlPct == null ? 'Waiting for live option quote' : `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% on option premium`}</small>
+          <small>{pnlPct == null ? 'Waiting for live option quote' : `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% · Entry ₹${fmt(entryOption)} → Live ₹${fmt(currentOption)}`}</small>
         </div>
+
         <div className="position-r-hero">
           <span>R NOW</span>
           <strong className={mentor.rMultiple >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatR(mentor.rMultiple)}</strong>
-          <small>Best {formatR(mentor.bestR)}</small>
+          <small>Best {formatR(mentor.bestR)} · Worst {formatR(mentor.worstR)}</small>
         </div>
+
         <div className={`position-action-hero ${mentor.tone}`}>
           <span>MENTOR ACTION</span>
           <strong>{mentor.shortTitle || mentor.title}</strong>
@@ -60,14 +63,14 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <Essential label="NIFTY entry" value={fmt(position.underlyingEntry)} />
         <Essential label="Hard stop" value={fmt(position.underlyingStop)} tone="danger" />
         <Essential label="Target / milestone" value={fmt(position.underlyingTarget)} tone="positive" />
-        <Essential label="Entry → current score" value={`${position.score ?? '—'} → ${mentor.currentScore ?? '—'}`} />
+        <Essential label="Score" value={`${position.score ?? '—'} → ${mentor.currentScore ?? '—'}`} />
         <Essential label="Live gates" value={`${position.currentMandatoryPassCount ?? '—'}/5 · ${position.currentConfirmationPassCount ?? '—'}/8`} />
       </div>
 
       <div className={`position-guidance position-guidance-compact ${mentor.tone}`}>
         <span>WHAT MATTERS NOW</span>
         <strong>{mentor.copy}</strong>
-        <small>Hard structural invalidation: {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
+        <small>Hard stop {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
       </div>
 
       <button className={`position-exit-button ${mentor.alertLevel === 'exit' ? 'urgent' : ''}`} onClick={() => onExit({ mentorState: mentor.title, reasonCode: mentor.reasonCode, reason: mentor.reason, rMultiple: mentor.rMultiple, closedBy: 'USER' })}>{mentor.alertLevel === 'exit' ? 'EXIT SIMULATED POSITION NOW' : 'EXIT SIMULATED TRADE'}</button>
@@ -88,4 +91,15 @@ function formatOpened(value) {
   if (!value) return 'time unavailable';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'time unavailable' : date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatDuration(value) {
+  if (!value) return 'duration unavailable';
+  const opened = new Date(value).getTime();
+  if (!Number.isFinite(opened)) return 'duration unavailable';
+  const totalMinutes = Math.max(0, Math.floor((Date.now() - opened) / 60000));
+  if (totalMinutes < 60) return `${totalMinutes} min open`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes}m open`;
 }
