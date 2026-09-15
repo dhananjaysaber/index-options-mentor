@@ -1,18 +1,20 @@
 export default function History({ history }) {
+  const displayHistory = dedupeHistory(history);
+
   return (
     <section className="panel history-panel history-panel-v2">
       <div className="panel-heading compact">
         <div><div className="eyebrow">LEARNING LOOP</div><h2>Trade history</h2></div>
-        <span className="muted">{history.length} trades</span>
+        <span className="muted">{displayHistory.length} trades</span>
       </div>
 
-      {history.length === 0 ? (
+      {displayHistory.length === 0 ? (
         <div className="empty-state"><p>No completed trades are available yet. Permanent Google Sheets history will appear here after it syncs.</p></div>
       ) : (
         <>
           <div className="history-list history-list-v2">
-            {history.map(trade => (
-              <article className="history-card-v2" key={trade.id}>
+            {displayHistory.map(trade => (
+              <article className="history-card-v2" key={trade.id || stableHistoryKey(trade)}>
                 <div className="history-card-head">
                   <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
                   <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
@@ -50,6 +52,69 @@ export default function History({ history }) {
       )}
     </section>
   );
+}
+
+function dedupeHistory(history) {
+  const rows = Array.isArray(history) ? history : [];
+  const map = new Map();
+
+  for (const trade of rows) {
+    if (!trade) continue;
+    const key = stableHistoryKey(trade);
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, trade);
+      continue;
+    }
+    map.set(key, richerTrade(existing, trade));
+  }
+
+  return [...map.values()].sort((a, b) => {
+    const aTime = new Date(a.closedAt || a.openedAt || 0).getTime();
+    const bTime = new Date(b.closedAt || b.openedAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function stableHistoryKey(trade) {
+  if (trade?.id) {
+    const signature = historySignature(trade);
+    return signature ? `sig:${signature}` : `id:${trade.id}`;
+  }
+  return `sig:${historySignature(trade) || Math.random()}`;
+}
+
+function historySignature(trade) {
+  const symbol = String(trade?.symbol || '').trim();
+  const opened = normaliseTime(trade?.openedAt);
+  const closed = normaliseTime(trade?.closedAt);
+  if (!symbol || !opened || !closed) return '';
+  return [
+    symbol,
+    opened,
+    closed,
+    numberKey(trade?.entry),
+    numberKey(trade?.exit),
+    String(trade?.side || '')
+  ].join('|');
+}
+
+function normaliseTime(value) {
+  if (!value) return '';
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? String(time) : String(value);
+}
+
+function numberKey(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(4) : '';
+}
+
+function richerTrade(a, b) {
+  const score = row => Object.values(row || {}).filter(value => value !== null && value !== undefined && value !== '').length;
+  const richer = score(b) >= score(a) ? b : a;
+  const other = richer === b ? a : b;
+  return { ...other, ...richer };
 }
 
 function Metric({ label, value, tone = '' }) { return <div><span>{label}</span><strong className={tone}>{value}</strong></div>; }
