@@ -1,0 +1,266 @@
+/* v24 — Live position: P&L first, essential information only. */
+.position-essential-card {
+  overflow: hidden;
+}
+
+.position-essential-head {
+  gap: 12px;
+  align-items: flex-start !important;
+}
+
+.position-essential-head h2 {
+  margin: 3px 0 5px;
+}
+
+.position-essential-head small {
+  display: block;
+  color: #718197;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.position-live-hero {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 1.25fr .72fr 1.3fr;
+  gap: 9px;
+}
+
+.position-pnl-hero,
+.position-r-hero,
+.position-action-hero {
+  min-width: 0;
+  min-height: 112px;
+  padding: 14px;
+  border: 1px solid #d8e4ef;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.position-pnl-hero span,
+.position-r-hero span,
+.position-action-hero span,
+.position-essential-grid span {
+  display: block;
+  color: #7b8da2;
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.position-pnl-hero strong {
+  display: block;
+  margin-top: 7px;
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: .95;
+  letter-spacing: -.045em;
+}
+
+.position-pnl-hero small,
+.position-r-hero small,
+.position-action-hero small {
+  display: block;
+  margin-top: 8px;
+  color: #667a90;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.position-pnl-hero.positive {
+  border-color: #9fdfbf;
+  background: linear-gradient(135deg, #edfdf4, #f9fffc);
+}
+.position-pnl-hero.negative {
+  border-color: #efb0b6;
+  background: linear-gradient(135deg, #fff0f2, #fffafb);
+}
+
+.position-r-hero strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 29px;
+  letter-spacing: -.035em;
+}
+
+.position-action-hero strong {
+  display: block;
+  margin-top: 8px;
+  color: #17324f;
+  font-size: 22px;
+  line-height: 1.05;
+  letter-spacing: -.025em;
+}
+.position-action-hero.go,
+.position-action-hero.hold {
+  border-color: #a5ddc0;
+  background: #f0faf5;
+}
+.position-action-hero.wait,
+.position-action-hero.protect {
+  border-color: #ead18e;
+  background: #fff9e9;
+}
+.position-action-hero.stop {
+  border-color: #efb2b7;
+  background: #fff2f3;
+}
+
+.position-essential-grid {
+  margin-top: 9px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+.position-essential-grid > div {
+  min-height: 65px;
+  padding: 10px;
+  border: 1px solid #dce6ef;
+  border-radius: 11px;
+  background: #fbfdff;
+}
+.position-essential-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: #1a344f;
+  font-size: 15px;
+  line-height: 1.15;
+}
+.position-essential-grid > .emphasis {
+  border-color: #bcd7f2;
+  background: #f3f9ff;
+}
+.position-essential-grid > .danger {
+  border-color: #efc0c4;
+  background: #fff4f5;
+}
+.position-essential-grid > .danger strong { color: #bd3440; }
+.position-essential-grid > .positive {
+  border-color: #b8e1ca;
+  background: #f1fbf6;
+}
+.position-essential-grid > .positive strong { color: #0d8454; }
+
+.position-guidance-compact {
+  margin-top: 9px !important;
+  padding: 11px 12px !important;
+}
+.position-guidance-compact > strong {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+.position-guidance-compact > small {
+  margin-top: 5px !important;
+  font-size: 9px !important;
+}
+
+html[data-theme="dark"] .position-essential-head small,
+html[data-theme="dark"] .position-pnl-hero small,
+html[data-theme="dark"] .position-r-hero small,
+html[data-theme="dark"] .position-action-hero small {
+  color: #9eb0c4;
+}
+html[data-theme="dark"] .position-pnl-hero,
+html[data-theme="dark"] .position-r-hero,
+html[data-theme="dark"] .position-action-hero,
+html[data-theme="dark"] .position-essential-grid > div {
+  border-color: #2b3e55;
+  background: #101c2c;
+}
+html[data-theme="dark"] .position-pnl-hero.positive,
+html[data-theme="dark"] .position-action-hero.go,
+html[data-theme="dark"] .position-action-hero.hold,
+html[data-theme="dark"] .position-essential-grid > .positive {
+  border-color: #276b52;
+  background: #12372c;
+}
+html[data-theme="dark"] .position-pnl-hero.negative,
+html[data-theme="dark"] .position-action-hero.stop,
+html[data-theme="dark"] .position-essential-grid > .danger {
+  border-color: #7a3f49;
+  background: #3b2027;
+}
+html[data-theme="dark"] .position-action-hero.wait,
+html[data-theme="dark"] .position-action-hero.protect {
+  border-color: #705a2a;
+  background: #372f1d;
+}
+html[data-theme="dark"] .position-action-hero strong,
+html[data-theme="dark"] .position-essential-grid strong {
+  color: #f0f6fd;
+}
+html[data-theme="dark"] .position-essential-grid > .emphasis {
+  border-color: #315878;
+  background: #12263b;
+}
+html[data-theme="dark"] .position-essential-grid > .danger strong { color: #ff9faa; }
+html[data-theme="dark"] .position-essential-grid > .positive strong { color: #7de0b0; }
+
+@media (max-width: 820px) {
+  .position-essential-card {
+    padding: 13px !important;
+  }
+
+  .position-essential-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .position-essential-head h2 {
+    font-size: 18px !important;
+    overflow-wrap: anywhere;
+  }
+  .position-essential-head small {
+    font-size: 11px !important;
+  }
+
+  .position-live-hero {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .position-pnl-hero {
+    grid-column: 1 / -1;
+    min-height: 130px;
+    padding: 16px;
+  }
+  .position-pnl-hero strong {
+    font-size: clamp(42px, 13vw, 58px) !important;
+  }
+  .position-pnl-hero span { font-size: 10px !important; }
+  .position-pnl-hero small { font-size: 13px !important; }
+
+  .position-r-hero,
+  .position-action-hero {
+    min-height: 118px;
+    padding: 13px;
+  }
+  .position-r-hero strong { font-size: 28px !important; }
+  .position-action-hero strong { font-size: 20px !important; }
+  .position-r-hero span,
+  .position-action-hero span { font-size: 9px !important; }
+  .position-r-hero small,
+  .position-action-hero small { font-size: 11px !important; }
+
+  .position-essential-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+  .position-essential-grid > div {
+    min-height: 72px;
+    padding: 10px;
+  }
+  .position-essential-grid span { font-size: 9px !important; }
+  .position-essential-grid strong { font-size: 17px !important; }
+
+  .position-guidance-compact > strong {
+    font-size: 13px !important;
+  }
+  .position-guidance-compact > small {
+    font-size: 10px !important;
+  }
+
+  .position-exit-button {
+    min-height: 50px !important;
+    font-size: 14px !important;
+  }
+}
