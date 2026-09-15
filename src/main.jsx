@@ -18,6 +18,7 @@ import './premium-responsive-v5.css';
 import './premium-desktop-v6.css';
 import './session-ui-fixes.css';
 import './cockpit-alignment-fix.css';
+import './mobile-dashboard-v21.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
