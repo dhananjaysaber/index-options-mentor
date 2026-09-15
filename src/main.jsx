@@ -20,6 +20,7 @@ import './session-ui-fixes.css';
 import './cockpit-alignment-fix.css';
 import './mobile-dashboard-v21.css';
 import './settings-position-v22.css';
+import './manual-research-v23.css';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
