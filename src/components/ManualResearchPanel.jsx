@@ -34,7 +34,7 @@ export default function ManualResearchPanel({ snapshot, settings, onTakeTrade })
 
       <div className="manual-research-body">
         <p className="manual-research-copy">
-          Use this when you deliberately want to test a setup even though the automatic Mentor cohort has not approved it. The complete 13-point snapshot, entry time, option, price, gates and later exit are still journalled for analysis.
+          Use this when you deliberately want to test a setup even though the automatic Mentor cohort has not approved it. The complete 13-point snapshot, entry time, option, price, gates and later exit are still journalled for analysis. You can close it manually at any time; if Mentor auto-close is enabled, the existing exit engine can also protect or close the research position.
         </p>
 
         <div className="manual-research-scoreline">
