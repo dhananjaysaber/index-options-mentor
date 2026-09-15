@@ -1,4 +1,5 @@
 import { buildSimulatedTicket, calculateSimulationSizing, classifyResearchSetup, tierEnabled } from '../engine/researchStrategy.js';
+import ManualResearchPanel from './ManualResearchPanel.jsx';
 
 function fmtNumber(value) {
   return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -20,7 +21,7 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
       <aside className="trade-focus-card sticky-trade">
         <div className="trade-focus-head"><div><div className="eyebrow">TRADE BOX</div><h2>Waiting for candidate option</h2></div><span className="simulation-pill">SIMULATION</span></div>
         <div className="candidate-label blocked">NO OPTION READY</div>
-        <div className="focus-action stop"><small>CURRENT ACTION</small><strong>{market.phase === 'CLOSED' ? 'MARKET CLOSED' : actionTitleForState(decision.state)}</strong><span>Direction, structure and the hard safety gates must exist before a research position can be opened.</span></div>
+        <div className="focus-action stop"><small>CURRENT ACTION</small><strong>{market.phase === 'CLOSED' ? 'MARKET CLOSED' : actionTitleForState(decision.state)}</strong><span>Direction, structure and the hard safety gates must exist before an automated research position can be opened.</span></div>
         <div className="next-checkpoint"><span>NEXT CHECKPOINT</span><strong>{nextCheckpoint}</strong></div>
       </aside>
     );
@@ -70,7 +71,7 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
       <div className="trade-focus-head"><div><div className="eyebrow">TRADE BOX</div><h2>{option.symbol}</h2></div><span className="simulation-pill">SIMULATION</span></div>
 
       <div className={`candidate-label ${canTake ? 'approved' : 'blocked'}`}>
-        {classification.eligible ? `${classification.label.toUpperCase()} · ${classification.mandatoryPassCount}/5 · ${classification.confirmationPassCount}/8` : 'CANDIDATE OPTION — NO POSITION'}
+        {classification.eligible ? `${classification.label.toUpperCase()} · ${classification.mandatoryPassCount}/5 · ${classification.confirmationPassCount}/8` : 'CANDIDATE OPTION — NO AUTOMATED POSITION'}
       </div>
 
       <div className={`focus-action ${actionTone}`}><small>CURRENT ACTION</small><strong>{actionTitle}</strong><span>{actionCopy}</span></div>
@@ -103,6 +104,8 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
       <button className={`mega-trade-button ${canTake ? 'go' : 'locked'}`} disabled={!canTake} onClick={() => { const ticket = buildSimulatedTicket(snapshot, settings, 'USER'); if (ticket) onTakeTrade(ticket); }}>
         {canTake ? `OPEN ${classification.label.toUpperCase()} SIMULATION` : actionTitle}
       </button>
+
+      {!blocked && <ManualResearchPanel snapshot={snapshot} settings={settings} onTakeTrade={onTakeTrade} />}
     </aside>
   );
 }
