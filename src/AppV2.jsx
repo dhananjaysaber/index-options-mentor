@@ -10,6 +10,7 @@ import History from './components/History.jsx';
 import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
+import MobileMentorDashboard from './components/MobileMentorDashboard.jsx';
 import { derivePositionMentor } from './engine/positionMentor.js';
 import { buildSimulatedTicket, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
@@ -292,6 +293,14 @@ export default function AppV2() {
     setMobileMenuOpen(false);
   }
 
+  function showMobilePosition() {
+    setView('dashboard');
+    setMobileMenuOpen(false);
+    window.setTimeout(() => {
+      document.getElementById('mobile-position-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  }
+
   const positionCard = position
     ? <LivePositionPanel position={position} onExit={exitTrade} history={history} snapshot={snapshot} sticky />
     : <LiveTradeTicket snapshot={snapshot} settings={settings} onTakeTrade={takeTrade} blocked={false} />;
@@ -315,7 +324,7 @@ export default function AppV2() {
 
       <DesktopNav view={view} navigate={navigate} settings={settings} setup={setupClassification} position={position} />
 
-      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} />}
+      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} onPosition={showMobilePosition} position={position} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} />}
 
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
@@ -329,21 +338,35 @@ export default function AppV2() {
               <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
             </section>
 
-            {liveError && <div className="alert-bar">{liveError} Reconnect FYERS if the daily session has expired.</div>}
-            {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
-            <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
-            <TraderDecisionBanner snapshot={snapshot} loading={loading} />
-            <ResearchStatus classification={setupClassification} position={position} settings={settings} />
-            <MentorWorkflow snapshot={snapshot} />
-            <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
+            <MobileMentorDashboard
+              mode={mode}
+              snapshot={snapshot}
+              loading={loading}
+              liveError={liveError}
+              position={position}
+              positionMentor={positionMentor}
+              alertsEnabled={alertsEnabled}
+              history={history}
+              settings={settings}
+              onTakeTrade={takeTrade}
+              onExit={exitTrade}
+            />
+
+            {liveError && <div className="alert-bar desktop-dashboard-only">{liveError} Reconnect FYERS if the daily session has expired.</div>}
+            {position && <div className="position-lock-bar desktop-dashboard-only">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
+            <div className="desktop-dashboard-only"><PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} /></div>
+            <div className="desktop-dashboard-only"><TraderDecisionBanner snapshot={snapshot} loading={loading} /></div>
+            <div className="desktop-dashboard-only"><ResearchStatus classification={setupClassification} position={position} settings={settings} /></div>
+            <div className="desktop-dashboard-only desktop-workflow-slot"><MentorWorkflow snapshot={snapshot} /></div>
+            <div className="desktop-dashboard-only desktop-checklist-slot"><QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} /></div>
 
             {mode === 'simple' ? (
-              <section className="trader-workspace simple-workspace mentor-v2-workspace">
+              <section className="trader-workspace simple-workspace mentor-v2-workspace desktop-dashboard-only desktop-workspace-slot">
                 <div className="workspace-left"><TraderMarketPanel snapshot={snapshot} />{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
                 {positionCard}
               </section>
             ) : (
-              <section className="trader-workspace advanced-workspace mentor-v2-workspace">
+              <section className="trader-workspace advanced-workspace mentor-v2-workspace desktop-dashboard-only desktop-workspace-slot">
                 <div className="workspace-left advanced-left">{snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
                 {positionCard}
               </section>
@@ -380,13 +403,13 @@ function NavButton({ active, onClick, icon, label }) {
   return <button type="button" className={`sidebar-nav-button ${active ? 'active' : ''}`} onClick={onClick}><span>{icon}</span><strong>{label}</strong></button>;
 }
 
-function MobileDrawer({ view, navigate, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot }) {
+function MobileDrawer({ view, navigate, onPosition, position, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot }) {
   return (
     <div className="mentor-drawer-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
         <div className={`drawer-connection ${brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
-        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
+        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${position ? 'has-position' : ''}`} onClick={onPosition}><span>↗</span><span className="drawer-position-copy"><strong>Position</strong><small>{position ? `${position.side || ''} ${position.strike || ''} · OPEN` : 'Trade box / no open position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
         <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /> <span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button></div>
