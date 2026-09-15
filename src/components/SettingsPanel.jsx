@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 export default function SettingsPanel({ settings, onSave }) {
   const [draft, setDraft] = useState(settings);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => setDraft(settings), [settings]);
 
@@ -12,6 +13,7 @@ export default function SettingsPanel({ settings, onSave }) {
   }
 
   function save() {
+    if (saving) return;
     const clean = {
       ...draft,
       capital: Math.max(10000, Number(draft.capital) || 50000),
@@ -20,9 +22,16 @@ export default function SettingsPanel({ settings, onSave }) {
       lotCap: Math.max(1, Math.min(20, Math.round(Number(draft.lotCap) || 5)))
     };
     if (clean.defaultLots > clean.lotCap) clean.defaultLots = clean.lotCap;
+
+    setSaving(true);
+    setSaved(false);
     onSave(clean);
     setDraft(clean);
-    setSaved(true);
+
+    window.setTimeout(() => {
+      setSaving(false);
+      setSaved(true);
+    }, 550);
   }
 
   return (
@@ -33,7 +42,9 @@ export default function SettingsPanel({ settings, onSave }) {
           <h1>Settings</h1>
           <p>Account sizing and simulation automation live here. Strategy thresholds remain locked in the Mentor engine so normal settings changes cannot quietly weaken the 13-step model.</p>
         </div>
-        <span className="settings-save-state">{saved ? 'Saved on this device' : 'Changes not saved'}</span>
+        <span className={`settings-save-state ${saving ? 'saving' : saved ? 'success' : ''}`} aria-live="polite">
+          {saving ? 'Saving settings…' : saved ? 'Settings saved successfully' : 'Changes not saved'}
+        </span>
       </div>
 
       <div className="settings-grid">
@@ -75,8 +86,11 @@ export default function SettingsPanel({ settings, onSave }) {
       </div>
 
       <div className="settings-actions">
-        <button type="button" className="settings-save-btn" onClick={save}>Save settings</button>
-        <span>Saved locally and used immediately by the Mentor on this device.</span>
+        <button type="button" className={`settings-save-btn ${saving ? 'is-saving' : saved ? 'is-saved' : ''}`} onClick={save} disabled={saving}>
+          {saving && <span className="settings-save-spinner" aria-hidden="true" />}
+          <span>{saving ? 'Saving…' : saved ? 'Saved' : 'Save settings'}</span>
+        </button>
+        <span className={saved ? 'settings-success-copy' : ''}>{saved ? 'Settings saved successfully and are now active on this device.' : 'Saved locally and used immediately by the Mentor on this device.'}</span>
       </div>
     </section>
   );
