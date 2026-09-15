@@ -23,70 +23,72 @@ export default function ManualResearchPanel({ snapshot, settings, onTakeTrade })
   }
 
   return (
-    <section className={`manual-research-card ${manual.eligible ? 'ready' : 'waiting'}`}>
-      <div className="manual-research-head">
-        <div>
-          <span>MANUAL RESEARCH</span>
+    <details className={`manual-research-card ${manual.eligible ? 'ready' : 'waiting'}`}>
+      <summary className="manual-research-summary">
+        <span>
+          <small>MANUAL RESEARCH</small>
           <strong>Open your own experimental simulation</strong>
+        </span>
+        <em>{manual.eligible ? 'READY' : 'WAIT'}</em>
+      </summary>
+
+      <div className="manual-research-body">
+        <p className="manual-research-copy">
+          Use this when you deliberately want to test a setup even though the automatic Mentor cohort has not approved it. The complete 13-point snapshot, entry time, option, price, gates and later exit are still journalled for analysis.
+        </p>
+
+        <div className="manual-research-scoreline">
+          <div><span>Mandatory</span><strong>{manual.mandatoryPassCount}/5</strong></div>
+          <div><span>Confirmations</span><strong>{manual.confirmationPassCount}/8</strong></div>
+          <div><span>Confluence</span><strong>{Number.isFinite(manual.score) ? Math.round(manual.score) : '—'}</strong></div>
+          <div><span>Auto tier</span><strong>{manual.automaticTier || 'NOT APPROVED'}</strong></div>
         </div>
-        <em>SIMULATION ONLY</em>
-      </div>
 
-      <p className="manual-research-copy">
-        Use this when you deliberately want to test a setup even though the automatic Mentor cohort has not approved it. The complete 13-point snapshot, entry time, option, price, gates and later exit are still journalled for analysis.
-      </p>
-
-      <div className="manual-research-scoreline">
-        <div><span>Mandatory</span><strong>{manual.mandatoryPassCount}/5</strong></div>
-        <div><span>Confirmations</span><strong>{manual.confirmationPassCount}/8</strong></div>
-        <div><span>Confluence</span><strong>{Number.isFinite(manual.score) ? Math.round(manual.score) : '—'}</strong></div>
-        <div><span>Auto tier</span><strong>{manual.automaticTier || 'NOT APPROVED'}</strong></div>
-      </div>
-
-      <div className="manual-research-inputs">
-        <label>
-          <span>Research lots</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="1"
-            max={Math.max(1, Number(settings?.lotCap) || 20)}
-            value={lots}
-            onChange={event => setLots(event.target.value)}
-          />
-          <small>Default {settings?.defaultLots || 1} · maximum {settings?.lotCap || 20}</small>
-        </label>
-        <label>
-          <span>Reference capital</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="10000"
-            step="5000"
-            value={capital}
-            onChange={event => setCapital(event.target.value)}
-          />
-          <small>Default ₹{Number(settings?.capital || 0).toLocaleString('en-IN')}</small>
-        </label>
-      </div>
-
-      {sizing && (
-        <div className={`manual-research-risk ${sizing.riskBudgetEligible ? 'eligible' : 'outside-budget'}`}>
-          <span>Estimated simulated risk</span>
-          <strong>₹{formatMoney(sizing.requiredRiskAmount)} · {formatNumber(sizing.requiredRiskPct)}%</strong>
-          <small>{sizing.riskBudgetEligible ? 'Within the selected reference capital/risk budget.' : 'Outside the selected risk budget — allowed only because this is manual research, never a live-order approval.'}</small>
+        <div className="manual-research-inputs">
+          <label>
+            <span>Research lots</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max={Math.max(1, Number(settings?.lotCap) || 20)}
+              value={lots}
+              onChange={event => setLots(event.target.value)}
+            />
+            <small>Default {settings?.defaultLots || 1} · maximum {settings?.lotCap || 20}</small>
+          </label>
+          <label>
+            <span>Reference capital</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="10000"
+              step="5000"
+              value={capital}
+              onChange={event => setCapital(event.target.value)}
+            />
+            <small>Default ₹{Number(settings?.capital || 0).toLocaleString('en-IN')}</small>
+          </label>
         </div>
-      )}
 
-      <div className="manual-research-status">
-        <span>{manual.eligible ? 'READY FOR MANUAL RESEARCH' : 'WAITING'}</span>
-        <strong>{manual.reason}</strong>
+        {sizing && (
+          <div className={`manual-research-risk ${sizing.riskBudgetEligible ? 'eligible' : 'outside-budget'}`}>
+            <span>Estimated simulated risk</span>
+            <strong>₹{formatMoney(sizing.requiredRiskAmount)} · {formatNumber(sizing.requiredRiskPct)}%</strong>
+            <small>{sizing.riskBudgetEligible ? 'Within the selected reference capital/risk budget.' : 'Outside the selected risk budget — allowed only because this is manual research, never a live-order approval.'}</small>
+          </div>
+        )}
+
+        <div className="manual-research-status">
+          <span>{manual.eligible ? 'READY FOR MANUAL RESEARCH' : 'WAITING'}</span>
+          <strong>{manual.reason}</strong>
+        </div>
+
+        <button type="button" className="manual-research-open" disabled={!manual.eligible} onClick={openManualResearch}>
+          OPEN MANUAL RESEARCH POSITION
+        </button>
       </div>
-
-      <button type="button" className="manual-research-open" disabled={!manual.eligible} onClick={openManualResearch}>
-        OPEN MANUAL RESEARCH POSITION
-      </button>
-    </section>
+    </details>
   );
 }
 
