@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(() => ({
+  base: process.env.GITHUB_ACTIONS ? '/index-options-mentor/' : '/',
   plugins: [react()],
   server: {
     host: true,
@@ -10,4 +11,4 @@ export default defineConfig({
       '/api': 'http://127.0.0.1:8787'
     }
   }
-});
+}));
