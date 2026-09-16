@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getFyersLoginUrl } from './services/apiBridge.js';
 
 export default function FyersConnectButton() {
   const [status, setStatus] = useState(null);
@@ -37,15 +38,16 @@ export default function FyersConnectButton() {
   }, []);
 
   if (!status?.configured || status.authenticated) return null;
+  const loginUrl = getFyersLoginUrl();
 
   return (
     <>
       {desktopTarget && createPortal(
-        <a className="secondary-btn fyers-connect-cta" href="/api/fyers/login">Connect FYERS</a>,
+        <a className="secondary-btn fyers-connect-cta" href={loginUrl}>Connect FYERS</a>,
         desktopTarget
       )}
       {mobileTarget && createPortal(
-        <a className="drawer-fyers-connect" href="/api/fyers/login">Connect FYERS</a>,
+        <a className="drawer-fyers-connect" href={loginUrl}>Connect FYERS</a>,
         mobileTarget
       )}
     </>
