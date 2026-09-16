@@ -5,6 +5,7 @@ import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import FyersConnectButton from './FyersConnectButton.jsx';
 import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
+import { installShadowResearchEngine } from './services/shadowResearch.js';
 import { installApiBridge } from './services/apiBridge.js';
 import './styles.css';
 import './pwa.css';
@@ -40,6 +41,12 @@ if ('serviceWorker' in navigator) {
 // Observe completed mentor snapshots and journal important setup decisions in
 // the background. This wrapper never delays the FYERS response used by the UI.
 installSetupDecisionObserver();
+
+// Run the separate background research engine. It can open several simulated
+// shadow positions from 3/5, 4/5 and 5/5 cohorts without weakening the visible
+// Mentor recommendation. Shadow positions use strategy-based exits and closed
+// results flow into the same permanent learning journal.
+installShadowResearchEngine();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
