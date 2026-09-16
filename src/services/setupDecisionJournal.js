@@ -1,5 +1,14 @@
+import {
+  advanceShadowResearchTrade,
+  buildShadowResearchTrade,
+  classifyShadowResearchEntry,
+  closeShadowResearchTrade
+} from '../engine/shadowResearch.js';
+
 const TRACKERS_KEY = 'index-options-mentor-setup-trackers-v1';
 const QUEUE_KEY = 'index-options-mentor-setup-journal-queue-v1';
+const SHADOW_TRADES_KEY = 'index-options-mentor-shadow-research-v1';
+const SHADOW_EVENT_QUEUE_KEY = 'index-options-mentor-shadow-journal-queue-v1';
 const API_URL = '/api/journal';
 const MILESTONES = [5, 10, 15, 30];
 
@@ -36,18 +45,44 @@ function observeSnapshot(snapshot) {
   if (!snapshot?.generatedAt || !snapshot?.market?.sessionDate || !Number.isFinite(Number(snapshot?.market?.spot))) return;
 
   const trackers = readJson(TRACKERS_KEY, {});
+  const shadowTrades = readJson(SHADOW_TRADES_KEY, {});
   const nowMs = new Date(snapshot.generatedAt).getTime();
   if (!Number.isFinite(nowMs)) return;
 
   let changed = false;
+  let shadowChanged = false;
+
   for (const tracker of Object.values(trackers)) {
     if (!tracker?.id || tracker.sessionDate !== snapshot.market.sessionDate || tracker.status === 'COMPLETE') continue;
     changed = updateTrackerOutcomes(tracker, snapshot, nowMs) || changed;
   }
 
+  // Background shadow positions are independent of the single visible simulated
+  // position. They let us collect 3/5, 4/5 and 5/5 research evidence in parallel.
+  for (const [tradeId, trade] of Object.entries(shadowTrades)) {
+    if (!trade?.id || trade.status !== 'OPEN') continue;
+    const result = advanceShadowResearchTrade(trade, snapshot);
+    if (!result?.trade) continue;
+    shadowTrades[tradeId] = result.trade;
+    shadowChanged = true;
+
+    if (result.exit) {
+      shadowTrades[tradeId] = {
+        ...result.trade,
+        status: 'CLOSING',
+        pendingExit: result.exit
+      };
+      void finaliseShadowExit(tradeId, snapshot, result.exit);
+    }
+  }
+
   const setupId = snapshot?.setup?.setupId;
-  const retestHeld = snapshot?.setup?.retestStatus === 'HELD';
-  if (snapshot.live === true && setupId && retestHeld && snapshot?.decision?.side) {
+  const hasDirection = snapshot?.decision?.side === 'CE' || snapshot?.decision?.side === 'PE';
+  const allChecksAvailable = Array.isArray(snapshot?.parameters) && snapshot.parameters.length >= 13;
+  const closeConfirmed = snapshot?.structure?.closeConfirmed === true;
+  const trackable = snapshot.live === true && setupId && hasDirection && allChecksAvailable && closeConfirmed;
+
+  if (trackable) {
     if (!trackers[setupId]) {
       trackers[setupId] = createTracker(snapshot);
       changed = true;
@@ -60,22 +95,56 @@ function observeSnapshot(snapshot) {
     }
   }
 
+  const shadowClass = classifyShadowResearchEntry(snapshot);
+  if (shadowClass.eligible) {
+    const shadowId = `shadow:${shadowClass.key}`;
+    if (!shadowTrades[shadowId]) {
+      const trade = buildShadowResearchTrade(snapshot, shadowClass);
+      if (trade) {
+        shadowTrades[shadowId] = trade;
+        shadowChanged = true;
+        queueShadowEvent({
+          eventId: `shadow-open:${trade.id}`,
+          type: 'TRADE_OPENED',
+          trade
+        });
+
+        const tracker = trackers[setupId] || (trackers[setupId] = createTracker(snapshot));
+        tracker.shadowTradeId = trade.id;
+        tracker.shadowStatus = 'OPEN';
+        tracker.shadowCohort = trade.shadowCohort;
+        tracker.shadowOpenedAt = trade.openedAt;
+        tracker.shadowEntryRetestStatus = trade.retestStatusAtEntry;
+        tracker.shadowEntryRRBand = trade.rrBand;
+        tracker.shadowEntryConfirmationPassCount = trade.entryConfirmationPassCount;
+        tracker.shadowMentorApprovedAtEntry = trade.mentorApprovedAtEntry;
+        tracker.needsSync = true;
+        changed = true;
+      }
+    }
+  }
+
+  pruneShadowTrades(shadowTrades);
+
   const activeIds = Object.keys(trackers);
-  if (activeIds.length > 80) {
+  if (activeIds.length > 120) {
     activeIds
       .sort((a, b) => String(trackers[a]?.firstSeenAt || '').localeCompare(String(trackers[b]?.firstSeenAt || '')))
-      .slice(0, activeIds.length - 80)
+      .slice(0, activeIds.length - 120)
       .forEach(id => delete trackers[id]);
     changed = true;
   }
+
+  if (shadowChanged) writeJson(SHADOW_TRADES_KEY, shadowTrades);
 
   if (changed) {
     writeJson(TRACKERS_KEY, trackers);
     for (const tracker of Object.values(trackers)) {
       if (tracker?.needsSync) queueSetup(tracker);
     }
-    void flushQueue();
   }
+
+  if (changed || shadowChanged) void flushQueue();
 }
 
 function createTracker(snapshot) {
@@ -141,6 +210,17 @@ function createTracker(snapshot) {
     bestHypotheticalR: 0,
     worstHypotheticalR: 0,
     outcomes: {},
+    shadowTradeId: '',
+    shadowStatus: '',
+    shadowCohort: '',
+    shadowOpenedAt: '',
+    shadowClosedAt: '',
+    shadowExitReasonCode: '',
+    shadowExitR: '',
+    shadowEntryRetestStatus: '',
+    shadowEntryRRBand: '',
+    shadowEntryConfirmationPassCount: '',
+    shadowMentorApprovedAtEntry: false,
     lastSyncBucket: -1,
     needsSync: true
   };
@@ -206,12 +286,90 @@ function updateTrackerOutcomes(tracker, snapshot, nowMs) {
   return changed;
 }
 
+async function finaliseShadowExit(tradeId, snapshot, exitMeta) {
+  const shadowTrades = readJson(SHADOW_TRADES_KEY, {});
+  const trade = shadowTrades[tradeId];
+  if (!trade || (trade.status !== 'CLOSING' && trade.status !== 'OPEN')) return;
+
+  const optionExit = await quoteOptionWithTimeout(trade.symbol);
+  const closed = closeShadowResearchTrade(trade, snapshot, exitMeta, optionExit);
+  shadowTrades[tradeId] = closed;
+  writeJson(SHADOW_TRADES_KEY, shadowTrades);
+
+  queueShadowEvent({
+    eventId: `shadow-close:${closed.id}`,
+    type: 'TRADE_CLOSED',
+    trade: closed
+  });
+
+  const trackers = readJson(TRACKERS_KEY, {});
+  const tracker = trackers[closed.setupId];
+  if (tracker) {
+    tracker.shadowTradeId = closed.id;
+    tracker.shadowStatus = 'CLOSED';
+    tracker.shadowCohort = closed.shadowCohort;
+    tracker.shadowClosedAt = closed.closedAt;
+    tracker.shadowExitReasonCode = closed.exitReasonCode;
+    tracker.shadowExitR = closed.rAchieved;
+    tracker.updatedAt = closed.closedAt;
+    tracker.needsSync = true;
+    writeJson(TRACKERS_KEY, trackers);
+    queueSetup(tracker);
+  }
+
+  void flushQueue();
+}
+
+async function quoteOptionWithTimeout(symbol) {
+  if (!symbol || !nativeFetch) return null;
+  try {
+    const quotePromise = (async () => {
+      const response = await nativeFetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbol)}`, { cache: 'no-store' });
+      if (!response.ok) return null;
+      const data = await response.json().catch(() => ({}));
+      const nodes = Array.isArray(data?.d) ? data.d : [];
+      const node = nodes.find(row => row?.n === symbol || row?.v?.symbol === symbol);
+      const ltp = Number(node?.v?.lp);
+      return Number.isFinite(ltp) && ltp > 0 ? ltp : null;
+    })();
+    return await Promise.race([
+      quotePromise,
+      new Promise(resolve => window.setTimeout(() => resolve(null), 2500))
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+function pruneShadowTrades(shadowTrades) {
+  const entries = Object.entries(shadowTrades || {});
+  if (entries.length <= 250) return;
+  entries
+    .filter(([, trade]) => trade?.status === 'CLOSED')
+    .sort((a, b) => String(a[1]?.closedAt || '').localeCompare(String(b[1]?.closedAt || '')))
+    .slice(0, Math.max(0, entries.length - 250))
+    .forEach(([id]) => delete shadowTrades[id]);
+}
+
 function queueSetup(tracker) {
   const queue = readJson(QUEUE_KEY, {});
   const payload = serialiseTracker(tracker);
   queue[tracker.id] = payload;
   writeJson(QUEUE_KEY, queue);
   tracker.needsSync = false;
+}
+
+function queueShadowEvent({ eventId, type, trade }) {
+  if (!eventId || !type || !trade?.id) return;
+  const queue = readJson(SHADOW_EVENT_QUEUE_KEY, {});
+  queue[eventId] = {
+    id: eventId,
+    type,
+    queuedAt: new Date().toISOString(),
+    source: 'shadow_research',
+    trade
+  };
+  writeJson(SHADOW_EVENT_QUEUE_KEY, queue);
 }
 
 async function flushQueue({ keepalive = false } = {}) {
@@ -233,6 +391,29 @@ async function flushQueue({ keepalive = false } = {}) {
       if (latestQueue[id]?.updatedAt === payload.updatedAt) {
         delete latestQueue[id];
         writeJson(QUEUE_KEY, latestQueue);
+      }
+    } catch {
+      break;
+    }
+  }
+
+  const shadowQueue = readJson(SHADOW_EVENT_QUEUE_KEY, {});
+  for (const [eventId, event] of Object.entries(shadowQueue)) {
+    try {
+      const response = await nativeFetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'journal_event', event }),
+        cache: 'no-store',
+        keepalive
+      });
+      if (!response.ok) break;
+      const data = await response.json().catch(() => ({}));
+      if (!data?.ok) break;
+      const latestQueue = readJson(SHADOW_EVENT_QUEUE_KEY, {});
+      if (latestQueue[eventId]?.queuedAt === event.queuedAt) {
+        delete latestQueue[eventId];
+        writeJson(SHADOW_EVENT_QUEUE_KEY, latestQueue);
       }
     } catch {
       break;
@@ -284,7 +465,18 @@ function serialiseTracker(tracker) {
     worstAdversePoints: tracker.worstAdversePoints,
     bestHypotheticalR: tracker.bestHypotheticalR,
     worstHypotheticalR: tracker.worstHypotheticalR,
-    outcomes: tracker.outcomes
+    outcomes: tracker.outcomes,
+    shadowTradeId: tracker.shadowTradeId,
+    shadowStatus: tracker.shadowStatus,
+    shadowCohort: tracker.shadowCohort,
+    shadowOpenedAt: tracker.shadowOpenedAt,
+    shadowClosedAt: tracker.shadowClosedAt,
+    shadowExitReasonCode: tracker.shadowExitReasonCode,
+    shadowExitR: tracker.shadowExitR,
+    shadowEntryRetestStatus: tracker.shadowEntryRetestStatus,
+    shadowEntryRRBand: tracker.shadowEntryRRBand,
+    shadowEntryConfirmationPassCount: tracker.shadowEntryConfirmationPassCount,
+    shadowMentorApprovedAtEntry: tracker.shadowMentorApprovedAtEntry
   };
 }
 
