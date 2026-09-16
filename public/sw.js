@@ -1,5 +1,5 @@
-const CACHE_NAME = 'index-options-mentor-pwa-v24';
-const APP_SHELL = ['/', '/manifest.webmanifest', '/icon.svg'];
+const CACHE_NAME = 'index-options-mentor-pwa-v25';
+const APP_SHELL = ['./', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -25,17 +25,17 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin) return;
 
   // Trading/API data and journal traffic must always come from the network and must never be cached.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/.netlify/functions/')) return;
+  if (url.pathname.includes('/api/') || url.pathname.includes('/.netlify/functions/')) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then(response => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('/', copy));
+          caches.open(CACHE_NAME).then(cache => cache.put('./', copy));
           return response;
         })
-        .catch(() => caches.match('/'))
+        .catch(() => caches.match('./'))
     );
     return;
   }
