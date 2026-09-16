@@ -5,6 +5,8 @@ const COOKIE_NAME = 'iom_fyers_session';
 const API_BASE = 'https://api-t1.fyers.in/api/v3';
 const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
+const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
+const GITHUB_PAGES_PATH = '/index-options-mentor/';
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -17,17 +19,9 @@ function json(data, status = 200, headers = {}) {
   });
 }
 
-function appId() {
-  return process.env.FYERS_APP_ID || '';
-}
-
-function appSecret() {
-  return process.env.FYERS_APP_SECRET || '';
-}
-
-function sessionSecret() {
-  return process.env.FYERS_SESSION_SECRET || '';
-}
+function appId() { return process.env.FYERS_APP_ID || ''; }
+function appSecret() { return process.env.FYERS_APP_SECRET || ''; }
+function sessionSecret() { return process.env.FYERS_SESSION_SECRET || ''; }
 
 function redirectUri(request) {
   if (process.env.FYERS_REDIRECT_URI) return process.env.FYERS_REDIRECT_URI;
@@ -39,16 +33,12 @@ function configured(request) {
   return Boolean(appId() && appSecret() && sessionSecret() && redirectUri(request));
 }
 
-function authHeader(accessToken) {
-  return `${appId()}:${accessToken}`;
-}
+function authHeader(accessToken) { return `${appId()}:${accessToken}`; }
 
 async function fyersGet(path, params, accessToken) {
   const url = new URL(`${DATA_BASE}${path}`);
   for (const [key, value] of Object.entries(params || {})) {
-    if (value !== undefined && value !== null && value !== '') {
-      url.searchParams.set(key, String(value));
-    }
+    if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
   }
 
   const response = await fetch(url, {
@@ -59,12 +49,7 @@ async function fyersGet(path, params, accessToken) {
     }
   });
 
-  const data = await response.json().catch(() => ({
-    s: 'error',
-    code: response.status,
-    message: 'FYERS returned an unreadable response.'
-  }));
-
+  const data = await response.json().catch(() => ({ s: 'error', code: response.status, message: 'FYERS returned an unreadable response.' }));
   if (!response.ok && data?.s !== 'error') {
     data.s = 'error';
     data.code = response.status;
@@ -73,30 +58,53 @@ async function fyersGet(path, params, accessToken) {
 }
 
 function loginUrl(request) {
+  const requestUrl = new URL(request.url);
   const url = new URL(`${API_BASE}/generate-authcode`);
   url.searchParams.set('client_id', appId());
   url.searchParams.set('redirect_uri', redirectUri(request));
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('state', crypto.randomBytes(12).toString('hex'));
+  url.searchParams.set('state', makeState(requestUrl.searchParams.get('returnTo'), requestUrl.origin));
   return url.toString();
 }
 
-async function exchangeAuthCode(authCode) {
-  const appIdHash = crypto
-    .createHash('sha256')
-    .update(`${appId()}:${appSecret()}`)
-    .digest('hex');
+function makeState(returnTo, backendOrigin) {
+  const safeReturnTo = validateReturnTo(returnTo, backendOrigin) || `${backendOrigin}/`;
+  const payload = Buffer.from(JSON.stringify({ returnTo: safeReturnTo, nonce: crypto.randomBytes(12).toString('hex') })).toString('base64url');
+  const signature = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
 
+function readState(value, backendOrigin) {
+  if (!value || !sessionSecret()) return `${backendOrigin}/`;
+  try {
+    const [payload, signature] = String(value).split('.');
+    if (!payload || !signature) return `${backendOrigin}/`;
+    const expected = crypto.createHmac('sha256', sessionSecret()).update(payload).digest('base64url');
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return `${backendOrigin}/`;
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return validateReturnTo(parsed?.returnTo, backendOrigin) || `${backendOrigin}/`;
+  } catch {
+    return `${backendOrigin}/`;
+  }
+}
+
+function validateReturnTo(value, backendOrigin) {
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.origin === backendOrigin) return url.toString();
+    if (url.origin === GITHUB_PAGES_ORIGIN && url.pathname.startsWith(GITHUB_PAGES_PATH)) return url.toString();
+  } catch {}
+  return '';
+}
+
+async function exchangeAuthCode(authCode) {
+  const appIdHash = crypto.createHash('sha256').update(`${appId()}:${appSecret()}`).digest('hex');
   const response = await fetch(`${API_BASE}/validate-authcode`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      appIdHash,
-      code: authCode
-    })
+    body: JSON.stringify({ grant_type: 'authorization_code', appIdHash, code: authCode })
   });
-
   return response.json();
 }
 
@@ -147,6 +155,11 @@ function decryptToken(payload) {
 }
 
 function accessTokenFromRequest(request) {
+  const authorization = request.headers.get('authorization') || '';
+  if (/^Bearer\s+/i.test(authorization)) {
+    const token = decryptToken(authorization.replace(/^Bearer\s+/i, '').trim());
+    if (token) return token;
+  }
   return decryptToken(cookieMap(request)[COOKIE_NAME]);
 }
 
@@ -177,10 +190,7 @@ function routeName(request) {
 }
 
 function normalisePendingDirection(snapshot) {
-  if (!snapshot?.decision || snapshot.decision.side || !Array.isArray(snapshot.parameters) || !snapshot.parameters.length) {
-    return snapshot;
-  }
-
+  if (!snapshot?.decision || snapshot.decision.side || !Array.isArray(snapshot.parameters) || !snapshot.parameters.length) return snapshot;
   const regime = snapshot.parameters.find(row => row.id === 'chop');
   const regimeWeak = regime && Number(regime.value) < 0.58;
 
@@ -236,9 +246,7 @@ async function handleStatus(request) {
 }
 
 async function handleLogin(request) {
-  if (!configured(request)) {
-    return json({ error: 'FYERS environment variables are not configured on Netlify.' }, 400);
-  }
+  if (!configured(request)) return json({ error: 'FYERS environment variables are not configured on Netlify.' }, 400);
   return Response.redirect(loginUrl(request), 302);
 }
 
@@ -249,18 +257,21 @@ async function handleCallback(request) {
 
   try {
     const response = await exchangeAuthCode(authCode);
-
     if (response?.s !== 'ok' || !response?.access_token) {
       console.error('FYERS token response:', response);
       return new Response('FYERS login could not be completed.', { status: 400 });
     }
 
     const encrypted = encryptToken(response.access_token);
-    const destination = `${url.origin}/?fyers=connected`;
+    const returnTo = readState(url.searchParams.get('state'), url.origin);
+    const destination = new URL(returnTo);
+    destination.searchParams.set('fyers', 'connected');
+    if (destination.origin === GITHUB_PAGES_ORIGIN) destination.hash = `fyers_session=${encodeURIComponent(encrypted)}`;
+
     return new Response(null, {
       status: 302,
       headers: {
-        location: destination,
+        location: destination.toString(),
         'set-cookie': setSessionCookie(encrypted, request),
         'cache-control': 'no-store'
       }
@@ -285,10 +296,8 @@ async function handleLogout(request) {
 async function handleQuote(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
-
   const raw = new URL(request.url).searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
   const symbols = raw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);
-
   try {
     return json(await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token));
   } catch (error) {
@@ -300,12 +309,10 @@ async function handleQuote(request) {
 async function handleHistory(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
-
   const url = new URL(request.url);
   const symbol = url.searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
   const resolution = url.searchParams.get('resolution') || '5';
   const today = dateKeyIST();
-
   try {
     return json(await fyersGet('/history', {
       symbol,
@@ -324,11 +331,9 @@ async function handleHistory(request) {
 async function handleOptionChain(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
-
   const url = new URL(request.url);
   const symbol = url.searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
   const strikecount = Number(url.searchParams.get('strikecount') || 10);
-
   try {
     return json(await fyersGet('/options-chain-v3', {
       symbol,
@@ -345,11 +350,9 @@ async function handleOptionChain(request) {
 async function handleMentorSnapshot(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
-
   try {
     const today = dateKeyIST();
     const from = dateDaysAgoIST(8);
-
     const [quoteResponse, historyResponse, chainResponse] = await Promise.all([
       fyersGet('/quotes', { symbols: 'NSE:NIFTY50-INDEX' }, auth.token),
       fyersGet('/history', {
@@ -367,36 +370,49 @@ async function handleMentorSnapshot(request) {
       }, auth.token)
     ]);
 
-    const snapshot = await buildMentorSnapshot({
-      quoteResponse,
-      historyResponse,
-      chainResponse,
-      now: new Date()
-    });
-
+    const snapshot = await buildMentorSnapshot({ quoteResponse, historyResponse, chainResponse, now: new Date() });
     return json(normalisePendingDirection(snapshot));
   } catch (error) {
     console.error('Mentor snapshot failed:', error);
-    return json({
-      error: 'The live mentor snapshot could not be calculated.',
-      detail: error?.message || 'Unknown error'
-    }, 500);
+    return json({ error: 'The live mentor snapshot could not be calculated.', detail: error?.message || 'Unknown error' }, 500);
   }
 }
 
+function corsOrigin(request) {
+  const origin = request.headers.get('origin') || '';
+  if (origin === GITHUB_PAGES_ORIGIN) return origin;
+  return '';
+}
+
+function withCors(response, request) {
+  const origin = corsOrigin(request);
+  if (!origin) return response;
+  const headers = new Headers(response.headers);
+  headers.set('Access-Control-Allow-Origin', origin);
+  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  headers.set('Vary', 'Origin');
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default async (request) => {
-  if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
+  if (request.method === 'OPTIONS') {
+    return withCors(new Response(null, { status: 204 }), request);
+  }
+  if (request.method !== 'GET') return withCors(json({ error: 'Method not allowed.' }, 405), request);
 
   const route = routeName(request);
+  let response;
   switch (route) {
-    case 'status': return handleStatus(request);
-    case 'login': return handleLogin(request);
-    case 'callback': return handleCallback(request);
-    case 'logout': return handleLogout(request);
-    case 'quote': return handleQuote(request);
-    case 'history': return handleHistory(request);
-    case 'option-chain': return handleOptionChain(request);
-    case 'mentor-snapshot': return handleMentorSnapshot(request);
-    default: return json({ error: 'Unknown FYERS route.' }, 404);
+    case 'status': response = await handleStatus(request); break;
+    case 'login': response = await handleLogin(request); break;
+    case 'callback': response = await handleCallback(request); break;
+    case 'logout': response = await handleLogout(request); break;
+    case 'quote': response = await handleQuote(request); break;
+    case 'history': response = await handleHistory(request); break;
+    case 'option-chain': response = await handleOptionChain(request); break;
+    case 'mentor-snapshot': response = await handleMentorSnapshot(request); break;
+    default: response = json({ error: 'Unknown FYERS route.' }, 404);
   }
+  return withCors(response, request);
 };
