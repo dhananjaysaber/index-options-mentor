@@ -6,7 +6,7 @@ const API_BASE = 'https://api-t1.fyers.in/api/v3';
 const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
-const GITHUB_PAGES_PATH = '/index-options-mentor/';
+const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -93,7 +93,7 @@ function validateReturnTo(value, backendOrigin) {
   try {
     const url = new URL(value);
     if (url.origin === backendOrigin) return url.toString();
-    if (url.origin === GITHUB_PAGES_ORIGIN && url.pathname.startsWith(GITHUB_PAGES_PATH)) return url.toString();
+    if (url.origin === GITHUB_PAGES_ORIGIN && GITHUB_PAGES_PATHS.some(path => url.pathname.startsWith(path))) return url.toString();
   } catch {}
   return '';
 }
