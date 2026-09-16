@@ -5,6 +5,7 @@ import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import FyersConnectButton from './FyersConnectButton.jsx';
 import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
+import { installApiBridge } from './services/apiBridge.js';
 import './styles.css';
 import './pwa.css';
 import './mobile-fixes.css';
@@ -21,11 +22,16 @@ import './cockpit-alignment-fix.css';
 import './mobile-dashboard-v21.css';
 import './settings-position-v22.css';
 import './manual-research-v23.css';
-import './position-live-v24.css';
+import './live-position-v24.css';
+
+// On GitHub Pages the visible PWA is static, while all /api/* traffic is
+// transparently routed to the existing secure Netlify backend. Netlify keeps
+// FYERS and journal secrets; no secret is bundled into the GitHub Pages build.
+installApiBridge();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(error => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
       console.warn('PWA service worker registration failed:', error);
     });
   });
