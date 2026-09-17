@@ -1,0 +1,70 @@
+/* v29 — near-live market surfaces and fixed mobile chart geometry */
+html,
+body,
+#root {
+  -webkit-text-size-adjust: 100%;
+}
+
+.nifty-chart-canvas-wrap {
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+}
+
+.nifty-chart-canvas {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
+.nifty-current-price-line rect {
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.12));
+}
+
+.nifty-current-price-value,
+.nifty-current-countdown,
+.nifty-chart-price-label,
+.nifty-chart-time-label,
+.nifty-level-label {
+  paint-order: stroke fill;
+  stroke: rgba(255, 255, 255, 0.72);
+  stroke-width: 0.35px;
+}
+
+[data-theme='dark'] .nifty-current-price-value,
+[data-theme='dark'] .nifty-current-countdown,
+[data-theme='dark'] .nifty-chart-price-label,
+[data-theme='dark'] .nifty-chart-time-label,
+[data-theme='dark'] .nifty-level-label {
+  stroke: rgba(8, 16, 29, 0.8);
+}
+
+@media (max-width: 820px) {
+  .nifty-chart-canvas-wrap {
+    width: 100%;
+    overflow: hidden !important;
+  }
+
+  .nifty-chart-canvas {
+    min-width: 0 !important;
+    width: 100% !important;
+    aspect-ratio: 920 / 390;
+  }
+
+  .nifty-chart-price-label {
+    font-size: 11px;
+  }
+
+  .nifty-current-price-value {
+    font-size: 13px;
+  }
+
+  .nifty-current-countdown {
+    font-size: 10px;
+  }
+
+  .nifty-level-label {
+    font-size: 9.5px;
+  }
+}
