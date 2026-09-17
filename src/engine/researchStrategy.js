@@ -179,6 +179,9 @@ function buildTicket({
   manualReason = ''
 }) {
   const { market, option, structure, decision } = snapshot;
+  const execution = resolveLiveExecution(option?.symbol, market?.spot, option?.ltp);
+  const underlyingEntry = execution.nifty;
+  const optionEntry = execution.option;
   const now = new Date().toISOString();
   const failedMandatoryIds = classification?.failedMandatoryIds || [];
   const entryMandatoryPassCount = classification?.mandatoryPassCount ?? 0;
@@ -214,17 +217,17 @@ function buildTicket({
     lotSize: option.lotSize,
     lots: sizing.lots,
     quantity: sizing.quantity,
-    entry: option.ltp,
-    currentPrice: option.ltp,
-    underlyingEntry: market.spot,
-    underlyingCurrent: market.spot,
+    entry: optionEntry,
+    currentPrice: optionEntry,
+    underlyingEntry,
+    underlyingCurrent: underlyingEntry,
     underlyingStop: structure.underlyingStop,
     underlyingTarget: structure.underlyingTarget,
     currentR: 0,
     bestR: 0,
     worstR: 0,
-    bestOptionPrice: option.ltp,
-    worstOptionPrice: option.ltp,
+    bestOptionPrice: optionEntry,
+    worstOptionPrice: optionEntry,
     oneRReached: false,
     entryMandatoryPassCount,
     entryConfirmationPassCount,
@@ -233,6 +236,7 @@ function buildTicket({
     requiredRiskAmount: sizing.requiredRiskAmount,
     requiredRiskPct: sizing.requiredRiskPct,
     riskBudget: sizing.riskBudget,
+    liveQuoteAtEntry: execution.at,
     settingsSnapshot: {
       capital: Number(settings?.capital) || 0,
       riskPct: Number(settings?.riskPct) || 0,
@@ -247,7 +251,7 @@ function buildTicket({
     reasons: decision.reasons,
     entryMarket: {
       sessionDate: market.sessionDate,
-      spot: market.spot,
+      spot: underlyingEntry,
       vwap: market.vwap,
       orh: market.orh,
       orl: market.orl,
@@ -259,9 +263,29 @@ function buildTicket({
     },
     entryStructure: { ...structure },
     entryDecision: { ...decision },
-    entryOption: { ...option },
+    entryOption: { ...option, ltp: optionEntry },
     openedByMentor: initiatedBy === 'MENTOR'
   };
+}
+
+function resolveLiveExecution(optionSymbol, snapshotSpot, snapshotOption) {
+  let quote = null;
+  try {
+    quote = typeof window !== 'undefined' ? window.__indexOptionsLiveQuote : null;
+  } catch {}
+  const liveNifty = positiveNumber(quote?.nifty);
+  const liveOption = quote?.optionSymbol === optionSymbol ? positiveNumber(quote?.optionPrice) : null;
+  return {
+    nifty: liveNifty ?? positiveNumber(snapshotSpot) ?? Number(snapshotSpot) || 0,
+    option: liveOption ?? positiveNumber(snapshotOption) ?? Number(snapshotOption) || 0,
+    at: quote?.at || null
+  };
+}
+
+function positiveNumber(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export function tierEnabled(classification, settings) {
