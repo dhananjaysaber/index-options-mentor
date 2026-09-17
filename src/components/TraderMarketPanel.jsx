@@ -1,3 +1,5 @@
+import NiftyStrategyChart from './NiftyStrategyChart.jsx';
+
 function fmt(value) {
   return value == null ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
@@ -28,6 +30,8 @@ export default function TraderMarketPanel({ snapshot }) {
         </div>
         <span className={`phase-pill ${market.phase === 'LIVE' ? 'live' : ''}`}>{market.phase.replaceAll('_', ' ')}</span>
       </div>
+
+      <NiftyStrategyChart snapshot={snapshot} compact />
 
       <div className="market-metric-grid">
         {metrics.map(([label, value]) => (
