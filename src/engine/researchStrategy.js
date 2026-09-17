@@ -275,9 +275,11 @@ function resolveLiveExecution(optionSymbol, snapshotSpot, snapshotOption) {
   } catch {}
   const liveNifty = positiveNumber(quote?.nifty);
   const liveOption = quote?.optionSymbol === optionSymbol ? positiveNumber(quote?.optionPrice) : null;
+  const snapshotNifty = positiveNumber(snapshotSpot);
+  const snapshotPremium = positiveNumber(snapshotOption);
   return {
-    nifty: liveNifty ?? positiveNumber(snapshotSpot) ?? Number(snapshotSpot) || 0,
-    option: liveOption ?? positiveNumber(snapshotOption) ?? Number(snapshotOption) || 0,
+    nifty: liveNifty ?? snapshotNifty ?? 0,
+    option: liveOption ?? snapshotPremium ?? 0,
     at: quote?.at || null
   };
 }
