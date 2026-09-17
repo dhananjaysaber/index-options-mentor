@@ -1,6 +1,8 @@
 import { derivePositionMentor, fmt, formatR } from '../engine/positionMentor.js';
+import useLiveQuote from '../hooks/useLiveQuote.js';
 
 export default function LivePositionPanel({ position, onExit, history = [], snapshot = null, sticky = false }) {
+  const liveQuote = useLiveQuote();
   if (!position) {
     const today = new Date().toDateString();
     const todayTrades = history.filter(t => new Date(t.closedAt).toDateString() === today);
@@ -15,8 +17,10 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
     );
   }
 
-  const currentUnderlying = numberOrNull(position.underlyingCurrent ?? snapshot?.market?.spot);
-  const currentOption = numberOrNull(position.currentPrice);
+  const liveUnderlying = numberOrNull(liveQuote?.nifty);
+  const liveOption = liveQuote?.optionSymbol === position.symbol ? numberOrNull(liveQuote?.optionPrice) : null;
+  const currentUnderlying = liveUnderlying ?? numberOrNull(position.underlyingCurrent ?? snapshot?.market?.spot);
+  const currentOption = liveOption ?? numberOrNull(position.currentPrice);
   const entryOption = numberOrNull(position.entry);
   const quantity = Number(position.quantity) || 0;
   const livePnl = currentOption != null && entryOption != null ? (currentOption - entryOption) * quantity : null;
@@ -46,7 +50,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <div className="position-r-hero">
           <span>R NOW</span>
           <strong className={mentor.rMultiple >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatR(mentor.rMultiple)}</strong>
-          <small>Best {formatR(mentor.bestR)} · Worst {formatR(mentor.worstR)}</small>
+          <small>Best {formatR(Math.max(Number(position.bestR) || 0, mentor.rMultiple))} · Worst {formatR(Math.min(Number(position.worstR) || 0, mentor.rMultiple))}</small>
         </div>
 
         <div className={`position-action-hero ${mentor.tone}`}>
@@ -83,8 +87,9 @@ function Essential({ label, value, tone = '', emphasis = false }) {
 }
 
 function numberOrNull(value) {
+  if (value == null || value === '') return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function formatOpened(value) {
