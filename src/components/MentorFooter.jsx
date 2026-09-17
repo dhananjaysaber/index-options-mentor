@@ -130,6 +130,7 @@ export default function MentorFooter({ snapshot, brokerStatus, refreshing, posit
   const tone = footerTone(snapshot, refreshing, positionMentor);
   const label = !brokerStatus?.authenticated ? 'MENTOR OFFLINE' : refreshing ? 'MENTOR CHECKING' : 'MENTOR SAYS';
   const message = mentorMessage(snapshot, brokerStatus, refreshing, positionMentor);
+  const lastRefresh = checkedTime(snapshot?.generatedAt);
 
   return (
     <footer className={`mentor-footer ${tone}`} aria-live="polite">
@@ -137,12 +138,15 @@ export default function MentorFooter({ snapshot, brokerStatus, refreshing, posit
         <span className={`mentor-live-dot ${tone}`} />
       </div>
       <div className="mentor-footer-copy">
-        <strong>{label}</strong>
+        <div className="mentor-footer-heading">
+          <strong>{label}</strong>
+          <span className="mentor-footer-last-refresh">LAST REFRESHED {refreshing ? 'UPDATING…' : lastRefresh}</span>
+        </div>
         <span>{message}</span>
       </div>
       <div className="mentor-footer-meta">
         <span>{brokerStatus?.authenticated ? 'AUTO 15s' : 'WAITING'}</span>
-        <strong>{refreshing ? 'Updating…' : `Checked ${checkedTime(snapshot?.generatedAt)}`}</strong>
+        <strong>{refreshing ? 'Refreshing latest snapshot…' : 'Live snapshot ready'}</strong>
       </div>
     </footer>
   );
