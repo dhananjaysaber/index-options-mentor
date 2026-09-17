@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 
-const MAX_CANDLES = 54;
+const TIMEFRAMES = {
+  '5': { label: '5 min', shortLabel: '5 MIN', maxCandles: 54 },
+  '3': { label: '3 min', shortLabel: '3 MIN', maxCandles: 70 }
+};
 
 export default function NiftyStrategyChart({ snapshot, position = null, compact = false }) {
+  const [timeframe, setTimeframe] = useState('5');
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const sessionDate = snapshot?.market?.sessionDate || '';
+  const timeframeConfig = TIMEFRAMES[timeframe] || TIMEFRAMES['5'];
 
   useEffect(() => {
     if (!sessionDate) {
@@ -18,11 +23,11 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     let cancelled = false;
 
     const load = async () => {
-      setLoading(current => current || candles.length === 0);
+      setLoading(true);
       try {
         const params = new URLSearchParams({
           symbol: 'NSE:NIFTY50-INDEX',
-          resolution: '5',
+          resolution: timeframe,
           from: sessionDate,
           to: sessionDate
         });
@@ -33,13 +38,16 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         const parsed = rows
           .map(row => normaliseCandle(row))
           .filter(Boolean)
-          .slice(-MAX_CANDLES);
+          .slice(-timeframeConfig.maxCandles);
         if (!cancelled) {
           setCandles(parsed);
-          setError(parsed.length ? '' : 'No 5-minute candles are available yet.');
+          setError(parsed.length ? '' : `No ${timeframeConfig.label} candles are available yet.`);
         }
       } catch (err) {
-        if (!cancelled) setError(err?.message || 'Live chart data is unavailable.');
+        if (!cancelled) {
+          setCandles([]);
+          setError(err?.message || 'Live chart data is unavailable.');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -51,34 +59,50 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [sessionDate]);
+  }, [sessionDate, timeframe, timeframeConfig.label, timeframeConfig.maxCandles]);
 
   const chart = useMemo(() => buildChartModel(candles, snapshot, position), [candles, snapshot, position]);
   const side = position?.side || snapshot?.decision?.side || '';
   const retest = snapshot?.setup?.retestStatus || 'WAIT';
 
   return (
-    <section className={`nifty-strategy-chart ${compact ? 'compact' : ''}`} aria-label="Live NIFTY five-minute strategy chart">
+    <section className={`nifty-strategy-chart ${compact ? 'compact' : ''}`} aria-label={`Live NIFTY ${timeframeConfig.label} strategy chart`}>
       <div className="nifty-chart-head">
         <div>
-          <span className="nifty-chart-eyebrow">LIVE NIFTY · 5 MIN</span>
+          <span className="nifty-chart-eyebrow">LIVE NIFTY · {timeframeConfig.shortLabel}</span>
           <strong>Strategy chart</strong>
           <small>Visual confirmation of structure, VWAP, breakout, retest and risk levels.</small>
+          <small className="nifty-chart-rule-note">Mentor entry rules remain based on the 5-minute strategy. Switching timeframe changes the chart view only.</small>
         </div>
-        <div className="nifty-chart-badges">
-          <span className={`nifty-chart-bias ${side ? `side-${side.toLowerCase()}` : ''}`}>{side ? `${side} BIAS` : 'NO BIAS'}</span>
-          <span className={`nifty-chart-retest retest-${String(retest).toLowerCase()}`}>RETEST {retest}</span>
+        <div className="nifty-chart-controls">
+          <div className="nifty-chart-timeframe-tabs" role="group" aria-label="Chart timeframe">
+            {Object.entries(TIMEFRAMES).map(([value, config]) => (
+              <button
+                key={value}
+                type="button"
+                className={timeframe === value ? 'active' : ''}
+                onClick={() => setTimeframe(value)}
+                aria-pressed={timeframe === value}
+              >
+                {config.label}
+              </button>
+            ))}
+          </div>
+          <div className="nifty-chart-badges">
+            <span className={`nifty-chart-bias ${side ? `side-${side.toLowerCase()}` : ''}`}>{side ? `${side} BIAS` : 'NO BIAS'}</span>
+            <span className={`nifty-chart-retest retest-${String(retest).toLowerCase()}`}>RETEST {retest}</span>
+          </div>
         </div>
       </div>
 
       {loading && !candles.length ? (
-        <div className="nifty-chart-empty">Loading 5-minute candles…</div>
+        <div className="nifty-chart-empty">Loading {timeframeConfig.label} candles…</div>
       ) : error && !candles.length ? (
         <div className="nifty-chart-empty">{error}</div>
       ) : chart ? (
         <>
           <div className="nifty-chart-canvas-wrap">
-            <svg className="nifty-chart-canvas" viewBox="0 0 900 360" role="img" aria-label="NIFTY five-minute candlestick chart with strategy levels">
+            <svg className="nifty-chart-canvas" viewBox="0 0 900 360" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
               <rect x="0" y="0" width="900" height="360" className="nifty-chart-bg" />
               {chart.grid.map((y, index) => (
                 <g key={`grid-${index}`}>
