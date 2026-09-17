@@ -1,4 +1,7 @@
+import useLiveQuote from '../hooks/useLiveQuote.js';
+
 export default function TraderDecisionBanner({ snapshot, loading }) {
+  const liveQuote = useLiveQuote();
   if (!snapshot) {
     return (
       <section className="decision-banner neutral">
@@ -11,6 +14,8 @@ export default function TraderDecisionBanner({ snapshot, loading }) {
   }
 
   const { decision, market, parameters = [] } = snapshot;
+  const liveSpot = Number(liveQuote?.nifty);
+  const displaySpot = Number.isFinite(liveSpot) && liveSpot > 0 ? liveSpot : Number(market.spot || 0);
   const isClosed = market.phase === 'CLOSED';
   const displayStage = isClosed ? decision.reviewState : decision.state;
   const label = stageLabel(displayStage);
@@ -54,7 +59,7 @@ export default function TraderDecisionBanner({ snapshot, loading }) {
       <div className="decision-banner-metrics">
         <div className="hero-metric">
           <span>NIFTY</span>
-          <strong>{Number(market.spot || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+          <strong>{displaySpot.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
           <small className={market.changePct >= 0 ? 'up' : 'down'}>
             {market.changePct >= 0 ? '+' : ''}{Number(market.changePct || 0).toFixed(2)}%
           </small>
