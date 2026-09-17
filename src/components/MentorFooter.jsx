@@ -144,10 +144,6 @@ export default function MentorFooter({ snapshot, brokerStatus, refreshing, posit
         </div>
         <span>{message}</span>
       </div>
-      <div className="mentor-footer-meta">
-        <span>{brokerStatus?.authenticated ? 'AUTO 15s' : 'WAITING'}</span>
-        <strong>{refreshing ? 'Refreshing latest snapshot…' : 'Live snapshot ready'}</strong>
-      </div>
     </footer>
   );
 }
