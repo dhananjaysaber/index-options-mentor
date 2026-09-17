@@ -1,5 +1,6 @@
 export default function History({ history }) {
   const displayHistory = dedupeHistory(history);
+  const summary = summariseHistory(displayHistory);
 
   return (
     <section className="panel history-panel history-panel-v2">
@@ -8,43 +9,57 @@ export default function History({ history }) {
         <span className="muted">{displayHistory.length} trades</span>
       </div>
 
+      <div className="history-summary-grid" aria-label="Trade journal summary">
+        <SummaryMetric label="Total trades" value={summary.total} />
+        <SummaryMetric label="Net P&L" value={`₹${formatMoney(summary.pnl)}`} tone={summary.pnl >= 0 ? 'positive' : 'negative'} />
+        <SummaryMetric label="Wins" value={summary.wins} tone="positive" />
+        <SummaryMetric label="Losses" value={summary.losses} tone="negative" />
+        <SummaryMetric label="Win rate" value={`${summary.winRate.toFixed(0)}%`} />
+        <SummaryMetric label="Avg R" value={formatR(summary.avgR)} tone={summary.avgR >= 0 ? 'positive' : 'negative'} />
+      </div>
+
       {displayHistory.length === 0 ? (
         <div className="empty-state"><p>No completed trades are available yet. Permanent Google Sheets history will appear here after it syncs.</p></div>
       ) : (
         <>
           <div className="history-list history-list-v2">
             {displayHistory.map(trade => (
-              <article className="history-card-v2" key={trade.id || stableHistoryKey(trade)}>
-                <div className="history-card-head">
-                  <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
-                  <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
-                </div>
-
-                <div className="history-metrics-v2">
-                  <Metric label="Entry score" value={trade.score ?? '—'} />
-                  <Metric label="Entry gates" value={trade.entryMandatoryPassCount != null ? `${trade.entryMandatoryPassCount}/5` : '—'} />
-                  <Metric label="Entry confirms" value={trade.entryConfirmationPassCount != null ? `${trade.entryConfirmationPassCount}/8` : '—'} />
-                  <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
-                  <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
-                  <Metric label="Best R" value={formatR(trade.bestR)} tone={Number(trade.bestR) > 0 ? 'positive' : ''} />
-                  <Metric label="Worst R" value={formatR(trade.worstR)} tone={Number(trade.worstR) < 0 ? 'negative' : ''} />
-                  <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
-                </div>
-
-                <div className="history-lifecycle-v2">
-                  <div><span>Opened</span><strong>{formatDateTime(trade.openedAt)}</strong></div>
-                  <div><span>Closed</span><strong>{formatDateTime(trade.closedAt)}</strong></div>
-                  <div><span>Closed by</span><strong>{trade.closedBy || 'USER / LEGACY'}</strong></div>
-                  <div><span>Exit reason</span><strong>{humanReason(trade.exitReasonCode)}</strong></div>
-                </div>
-
-                {(trade.mentorSuggestionAtEntry || trade.mentorSuggestionAtExit) && (
-                  <div className="history-mentor-notes">
-                    {trade.mentorSuggestionAtEntry && <p><span>Mentor at entry</span>{trade.mentorSuggestionAtEntry}</p>}
-                    {trade.mentorSuggestionAtExit && <p><span>Mentor at exit</span>{trade.mentorSuggestionAtExit}</p>}
+              <details className="history-card-v2 history-card-expandable" key={trade.id || stableHistoryKey(trade)}>
+                <summary className="history-card-summary">
+                  <div className="history-card-head">
+                    <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
+                    <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
                   </div>
-                )}
-              </article>
+                  <div className="history-card-open-hint"><span>View position details</span><i aria-hidden="true" /></div>
+                </summary>
+
+                <div className="history-card-details">
+                  <div className="history-metrics-v2">
+                    <Metric label="Entry score" value={trade.score ?? '—'} />
+                    <Metric label="Entry gates" value={trade.entryMandatoryPassCount != null ? `${trade.entryMandatoryPassCount}/5` : '—'} />
+                    <Metric label="Entry confirms" value={trade.entryConfirmationPassCount != null ? `${trade.entryConfirmationPassCount}/8` : '—'} />
+                    <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
+                    <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                    <Metric label="Best R" value={formatR(trade.bestR)} tone={Number(trade.bestR) > 0 ? 'positive' : ''} />
+                    <Metric label="Worst R" value={formatR(trade.worstR)} tone={Number(trade.worstR) < 0 ? 'negative' : ''} />
+                    <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
+                  </div>
+
+                  <div className="history-lifecycle-v2">
+                    <div><span>Opened</span><strong>{formatDateTime(trade.openedAt)}</strong></div>
+                    <div><span>Closed</span><strong>{formatDateTime(trade.closedAt)}</strong></div>
+                    <div><span>Closed by</span><strong>{trade.closedBy || 'USER / LEGACY'}</strong></div>
+                    <div><span>Exit reason</span><strong>{humanReason(trade.exitReasonCode)}</strong></div>
+                  </div>
+
+                  {(trade.mentorSuggestionAtEntry || trade.mentorSuggestionAtExit) && (
+                    <div className="history-mentor-notes">
+                      {trade.mentorSuggestionAtEntry && <p><span>Mentor at entry</span>{trade.mentorSuggestionAtEntry}</p>}
+                      {trade.mentorSuggestionAtExit && <p><span>Mentor at exit</span>{trade.mentorSuggestionAtExit}</p>}
+                    </div>
+                  )}
+                </div>
+              </details>
             ))}
           </div>
           <p className="history-storage-note">Permanent journal: completed trades are restored from Google Sheets; browser storage remains the fast local cache. Full trade JSON and journey checkpoints preserve the detailed Mentor context for later analysis.</p>
@@ -52,6 +67,20 @@ export default function History({ history }) {
       )}
     </section>
   );
+}
+
+function summariseHistory(rows) {
+  const total = rows.length;
+  const pnl = rows.reduce((sum, trade) => sum + (Number(trade?.pnl) || 0), 0);
+  const wins = rows.filter(trade => Number(trade?.pnl) > 0).length;
+  const losses = rows.filter(trade => Number(trade?.pnl) < 0).length;
+  const rValues = rows.map(trade => Number(trade?.rAchieved)).filter(Number.isFinite);
+  const avgR = rValues.length ? rValues.reduce((sum, value) => sum + value, 0) / rValues.length : 0;
+  return { total, pnl, wins, losses, winRate: total ? (wins / total) * 100 : 0, avgR };
+}
+
+function SummaryMetric({ label, value, tone = '' }) {
+  return <div className={`history-summary-card ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function dedupeHistory(history) {
@@ -135,7 +164,11 @@ function humanReason(code) {
     RUNNER_PULLBACK: 'Manual exit during runner pullback',
     APPROACHING_ONE_R: 'Manual exit approaching 1R',
     STRUCTURE_WEAKENING: 'Structure weakening',
-    STRUCTURE_INTACT: 'Manual exit while intact'
+    STRUCTURE_INTACT: 'Manual exit while intact',
+    STRUCTURAL_TARGET_REACHED: 'Structural target reached',
+    RESEARCH_1_5R_EXIT: 'Research +1.5R exit',
+    RESEARCH_TIME_EXIT: 'Research time exit',
+    SESSION_EXIT: 'Session close exit'
   };
   return map[code] || code || 'Manual exit';
 }
