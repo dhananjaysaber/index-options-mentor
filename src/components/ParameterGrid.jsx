@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 const DIRECTIONAL_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 
@@ -10,8 +10,16 @@ export default function ParameterGrid({ rows, directionReady = true }) {
   }, [rows]);
 
   const [selectedId, setSelectedId] = useState(defaultId);
+  const detailRef = useRef(null);
   const selected = rows.find(row => row.id === selectedId) || rows.find(row => row.id === defaultId) || rows[0];
   const isPending = row => !directionReady && DIRECTIONAL_IDS.has(row.id);
+
+  function selectEvidence(id) {
+    setSelectedId(id);
+    window.requestAnimationFrame(() => {
+      detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
 
   return (
     <section className="panel evidence-matrix-panel">
@@ -20,7 +28,7 @@ export default function ParameterGrid({ rows, directionReady = true }) {
           <div className="eyebrow">ADVANCED VIEW</div>
           <h2>13-point evidence matrix</h2>
         </div>
-        <span className="muted">Select a card for a simple explanation · M = mandatory</span>
+        <span className="muted">Tap a card to open its explanation · M = mandatory</span>
       </div>
 
       <div className="evidence-matrix">
@@ -32,7 +40,8 @@ export default function ParameterGrid({ rows, directionReady = true }) {
               type="button"
               className={`evidence-tile ${pending ? 'pending' : row.status} ${row.mandatory ? 'mandatory' : ''} ${selected?.id === row.id ? 'selected' : ''}`}
               key={row.id}
-              onClick={() => setSelectedId(row.id)}
+              onClick={() => selectEvidence(row.id)}
+              aria-pressed={selected?.id === row.id}
             >
               <div className="evidence-tile-top">
                 <span className="evidence-number">{String(index + 1).padStart(2, '0')}</span>
@@ -54,7 +63,8 @@ export default function ParameterGrid({ rows, directionReady = true }) {
       {selected && (() => {
         const pending = isPending(selected);
         return (
-          <div className={`evidence-detail ${pending ? 'pending' : selected.status}`}>
+          <div ref={detailRef} className={`evidence-detail ${pending ? 'pending' : selected.status}`} aria-live="polite">
+            <div className="evidence-explanation-kicker">WHAT THIS MEANS</div>
             <div className="evidence-detail-title">
               <span className={`status-pill ${pending ? 'pending' : selected.status}`}>{pending ? 'WAIT' : selected.status}</span>
               <strong>{selected.label}</strong>
@@ -96,7 +106,7 @@ function simpleDetail(row) {
     htf: 'This checks whether the 15-minute structure agrees with the shorter 5-minute direction.',
     time: 'This scores the part of the trading day. Some windows are more reliable than quieter periods.'
   };
-  return map[row.id] || row.detail;
+  return map[row.id] || row.detail || 'This check contributes to the 13-point evidence score. Its current value is shown above.';
 }
 
 function shortLabel(label) {
