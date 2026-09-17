@@ -24,6 +24,7 @@ import './mobile-dashboard-v21.css';
 import './settings-position-v22.css';
 import './manual-research-v23.css';
 import './position-live-v24.css';
+import './nifty-chart-v26.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure Netlify backend. Netlify keeps
