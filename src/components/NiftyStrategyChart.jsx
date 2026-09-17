@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import useLiveQuote from '../hooks/useLiveQuote.js';
 
 const TIMEFRAMES = {
-  '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64 },
-  '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84 }
+  '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48 },
+  '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56 }
 };
 
 export default function NiftyStrategyChart({ snapshot, position = null, compact = false }) {
+  const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState('5');
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,20 +59,25 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     };
 
     void load();
-    const timer = window.setInterval(load, 60000);
+    const timer = window.setInterval(load, 30000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
   }, [sessionDate, timeframe, timeframeConfig.label, timeframeConfig.maxCandles]);
 
-  const liveSpot = numberOrNull(position?.underlyingCurrent) ?? numberOrNull(snapshot?.market?.spot);
-  const liveTimestamp = snapshot?.generatedAt ? new Date(snapshot.generatedAt).getTime() : now;
+  const liveSpot = priceOrNull(liveQuote?.nifty)
+    ?? priceOrNull(position?.underlyingCurrent)
+    ?? priceOrNull(snapshot?.market?.spot);
+  const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
   const displayCandles = useMemo(
     () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
     [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
-  const chart = useMemo(() => buildChartModel(displayCandles, snapshot, position), [displayCandles, snapshot, position]);
+  const chart = useMemo(
+    () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles),
+    [displayCandles, snapshot, position, timeframeConfig.visibleCandles]
+  );
   const side = position?.side || snapshot?.decision?.side || '';
   const retest = snapshot?.setup?.retestStatus || 'NOT_STARTED';
   const latest = displayCandles.at(-1) || null;
@@ -125,7 +132,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
       ) : chart ? (
         <>
           <div className="nifty-chart-canvas-wrap">
-            <svg className="nifty-chart-canvas" viewBox="0 0 920 390" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
+            <svg className="nifty-chart-canvas" viewBox="0 0 920 390" preserveAspectRatio="xMidYMid meet" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
               <rect x="0" y="0" width="920" height="390" className="nifty-chart-bg" />
 
               {chart.grid.map((row, index) => (
@@ -185,19 +192,19 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
 }
 
 function LevelChip({ label, value }) {
-  const n = Number(value);
-  return <div className="nifty-chart-level-chip"><span>{label}</span><strong>{Number.isFinite(n) && n > 0 ? formatPrice(n) : '—'}</strong></div>;
+  const n = priceOrNull(value);
+  return <div className="nifty-chart-level-chip"><span>{label}</span><strong>{n != null ? formatPrice(n) : '—'}</strong></div>;
 }
 
 function normaliseCandle(row) {
   if (!Array.isArray(row) || row.length < 5) return null;
   const [time, open, high, low, close, volume] = row.map(Number);
-  if (![time, open, high, low, close].every(Number.isFinite)) return null;
+  if (![time, open, high, low, close].every(Number.isFinite) || close <= 0) return null;
   return { time, open, high, low, close, volume: Number.isFinite(volume) ? volume : 0 };
 }
 
 function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) {
-  if (!Number.isFinite(Number(spot))) return rows.slice(-maxCandles);
+  if (!Number.isFinite(Number(spot)) || Number(spot) <= 0) return rows.slice(-maxCandles);
   const price = Number(spot);
   const epochSeconds = Math.floor((Number.isFinite(timestampMs) ? timestampMs : Date.now()) / 1000);
   const bucket = Math.floor(epochSeconds / timeframeSeconds) * timeframeSeconds;
@@ -220,36 +227,35 @@ function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) 
   return next.slice(-maxCandles);
 }
 
-function buildChartModel(rows, snapshot, position) {
+function buildChartModel(rows, snapshot, position, visibleCount = 52) {
   if (!rows.length) return null;
 
+  const visibleRows = rows.slice(-visibleCount);
   const width = 782;
   const left = 42;
+  const right = 824;
   const top = 18;
   const bottom = 350;
   const plotHeight = bottom - top;
-  const levelValues = [
-    snapshot?.market?.vwap,
-    snapshot?.market?.orh,
-    snapshot?.market?.orl,
-    position?.underlyingEntry ?? snapshot?.structure?.trigger,
-    position?.underlyingStop ?? snapshot?.structure?.underlyingStop,
-    position?.underlyingTarget ?? snapshot?.structure?.underlyingTarget
-  ].map(Number).filter(Number.isFinite);
-  const lows = rows.map(row => row.low);
-  const highs = rows.map(row => row.high);
-  let min = Math.min(...lows, ...levelValues);
-  let max = Math.max(...highs, ...levelValues);
-  const rawRange = Math.max(1, max - min);
-  min -= rawRange * 0.07;
-  max += rawRange * 0.07;
+  const lows = visibleRows.map(row => row.low).filter(value => Number.isFinite(value) && value > 0);
+  const highs = visibleRows.map(row => row.high).filter(value => Number.isFinite(value) && value > 0);
+  if (!lows.length || !highs.length) return null;
+
+  let min = Math.min(...lows);
+  let max = Math.max(...highs);
+  const rawRange = Math.max(8, max - min);
+  min -= rawRange * 0.1;
+  max += rawRange * 0.1;
   const range = Math.max(1, max - min);
   const yFor = value => top + ((max - value) / range) * plotHeight;
-  const spacing = width / Math.max(rows.length, 1);
-  const bodyWidth = Math.max(3, Math.min(10, spacing * 0.58));
 
-  const candles = rows.map((row, index) => {
-    const x = left + spacing * index + spacing / 2;
+  const slots = visibleCount;
+  const spacing = width / slots;
+  const offsetSlots = Math.max(0, slots - visibleRows.length);
+  const bodyWidth = Math.max(4, Math.min(10, spacing * 0.6));
+
+  const candles = visibleRows.map((row, index) => {
+    const x = left + spacing * (offsetSlots + index) + spacing / 2;
     const openY = yFor(row.open);
     const closeY = yFor(row.close);
     return {
@@ -259,7 +265,7 @@ function buildChartModel(rows, snapshot, position) {
       highY: yFor(row.high),
       lowY: yFor(row.low),
       bodyY: Math.min(openY, closeY),
-      bodyHeight: Math.max(2, Math.abs(openY - closeY)),
+      bodyHeight: Math.max(2.2, Math.abs(openY - closeY)),
       bodyWidth
     };
   });
@@ -274,8 +280,8 @@ function buildChartModel(rows, snapshot, position) {
   ];
 
   const levels = levelSpecs
-    .map(([key, name, value, kind]) => ({ key, name, value: Number(value), kind }))
-    .filter(level => Number.isFinite(level.value))
+    .map(([key, name, value, kind]) => ({ key, name, value: priceOrNull(value), kind }))
+    .filter(level => level.value != null && level.value >= min && level.value <= max)
     .map(level => {
       const label = `${level.name} ${formatPrice(level.value)}`;
       return { ...level, y: yFor(level.value), label, labelWidth: Math.max(68, Math.min(148, 10 + label.length * 5.8)) };
@@ -286,11 +292,22 @@ function buildChartModel(rows, snapshot, position) {
     return { value, y: yFor(value) };
   });
 
-  const timeIndexes = [...new Set([0, Math.floor((rows.length - 1) / 3), Math.floor(((rows.length - 1) * 2) / 3), rows.length - 1])];
-  const timeLabels = timeIndexes.map(index => ({ key: `time-${rows[index].time}-${index}`, x: left + spacing * index + spacing / 2, label: formatTime(rows[index].time) }));
+  const lastIndex = visibleRows.length - 1;
+  const timeIndexes = [...new Set([0, Math.floor(lastIndex / 3), Math.floor((lastIndex * 2) / 3), lastIndex])].filter(index => index >= 0);
+  const timeLabels = timeIndexes.map(index => ({
+    key: `time-${visibleRows[index].time}-${index}`,
+    x: left + spacing * (offsetSlots + index) + spacing / 2,
+    label: formatTime(visibleRows[index].time)
+  }));
   const last = candles.at(-1);
 
-  return { candles, levels, grid, timeLabels, current: { x: last.x, y: yFor(last.close), value: last.close } };
+  return {
+    candles,
+    levels,
+    grid,
+    timeLabels,
+    current: { x: Math.min(right - spacing / 2, last.x), y: yFor(last.close), value: last.close }
+  };
 }
 
 function secondsToBoundary(nowMs, intervalSeconds) {
@@ -316,9 +333,10 @@ function formatPrice(value) {
   return Number(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function numberOrNull(value) {
+function priceOrNull(value) {
+  if (value == null || value === '') return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function signed(value) {
