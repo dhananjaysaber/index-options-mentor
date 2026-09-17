@@ -29,7 +29,10 @@ export default function ManualResearchPanel({ snapshot, settings, onTakeTrade })
           <small>MANUAL RESEARCH</small>
           <strong>Open your own experimental simulation</strong>
         </span>
-        <em>{manual.eligible ? 'READY' : 'WAIT'}</em>
+        <span className="manual-research-summary-actions">
+          <em>{manual.eligible ? 'READY' : 'WAIT'}</em>
+          <i className="manual-research-toggle" aria-hidden="true" />
+        </span>
       </summary>
 
       <div className="manual-research-body">
