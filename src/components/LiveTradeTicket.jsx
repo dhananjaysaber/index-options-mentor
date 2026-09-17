@@ -28,20 +28,26 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
   const failedMandatory = parameters.filter(row => row.mandatory && !row.gatePassed);
   const weakConfirmations = parameters.filter(row => !row.mandatory && row.status !== 'green').sort((a, b) => a.value - b.value);
   const nextCheckpoint = checkpointForState({ decision, setup, failedMandatory, weakConfirmations, structure, classification });
+  const manualPanel = !blocked
+    ? <div className="manual-research-outside"><ManualResearchPanel snapshot={executionSnapshot} settings={settings} onTakeTrade={onTakeTrade} /></div>
+    : null;
 
   if (!option) {
     return (
-      <aside className={`trade-focus-card sticky-trade collapsible-trade-box ${expanded ? 'expanded' : 'collapsed'}`}>
-        <div className="trade-focus-head trade-box-collapsible-head">
-          <div><div className="eyebrow">TRADE BOX</div><h2>Waiting for candidate option</h2></div>
-          <div className="trade-box-head-actions"><span className="simulation-pill">SIMULATION</span><button type="button" className="trade-box-toggle" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label={expanded ? 'Collapse trade box' : 'Expand trade box'}>{expanded ? '−' : '+'}</button></div>
-        </div>
-        {expanded && <div className="trade-box-collapsible-body">
-          <div className="candidate-label blocked">NO OPTION READY</div>
-          <div className="focus-action stop"><small>CURRENT ACTION</small><strong>{market.phase === 'CLOSED' ? 'MARKET CLOSED' : actionTitleForState(decision.state)}</strong><span>Direction, structure and the hard safety gates must exist before an automated research position can be opened.</span></div>
-          <div className="next-checkpoint"><span>NEXT CHECKPOINT</span><strong>{nextCheckpoint}</strong></div>
-        </div>}
-      </aside>
+      <div className="trade-and-manual-stack">
+        <aside className={`trade-focus-card sticky-trade collapsible-trade-box ${expanded ? 'expanded' : 'collapsed'}`}>
+          <div className="trade-focus-head trade-box-collapsible-head">
+            <div><div className="eyebrow">TRADE BOX</div><h2>Waiting for candidate option</h2></div>
+            <div className="trade-box-head-actions"><span className="simulation-pill">SIMULATION</span><button type="button" className="trade-box-toggle" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label={expanded ? 'Collapse trade box' : 'Expand trade box'}>{expanded ? '−' : '+'}</button></div>
+          </div>
+          {expanded && <div className="trade-box-collapsible-body">
+            <div className="candidate-label blocked">NO OPTION READY</div>
+            <div className="focus-action stop"><small>CURRENT ACTION</small><strong>{market.phase === 'CLOSED' ? 'MARKET CLOSED' : actionTitleForState(decision.state)}</strong><span>Direction, structure and the hard safety gates must exist before an automated research position can be opened.</span></div>
+            <div className="next-checkpoint"><span>NEXT CHECKPOINT</span><strong>{nextCheckpoint}</strong></div>
+          </div>}
+        </aside>
+        {manualPanel}
+      </div>
     );
   }
 
@@ -85,51 +91,52 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
   ];
 
   return (
-    <aside className={`trade-focus-card sticky-trade collapsible-trade-box ${expanded ? 'expanded' : 'collapsed'}`}>
-      <div className="trade-focus-head trade-box-collapsible-head">
-        <div><div className="eyebrow">TRADE BOX</div><h2>{option.symbol}</h2></div>
-        <div className="trade-box-head-actions"><span className="simulation-pill">SIMULATION</span><button type="button" className="trade-box-toggle" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label={expanded ? 'Collapse trade box' : 'Expand trade box'}>{expanded ? '−' : '+'}</button></div>
-      </div>
-
-      {expanded && <div className="trade-box-collapsible-body">
-        <div className={`candidate-label ${canTake ? 'approved' : 'blocked'}`}>
-          {classification.eligible ? `${classification.label.toUpperCase()} · ${classification.mandatoryPassCount}/5 · ${classification.confirmationPassCount}/8` : 'CANDIDATE OPTION — NO AUTOMATED POSITION'}
+    <div className="trade-and-manual-stack">
+      <aside className={`trade-focus-card sticky-trade collapsible-trade-box ${expanded ? 'expanded' : 'collapsed'}`}>
+        <div className="trade-focus-head trade-box-collapsible-head">
+          <div><div className="eyebrow">TRADE BOX</div><h2>{option.symbol}</h2></div>
+          <div className="trade-box-head-actions"><span className="simulation-pill">SIMULATION</span><button type="button" className="trade-box-toggle" onClick={() => setExpanded(value => !value)} aria-expanded={expanded} aria-label={expanded ? 'Collapse trade box' : 'Expand trade box'}>{expanded ? '−' : '+'}</button></div>
         </div>
 
-        <div className={`focus-action ${actionTone}`}><small>CURRENT ACTION</small><strong>{actionTitle}</strong><span>{actionCopy}</span></div>
-        <div className="next-checkpoint"><span>NEXT CHECKPOINT</span><strong>{nextCheckpoint}</strong></div>
-
-        <div className="trade-plan-grid">
-          {tradeRows.map(([label, value]) => {
-            const isRr = label === 'R:R';
-            return <div key={label} className={isRr ? `rr-card ${rrViable ? 'viable' : 'not-viable'}` : ''}><span>{label}</span><strong>{value}</strong>{isRr && <small className="rr-card-note">{rrViable ? 'REWARD ROOM OK' : 'SKIP — REWARD TOO LOW'}</small>}</div>;
-          })}
-        </div>
-
-        <div className="option-health-row">
-          <div><span>Delta</span><strong>{fmtNumber(option.delta)}</strong></div>
-          <div><span>Spread</span><strong>{fmtNumber(option.spreadPct)}%</strong></div>
-          <div><span>IV</span><strong>{fmtNumber(option.iv)}</strong></div>
-          <div><span>Contract lot</span><strong>{option.lotSize ?? '—'}</strong></div>
-        </div>
-
-        {sizing && (
-          <div className={`research-risk-card ${sizing.riskBudgetEligible ? 'eligible' : 'outside-budget'}`}>
-            <div><span>Configured risk budget</span><strong>₹{fmtNumber(sizing.riskBudget)}</strong></div>
-            <div><span>{sizing.lots} sim lot{Number(sizing.lots) === 1 ? '' : 's'} estimated risk</span><strong>₹{fmtNumber(sizing.requiredRiskAmount)} · {fmtNumber(sizing.requiredRiskPct)}%</strong></div>
-            <small>{sizing.riskBudgetEligible ? 'This simulated size also fits the configured capital-risk budget.' : 'Research simulation may still be opened, but this size is NOT live-risk eligible. A future real-order layer must remain blocked.'}</small>
+        {expanded && <div className="trade-box-collapsible-body">
+          <div className={`candidate-label ${canTake ? 'approved' : 'blocked'}`}>
+            {classification.eligible ? `${classification.label.toUpperCase()} · ${classification.mandatoryPassCount}/5 · ${classification.confirmationPassCount}/8` : 'CANDIDATE OPTION — NO AUTOMATED POSITION'}
           </div>
-        )}
 
-        <div className="premium-guide"><span>Premium guide</span><strong>Stop ~ ₹{fmtNumber(option.estimatedPremiumStop)}</strong><strong>Target ~ ₹{fmtNumber(option.estimatedPremiumTarget)}</strong><small>Underlying structure remains the actual invalidation reference.</small></div>
+          <div className={`focus-action ${actionTone}`}><small>CURRENT ACTION</small><strong>{actionTitle}</strong><span>{actionCopy}</span></div>
+          <div className="next-checkpoint"><span>NEXT CHECKPOINT</span><strong>{nextCheckpoint}</strong></div>
 
-        <button className={`mega-trade-button ${canTake ? 'go' : 'locked'}`} disabled={!canTake} onClick={() => { const ticket = buildSimulatedTicket(executionSnapshot, settings, 'USER'); if (ticket) onTakeTrade(ticket); }}>
-          {canTake ? `OPEN ${classification.label.toUpperCase()} SIMULATION` : actionTitle}
-        </button>
+          <div className="trade-plan-grid">
+            {tradeRows.map(([label, value]) => {
+              const isRr = label === 'R:R';
+              return <div key={label} className={isRr ? `rr-card ${rrViable ? 'viable' : 'not-viable'}` : ''}><span>{label}</span><strong>{value}</strong>{isRr && <small className="rr-card-note">{rrViable ? 'REWARD ROOM OK' : 'SKIP — REWARD TOO LOW'}</small>}</div>;
+            })}
+          </div>
 
-        {!blocked && <ManualResearchPanel snapshot={executionSnapshot} settings={settings} onTakeTrade={onTakeTrade} />}
-      </div>}
-    </aside>
+          <div className="option-health-row">
+            <div><span>Delta</span><strong>{fmtNumber(option.delta)}</strong></div>
+            <div><span>Spread</span><strong>{fmtNumber(option.spreadPct)}%</strong></div>
+            <div><span>IV</span><strong>{fmtNumber(option.iv)}</strong></div>
+            <div><span>Contract lot</span><strong>{option.lotSize ?? '—'}</strong></div>
+          </div>
+
+          {sizing && (
+            <div className={`research-risk-card ${sizing.riskBudgetEligible ? 'eligible' : 'outside-budget'}`}>
+              <div><span>Configured risk budget</span><strong>₹{fmtNumber(sizing.riskBudget)}</strong></div>
+              <div><span>{sizing.lots} sim lot{Number(sizing.lots) === 1 ? '' : 's'} estimated risk</span><strong>₹{fmtNumber(sizing.requiredRiskAmount)} · {fmtNumber(sizing.requiredRiskPct)}%</strong></div>
+              <small>{sizing.riskBudgetEligible ? 'This simulated size also fits the configured capital-risk budget.' : 'Research simulation may still be opened, but this size is NOT live-risk eligible. A future real-order layer must remain blocked.'}</small>
+            </div>
+          )}
+
+          <div className="premium-guide"><span>Premium guide</span><strong>Stop ~ ₹{fmtNumber(option.estimatedPremiumStop)}</strong><strong>Target ~ ₹{fmtNumber(option.estimatedPremiumTarget)}</strong><small>Underlying structure remains the actual invalidation reference.</small></div>
+
+          <button className={`mega-trade-button ${canTake ? 'go' : 'locked'}`} disabled={!canTake} onClick={() => { const ticket = buildSimulatedTicket(executionSnapshot, settings, 'USER'); if (ticket) onTakeTrade(ticket); }}>
+            {canTake ? `OPEN ${classification.label.toUpperCase()} SIMULATION` : actionTitle}
+          </button>
+        </div>}
+      </aside>
+      {manualPanel}
+    </div>
   );
 }
 
