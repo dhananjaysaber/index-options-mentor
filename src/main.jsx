@@ -27,6 +27,7 @@ import './manual-research-v23.css';
 import './position-live-v24.css';
 import './nifty-chart-v26.css';
 import './live-market-v29.css';
+import './mobile-density-v30.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
