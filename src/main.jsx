@@ -7,6 +7,7 @@ import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
 import { installShadowResearchEngine } from './services/shadowResearch.js';
 import { installApiBridge } from './services/apiBridge.js';
+import { installLiveQuoteFeed } from './services/liveQuoteFeed.js';
 import './styles.css';
 import './pwa.css';
 import './mobile-fixes.css';
@@ -25,11 +26,16 @@ import './settings-position-v22.css';
 import './manual-research-v23.css';
 import './position-live-v24.css';
 import './nifty-chart-v26.css';
+import './live-market-v29.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
-// transparently routed to the existing secure Netlify backend. Netlify keeps
-// FYERS and journal secrets; no secret is bundled into the GitHub Pages build.
+// transparently routed to the existing secure backend. No FYERS secret is
+// bundled into the public GitHub Pages build.
 installApiBridge();
+
+// A single shared quote loop keeps NIFTY and the current candidate/open option
+// near-live across the visible Mentor UI without each component polling FYERS.
+installLiveQuoteFeed();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
