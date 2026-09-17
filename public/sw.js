@@ -1,4 +1,4 @@
-const CACHE_NAME = 'index-options-mentor-pwa-v29';
+const CACHE_NAME = 'index-options-mentor-pwa-v30';
 const APP_SHELL = ['./', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
