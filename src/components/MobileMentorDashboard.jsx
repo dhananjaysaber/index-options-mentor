@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import TraderDecisionBanner from './TraderDecisionBanner.jsx';
 import MentorWorkflow from './MentorWorkflow.jsx';
 import QuickChecklist from './QuickChecklist.jsx';
@@ -20,6 +21,7 @@ export default function MobileMentorDashboard({
   onTakeTrade,
   onExit
 }) {
+  const [advancedOpen, setAdvancedOpen] = useState(true);
   const directionReady = Boolean(snapshot?.decision?.side);
   const positionCard = position
     ? <LivePositionPanel position={position} onExit={onExit} history={history} snapshot={snapshot} />
@@ -57,13 +59,20 @@ export default function MobileMentorDashboard({
       </section>
 
       {mode === 'advanced' && (
-        <section className="mobile-advanced-stack" aria-label="Advanced mentor analysis">
-          <div className="mobile-advanced-heading">
-            <span>ADVANCED VIEW</span>
-            <strong>13-point strategy detail</strong>
+        <section className={`mobile-advanced-stack advanced-strategy-section ${advancedOpen ? 'expanded' : 'collapsed'}`} aria-label="Advanced mentor analysis">
+          <div className="mobile-advanced-heading advanced-strategy-heading">
+            <span>
+              <small>ADVANCED VIEW</small>
+              <strong>13-point strategy detail</strong>
+            </span>
+            <button type="button" className="advanced-strategy-toggle" onClick={() => setAdvancedOpen(value => !value)} aria-expanded={advancedOpen} aria-label={advancedOpen ? 'Collapse 13-point strategy detail' : 'Expand 13-point strategy detail'}>{advancedOpen ? '−' : '+'}</button>
           </div>
-          <QuickChecklist rows={snapshot?.parameters || []} directionReady={directionReady} />
-          {snapshot && <ParameterGrid rows={snapshot.parameters || []} directionReady={directionReady} />}
+          {advancedOpen && (
+            <div className="advanced-strategy-body">
+              <QuickChecklist rows={snapshot?.parameters || []} directionReady={directionReady} />
+              {snapshot && <ParameterGrid rows={snapshot.parameters || []} directionReady={directionReady} />}
+            </div>
+          )}
         </section>
       )}
     </div>
