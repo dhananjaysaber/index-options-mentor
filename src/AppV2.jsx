@@ -14,6 +14,7 @@ import MobileMentorDashboard from './components/MobileMentorDashboard.jsx';
 import { derivePositionMentor } from './engine/positionMentor.js';
 import { buildSimulatedTicket, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
+import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
 
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
@@ -297,6 +298,17 @@ export default function AppV2() {
     navigate('position');
   }
 
+  function reconnectFyers() {
+    clearFyersSession();
+    setBrokerStatus(current => ({ ...current, authenticated: false }));
+    setSnapshot(null);
+    setLiveError('');
+    setMobileMenuOpen(false);
+    window.location.assign(getFyersLoginUrl());
+  }
+
+  const reconnectRequired = brokerStatus.authenticated && Boolean(liveError);
+
   const positionCard = position
     ? <LivePositionPanel position={position} onExit={exitTrade} history={history} snapshot={snapshot} sticky />
     : <LiveTradeTicket snapshot={snapshot} settings={settings} onTakeTrade={takeTrade} blocked={false} />;
@@ -309,18 +321,18 @@ export default function AppV2() {
           <div><div className="brand-kicker">DATA-DRIVEN TRADING MENTOR</div><div className="brand-title">Index Options Mentor</div></div>
         </button>
         <div className="mentor-v2-desktop-actions">
-          <span className={`connection-pill ${brokerStatus.authenticated ? 'connected' : ''}`}>FYERS {brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</span>
+          <span className={`connection-pill ${reconnectRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}>FYERS {reconnectRequired ? 'Reconnect' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</span>{reconnectRequired && <button className="secondary-btn fyers-reconnect-btn" onClick={reconnectFyers}>Reconnect FYERS</button>}
           <button className="secondary-btn theme-toggle" onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')} title="Toggle theme">{theme === 'dark' ? <SunIcon /> : <MoonIcon />}</button>
           <button className={`secondary-btn ${alertsEnabled ? 'active' : ''}`} onClick={toggleAlerts}>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</button>
           {brokerStatus.authenticated && <button className={`secondary-btn refresh-btn ${refreshing ? 'refreshing' : ''}`} onClick={() => refreshSnapshot({ manual: true })} disabled={refreshing}>{refreshing ? 'Checking…' : 'Refresh now'}</button>}
         </div>
-        <div className="mentor-v2-mobile-status"><span className={brokerStatus.authenticated ? 'online' : ''} /></div>
+        <div className="mentor-v2-mobile-status"><span className={reconnectRequired ? 'reconnect' : brokerStatus.authenticated ? 'online' : ''} /></div>
         <button className="mentor-v2-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><MenuIcon /></button>
       </header>
 
       <DesktopNav view={view} navigate={navigate} settings={settings} setup={setupClassification} position={position} />
 
-      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} onPosition={showMobilePosition} position={position} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} />}
+      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} onPosition={showMobilePosition} position={position} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} onReconnect={reconnectFyers} />}
 
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
@@ -344,11 +356,12 @@ export default function AppV2() {
               alertsEnabled={alertsEnabled}
               history={history}
               settings={settings}
+              onReconnect={reconnectFyers}
               onTakeTrade={takeTrade}
               onExit={exitTrade}
             />
 
-            {liveError && <div className="alert-bar">{liveError} Reconnect FYERS if the daily session has expired.</div>}
+            {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={reconnectFyers}>Reconnect FYERS</button></div>}
             {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
             <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
             <TraderDecisionBanner snapshot={snapshot} loading={loading} />
@@ -413,16 +426,16 @@ function NavButton({ active, onClick, icon, label }) {
   return <button type="button" className={`sidebar-nav-button ${active ? 'active' : ''}`} onClick={onClick}><span>{icon}</span><strong>{label}</strong></button>;
 }
 
-function MobileDrawer({ view, navigate, onPosition, position, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot }) {
+function MobileDrawer({ view, navigate, onPosition, position, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot, liveError, onReconnect }) {
   return (
     <div className="mentor-drawer-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
-        <div className={`drawer-connection ${brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
+        <div className={`drawer-connection ${liveError ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {liveError ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
         <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${position ? 'has-position' : ''}`} onClick={onPosition}><span>↗</span><span className="drawer-position-copy"><strong>Position</strong><small>{position ? `${position.side || ''} ${position.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
-        <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /> <span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button></div>
+        <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /> <span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${liveError ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{liveError ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>
         <button className="drawer-settings-cta" onClick={() => navigate('settings')}>Account & automation settings</button>
       </aside>
     </div>
@@ -441,6 +454,7 @@ function CloseIcon() { return <svg viewBox="0 0 24 24" width="22" height="22" fi
 function MoonIcon() { return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M20.2 15.1A8.4 8.4 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z" /></svg>; }
 function SunIcon() { return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><circle cx="12" cy="12" r="3.7" /><path d="M12 2.3v2M12 19.7v2M4.1 4.1l1.4 1.4M18.5 18.5l1.4 1.4M2.3 12h2M19.7 12h2M4.1 19.9l1.4-1.4M18.5 5.5l1.4-1.4" /></svg>; }
 function RefreshIcon() { return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 6v5h-5M4 18v-5h5" /><path d="M18.2 9A7 7 0 0 0 6 6.6L4 9M5.8 15A7 7 0 0 0 18 17.4l2-2.4" /></svg>; }
+function ReconnectIcon() { return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 11a8 8 0 1 0-2.34 5.66" /><path d="M20 4v7h-7" /></svg>; }
 
 function updateLivePosition(current, liveOption, liveNifty, fallbackSpot) {
   if (!current) return current;
