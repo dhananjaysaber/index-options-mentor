@@ -18,6 +18,7 @@ export default function MobileMentorDashboard({
   alertsEnabled,
   history,
   settings,
+  onReconnect,
   onTakeTrade,
   onExit
 }) {
@@ -29,7 +30,7 @@ export default function MobileMentorDashboard({
 
   return (
     <div className={`mobile-mentor-flow mode-${mode}`}>
-      {liveError && <div className="alert-bar mobile-flow-alert">{liveError} Reconnect FYERS if the daily session has expired.</div>}
+      {liveError && <div className="alert-bar mobile-flow-alert reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={onReconnect}>Reconnect FYERS</button></div>}
 
       <div className="mobile-flow-block mobile-decision-block">
         <TraderDecisionBanner snapshot={snapshot} loading={loading} />
