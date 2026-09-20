@@ -256,3 +256,81 @@ export function formatR(value) {
 export function fmt(value) {
   return value == null ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
+
+
+export function deriveScalpPositionMentor(position, snapshot, currentUnderlying) {
+  const entry = Number(position?.underlyingEntry);
+  const stop = Number(position?.underlyingStop);
+  const target = Number(position?.underlyingTarget);
+  const current = Number(currentUnderlying);
+  const riskPoints = Math.max(0.01, Math.abs(entry - stop));
+  const movePoints = position?.side === 'CE' ? current - entry : entry - current;
+  const rMultiple = movePoints / riskPoints;
+  const bestR = Math.max(Number.isFinite(Number(position?.bestR)) ? Number(position.bestR) : rMultiple, rMultiple);
+  const worstR = Math.min(Number.isFinite(Number(position?.worstR)) ? Number(position.worstR) : rMultiple, rMultiple);
+  const givebackR = Math.max(0, bestR - rMultiple);
+  const currentScore = Number(position?.scalpScoreAtEntry ?? position?.score ?? 0);
+
+  const stopHit = position?.side === 'CE' ? current <= stop : current >= stop;
+  const targetHit = Number.isFinite(target) && (position?.side === 'CE' ? current >= target : current <= target);
+  const heldMinutes = Math.max(0, (Date.now() - new Date(position?.openedAt || 0).getTime()) / 60000);
+  const maxHoldMinutes = Math.max(1, Number(position?.scalpMaxHoldMinutes) || 12);
+
+  const currentBias = snapshot?.decision?.side || null;
+  const oppositeBias = Boolean(currentBias && currentBias !== position?.side);
+  const vwap = Number(snapshot?.market?.vwap);
+  const vwapInvalid = Number.isFinite(vwap) && (
+    position?.side === 'CE' ? current < vwap : current > vwap
+  );
+
+  if (stopHit) {
+    return scalpState('SCALP EXIT', 'HARD EXIT', 'stop', 'exit', 'SCALP_STOP', `NIFTY reached the scalp invalidation at ${fmt(stop)}.`, 'The 3-minute scalp thesis is invalid. Close the simulated scalp; do not widen the stop.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if (targetHit || rMultiple >= 1) {
+    return scalpState('SCALP TARGET HIT', 'TAKE PROFIT', 'go', 'exit', 'SCALP_TARGET', `The scalp reached the +1.00R objective near ${fmt(target)}.`, 'Scalp objective achieved. Close the simulated position rather than converting a quick trade into a longer hold.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if (heldMinutes >= maxHoldMinutes) {
+    return scalpState('SCALP TIME EXIT', 'TIME EXIT', 'wait', 'exit', 'SCALP_TIME_EXIT', `The position has been open for ${Math.floor(heldMinutes)} minutes; the scalp time limit is ${maxHoldMinutes} minutes.`, 'The fast setup did not resolve quickly enough. Close the simulation and wait for a fresh scalp.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if ((oppositeBias && rMultiple <= 0) || (vwapInvalid && rMultiple <= -0.15)) {
+    return scalpState('SCALP MOMENTUM LOST', 'EXIT EARLY', 'stop', 'exit', 'SCALP_CONTEXT_EXIT', oppositeBias ? `The 5-minute context has flipped to ${currentBias} while this scalp is not profitable.` : 'Price moved through VWAP against the scalp while the trade is losing.', 'For a scalp, failed context is an exit signal. Do not wait for a wider swing-trade recovery.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if (bestR >= 0.65 && rMultiple <= 0.20 && givebackR >= 0.45) {
+    return scalpState('PROTECT SCALP', 'PROTECT', 'protect', 'exit', 'SCALP_PROFIT_PROTECT', `The scalp reached ${formatR(bestR)} and has given back ${givebackR.toFixed(2)}R.`, 'A quick winner has lost most of its edge. Bank the research result instead of allowing the scalp to round-trip.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if (rMultiple >= 0.60) {
+    return scalpState('SCALP WORKING', 'HOLD TO 1R', 'go', 'none', 'SCALP_APPROACH_TARGET', `The scalp is ${formatR(rMultiple)} and approaching the +1R objective.`, 'Keep the original stop and target. This is a short-duration trade; do not add to it.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  if (rMultiple <= -0.40 || vwapInvalid || oppositeBias) {
+    return scalpState('SCALP CAUTION', 'CAUTION', 'wait', 'caution', 'SCALP_WEAKENING', vwapInvalid ? 'Price is testing the wrong side of VWAP for the scalp.' : oppositeBias ? `The broader context currently points ${currentBias}.` : `The scalp is ${formatR(rMultiple)} against entry.`, 'Do not add. The scalp still has its hard stop, but the fast edge is weakening.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+  }
+
+  return scalpState('SCALP ACTIVE', 'HOLD', 'hold', 'none', 'SCALP_HOLD', `The scalp remains inside its plan at ${formatR(rMultiple)}.`, 'Hold only while the tight 3-minute invalidation and short time window remain intact.', { rMultiple, bestR, worstR, givebackR, currentScore, oppositeBias });
+}
+
+function scalpState(title, shortTitle, tone, alertLevel, reasonCode, reason, copy, metrics) {
+  return {
+    title,
+    shortTitle,
+    tone,
+    alertLevel,
+    reasonCode,
+    reason,
+    copy,
+    rMultiple: metrics.rMultiple,
+    bestR: metrics.bestR,
+    worstR: metrics.worstR,
+    givebackR: metrics.givebackR,
+    oneRReached: metrics.bestR >= 1,
+    currentScore: metrics.currentScore,
+    scoreDrop: 0,
+    oppositeBias: metrics.oppositeBias,
+    coreGateFails: 0
+  };
+}
