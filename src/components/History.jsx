@@ -45,21 +45,42 @@ export default function History({ history }) {
 
                 <div className="history-card-details">
                   <div className="history-metrics-v2">
-                    <Metric label="Entry score" value={trade.score ?? '—'} />
-                    <Metric label="Entry gates" value={trade.entryMandatoryPassCount != null ? `${trade.entryMandatoryPassCount}/5` : '—'} />
-                    <Metric label="Entry confirms" value={trade.entryConfirmationPassCount != null ? `${trade.entryConfirmationPassCount}/8` : '—'} />
-                    <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
-                    <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                    {isScalpTrade(trade) ? (
+                      <>
+                        <Metric label="Entry method" value={trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL')} />
+                        <Metric label="Scalp score" value={trade.scalpScoreAtEntry ?? trade.score ?? '—'} />
+                        <Metric label="Checks" value={trade.scalpChecksPassCount != null ? `${trade.scalpChecksPassCount}/${trade.scalpChecksTotal || 7}` : '—'} />
+                        <Metric label="Auto-qualified" value={trade.scalpAutoEligibleAtEntry === true ? 'YES' : trade.scalpAutoEligibleAtEntry === false ? 'NO' : '—'} />
+                        <Metric label="3m trigger" value={formatNumber(trade.scalpTrigger)} />
+                        <Metric label="NIFTY stop" value={formatNumber(trade.underlyingStop)} />
+                        <Metric label="NIFTY target" value={formatNumber(trade.underlyingTarget)} />
+                        <Metric label="3m body" value={formatPercent01(trade.scalpBodyRatioAtEntry)} />
+                        <Metric label="Extension" value={formatNumber(trade.scalpExtensionAtEntry)} />
+                        <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
+                        <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                        <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
+                      </>
+                    ) : (
+                      <>
+                        <Metric label="Entry score" value={trade.score ?? '—'} />
+                        <Metric label="Entry gates" value={trade.entryMandatoryPassCount != null ? `${trade.entryMandatoryPassCount}/5` : '—'} />
+                        <Metric label="Entry confirms" value={trade.entryConfirmationPassCount != null ? `${trade.entryConfirmationPassCount}/8` : '—'} />
+                        <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
+                        <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                        <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
+                      </>
+                    )}
                     <Metric label="Best R" value={formatR(trade.bestR)} tone={Number(trade.bestR) > 0 ? 'positive' : ''} />
                     <Metric label="Worst R" value={formatR(trade.worstR)} tone={Number(trade.worstR) < 0 ? 'negative' : ''} />
-                    <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
                   </div>
 
                   <div className="history-lifecycle-v2">
                     <div><span>Opened</span><strong>{formatDateTime(trade.openedAt)}</strong></div>
                     <div><span>Closed</span><strong>{formatDateTime(trade.closedAt)}</strong></div>
-                    <div><span>Closed by</span><strong>{trade.closedBy || 'USER / LEGACY'}</strong></div>
+                    <div><span>Closed by</span><strong>{trade.closedBy || 'USER / LEGACY'}{trade.exitMethod ? ` · ${trade.exitMethod}` : ''}</strong></div>
                     <div><span>Exit reason</span><strong>{humanReason(trade.exitReasonCode)}</strong></div>
+                    {isScalpTrade(trade) && <div><span>Exit scalp score</span><strong>{trade.scalpScoreAtExit ?? '—'}</strong></div>}
+                    {isScalpTrade(trade) && <div><span>Exit checks</span><strong>{trade.scalpChecksPassAtExit != null ? `${trade.scalpChecksPassAtExit}/7` : '—'}</strong></div>}
                   </div>
 
                   {(trade.mentorSuggestionAtEntry || trade.mentorSuggestionAtExit) && (
@@ -162,6 +183,8 @@ function richerTrade(a, b) {
 
 function Metric({ label, value, tone = '' }) { return <div><span>{label}</span><strong className={tone}>{value}</strong></div>; }
 function formatMoney(value) { const n = Number(value); return Number.isFinite(n) ? n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'; }
+function formatNumber(value) { const n = Number(value); return Number.isFinite(n) ? n.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '—'; }
+function formatPercent01(value) { const n = Number(value); return Number.isFinite(n) ? `${Math.round(n * 100)}%` : '—'; }
 function formatR(value) { const n = Number(value); return Number.isFinite(n) ? `${n >= 0 ? '+' : ''}${n.toFixed(2)}R` : '—'; }
 function formatDateTime(value) { if (!value) return '—'; const d = new Date(value); return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 
