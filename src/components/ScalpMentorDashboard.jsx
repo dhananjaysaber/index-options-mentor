@@ -77,7 +77,7 @@ export default function ScalpMentorDashboard({
   }, [evaluation?.eligible, evaluation?.score, evaluation?.side, evaluation?.reason, evaluation?.setupId]);
 
   useEffect(() => {
-    if (!settings?.mentorAutoOpen || position || !evaluation?.eligible || !evaluation?.setupId) return;
+    if (settings?.scalpAutoOpen === false || position || !evaluation?.eligible || !evaluation?.setupId) return;
     const ledger = readJson(LEDGER_KEY, {});
     if (ledger[evaluation.setupId]) return;
     const ticket = buildScalpTicket(snapshot, evaluation, settings, 'MENTOR');
@@ -86,10 +86,10 @@ export default function ScalpMentorDashboard({
     pruneLedger(ledger);
     writeJson(LEDGER_KEY, ledger);
     onTakeTrade(ticket);
-  }, [evaluation?.setupId, evaluation?.eligible, position?.id, settings?.mentorAutoOpen, settings?.defaultLots, settings?.lotCap]);
+  }, [evaluation?.setupId, evaluation?.eligible, position?.id, settings?.scalpAutoOpen, settings?.defaultLots, settings?.lotCap]);
 
   function openManualScalp() {
-    if (position || !evaluation?.eligible) return;
+    if (position || !evaluation?.manualEligible) return;
     const ticket = buildScalpTicket(snapshot, evaluation, settings, 'USER');
     if (ticket) onTakeTrade(ticket);
   }
@@ -122,6 +122,11 @@ export default function ScalpMentorDashboard({
           <Metric label="Stop" value={fmt(evaluation.stop)} tone="danger" />
           <Metric label="Target" value={fmt(evaluation.target)} tone="positive" />
           <Metric label="Plan" value="1:1 · 12 min max" />
+        </div>
+        <div className="scalp-automation-strip" aria-label="Scalp automation status">
+          <div><span>AUTO ENTRY</span><strong className={settings?.scalpAutoOpen === false ? 'off' : 'on'}>{settings?.scalpAutoOpen === false ? 'OFF' : 'ON'}</strong><small>Strict scalp rules only</small></div>
+          <div><span>AUTO CLOSE</span><strong className={settings?.scalpAutoClose === false ? 'off' : 'on'}>{settings?.scalpAutoClose === false ? 'OFF' : 'ON'}</strong><small>Target, stop, time & context</small></div>
+          <div><span>MANUAL ENTRY</span><strong className={evaluation.manualEligible ? 'on' : 'off'}>{evaluation.manualEligible ? 'READY' : 'WAIT'}</strong><small>Research override with hard safety intact</small></div>
         </div>
       </section>
 
@@ -185,14 +190,25 @@ export default function ScalpMentorDashboard({
           <Metric label="Risk points" value={fmt(evaluation.riskPoints)} />
           <Metric label="Max hold" value="12 min" />
           <Metric label="Profit target" value="+1.00R" tone="positive" />
-          <Metric label="Auto close" value={settings?.mentorAutoClose ? 'ON' : 'OFF'} />
+          <Metric label="Auto entry" value={settings?.scalpAutoOpen === false ? 'OFF' : 'ON'} />
+          <Metric label="Auto close" value={settings?.scalpAutoClose === false ? 'OFF' : 'ON'} />
         </div>
         {candleLoading && <div className="scalp-data-note">Refreshing 3-minute structure…</div>}
         {candleError && <div className="scalp-data-note warning">{candleError}</div>}
         {!position && (
-          <button type="button" className="scalp-open-button" disabled={!evaluation.eligible} onClick={openManualScalp}>
-            {evaluation.eligible ? 'OPEN SCALP RESEARCH POSITION' : 'WAITING FOR SCALP SETUP'}
-          </button>
+          <>
+            <div className={`scalp-manual-note ${evaluation.manualEligible ? 'ready' : ''}`}>
+              <strong>{evaluation.manualEligible ? 'Manual research available' : 'Manual research waiting'}</strong>
+              <span>{evaluation.manualReason}</span>
+            </div>
+            <button type="button" className="scalp-open-button" disabled={!evaluation.manualEligible} onClick={openManualScalp}>
+              {evaluation.manualEligible
+                ? evaluation.eligible
+                  ? 'OPEN SCALP MANUALLY'
+                  : 'OPEN MANUAL SCALP RESEARCH'
+                : 'WAITING FOR SAFE MANUAL ENTRY'}
+            </button>
+          </>
         )}
       </section>
     </div>
