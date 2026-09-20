@@ -94,6 +94,16 @@ export default function ScalpMentorDashboard({
     if (ticket) onTakeTrade(ticket);
   }
 
+  function quickSellScalp() {
+    if (!position || position.strategyFamily !== 'SCALP') return;
+    onExit({
+      closedBy: 'USER',
+      reasonCode: 'MANUAL_EXIT',
+      reason: 'Manual scalp exit from the fixed quick-action bar.',
+      mentorState: 'SCALP MANUAL EXIT'
+    });
+  }
+
   return (
     <div className="scalp-dashboard">
       {liveError && (
@@ -178,6 +188,27 @@ export default function ScalpMentorDashboard({
           ))}
         </div>
       </section>
+
+      <div className="scalp-quick-actions" role="group" aria-label="Fixed scalp buy and sell controls">
+        <button
+          type="button"
+          className="scalp-quick-buy"
+          disabled={Boolean(position) || !evaluation.manualEligible}
+          onClick={openManualScalp}
+        >
+          <span>BUY</span>
+          <small>{position ? 'Position open' : evaluation.manualEligible ? `Open ${evaluation.side || 'scalp'}` : 'Waiting'}</small>
+        </button>
+        <button
+          type="button"
+          className="scalp-quick-sell"
+          disabled={!position || position.strategyFamily !== 'SCALP'}
+          onClick={quickSellScalp}
+        >
+          <span>SELL</span>
+          <small>{position?.strategyFamily === 'SCALP' ? 'Exit scalp' : 'No scalp open'}</small>
+        </button>
+      </div>
 
       <section className="scalp-plan-panel">
         <div className="scalp-section-heading">
