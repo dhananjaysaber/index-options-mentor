@@ -1,5 +1,9 @@
+import { useState } from 'react';
+
 export default function History({ history }) {
-  const displayHistory = dedupeHistory(history);
+  const [filter, setFilter] = useState('all');
+  const allHistory = dedupeHistory(history);
+  const displayHistory = allHistory.filter(trade => filter === 'all' ? true : filter === 'scalp' ? isScalpTrade(trade) : !isScalpTrade(trade));
   const summary = summariseHistory(displayHistory);
 
   return (
@@ -7,6 +11,12 @@ export default function History({ history }) {
       <div className="panel-heading compact">
         <div><div className="eyebrow">LEARNING LOOP</div><h2>Trade history</h2></div>
         <span className="muted">{displayHistory.length} trades</span>
+      </div>
+
+      <div className="history-filter-tabs" role="group" aria-label="Trade journal strategy filter">
+        <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
+        <button type="button" className={filter === 'core' ? 'active' : ''} onClick={() => setFilter('core')}>13-point</button>
+        <button type="button" className={filter === 'scalp' ? 'active' : ''} onClick={() => setFilter('scalp')}>Scalp</button>
       </div>
 
       <div className="history-summary-grid" aria-label="Trade journal summary">
@@ -67,6 +77,10 @@ export default function History({ history }) {
       )}
     </section>
   );
+}
+
+function isScalpTrade(trade) {
+  return trade?.strategyFamily === 'SCALP' || trade?.strategyTier === 'SCALP' || /scalp/i.test(String(trade?.strategyTierLabel || ''));
 }
 
 function summariseHistory(rows) {
@@ -168,7 +182,14 @@ function humanReason(code) {
     STRUCTURAL_TARGET_REACHED: 'Structural target reached',
     RESEARCH_1_5R_EXIT: 'Research +1.5R exit',
     RESEARCH_TIME_EXIT: 'Research time exit',
-    SESSION_EXIT: 'Session close exit'
+    SESSION_EXIT: 'Session close exit',
+    SCALP_STOP: 'Scalp hard stop',
+    SCALP_TARGET: 'Scalp +1R target',
+    SCALP_TIME_EXIT: 'Scalp time exit',
+    SCALP_CONTEXT_EXIT: 'Scalp context exit',
+    SCALP_PROFIT_PROTECT: 'Scalp profit protection',
+    SCALP_WEAKENING: 'Scalp weakening',
+    SCALP_HOLD: 'Scalp hold'
   };
   return map[code] || code || 'Manual exit';
 }
