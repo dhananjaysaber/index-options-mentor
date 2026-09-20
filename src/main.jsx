@@ -31,6 +31,7 @@ import './live-market-v29.css';
 import './mobile-density-v30.css';
 import './mentor-ux-v31.css';
 import './reconnect-v32.css';
+import './scalp-v33.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
