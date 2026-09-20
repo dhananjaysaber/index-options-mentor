@@ -1,4 +1,4 @@
-import { derivePositionMentor, fmt, formatR } from '../engine/positionMentor.js';
+import { derivePositionMentor, deriveScalpPositionMentor, fmt, formatR } from '../engine/positionMentor.js';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 
 export default function LivePositionPanel({ position, onExit, history = [], snapshot = null, sticky = false }) {
@@ -25,9 +25,12 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
   const quantity = Number(position.quantity) || 0;
   const livePnl = currentOption != null && entryOption != null ? (currentOption - entryOption) * quantity : null;
   const pnlPct = livePnl != null && entryOption > 0 && quantity > 0 ? (livePnl / (entryOption * quantity)) * 100 : null;
-  const mentor = derivePositionMentor(position, snapshot, currentUnderlying ?? Number(position.underlyingEntry));
+  const isScalp = position?.strategyFamily === 'SCALP';
+  const mentor = isScalp
+    ? deriveScalpPositionMentor(position, snapshot, currentUnderlying ?? Number(position.underlyingEntry))
+    : derivePositionMentor(position, snapshot, currentUnderlying ?? Number(position.underlyingEntry));
   const pnlTone = livePnl == null ? '' : livePnl >= 0 ? 'pnl-pos' : 'pnl-neg';
-  const positionLabel = position.manualResearch ? 'MANUAL RESEARCH' : (position.strategyTierLabel || position.strategyTier || 'SIMULATION');
+  const positionLabel = isScalp ? 'SCALP RESEARCH' : position.manualResearch ? 'MANUAL RESEARCH' : (position.strategyTierLabel || position.strategyTier || 'SIMULATION');
 
   return (
     <aside className={`trade-focus-card position-mentor-card position-essential-card ${sticky ? 'sticky-trade' : ''} ${mentor.tone}`}>
@@ -67,14 +70,14 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <Essential label="NIFTY entry" value={fmt(position.underlyingEntry)} />
         <Essential label="Hard stop" value={fmt(position.underlyingStop)} tone="danger" />
         <Essential label="Target / milestone" value={fmt(position.underlyingTarget)} tone="positive" />
-        <Essential label="Score" value={`${position.score ?? '—'} → ${mentor.currentScore ?? '—'}`} />
-        <Essential label="Live gates" value={`${position.currentMandatoryPassCount ?? '—'}/5 · ${position.currentConfirmationPassCount ?? '—'}/8`} />
+        <Essential label={isScalp ? 'Scalp score' : 'Score'} value={isScalp ? `${position.score ?? '—'}/100` : `${position.score ?? '—'} → ${mentor.currentScore ?? '—'}`} />
+        <Essential label={isScalp ? 'Scalp plan' : 'Live gates'} value={isScalp ? `3m · ${position.scalpMaxHoldMinutes || 12}m max` : `${position.currentMandatoryPassCount ?? '—'}/5 · ${position.currentConfirmationPassCount ?? '—'}/8`} />
       </div>
 
       <div className={`position-guidance position-guidance-compact ${mentor.tone}`}>
         <span>WHAT MATTERS NOW</span>
         <strong>{mentor.copy}</strong>
-        <small>Hard stop {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
+        <small>Hard stop {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {isScalp ? 'Scalp research' : position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
       </div>
 
       <button className={`position-exit-button ${mentor.alertLevel === 'exit' ? 'urgent' : ''}`} onClick={() => onExit({ mentorState: mentor.title, reasonCode: mentor.reasonCode, reason: mentor.reason, rMultiple: mentor.rMultiple, closedBy: 'USER' })}>{mentor.alertLevel === 'exit' ? 'EXIT SIMULATED POSITION NOW' : 'EXIT SIMULATED TRADE'}</button>
