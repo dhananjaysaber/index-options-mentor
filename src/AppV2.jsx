@@ -33,6 +33,8 @@ const DEFAULT_SETTINGS = {
   lotCap: 5,
   mentorAutoOpen: true,
   mentorAutoClose: true,
+  scalpAutoOpen: true,
+  scalpAutoClose: true,
   controlledResearch: true,
   experimentalResearch: true
 };
@@ -199,7 +201,10 @@ export default function AppV2() {
   }, [snapshot?.generatedAt, position?.id, strategyMode, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
 
   useEffect(() => {
-    if (!position || !positionMentor || !settings.mentorAutoClose || positionMentor.alertLevel !== 'exit') {
+    const autoCloseEnabled = position?.strategyFamily === 'SCALP'
+      ? settings.scalpAutoClose !== false
+      : settings.mentorAutoClose !== false;
+    if (!position || !positionMentor || !autoCloseEnabled || positionMentor.alertLevel !== 'exit') {
       autoExitRef.current = '';
       return;
     }
@@ -213,7 +218,7 @@ export default function AppV2() {
       rMultiple: positionMentor.rMultiple,
       closedBy: 'MENTOR'
     });
-  }, [position?.id, positionMentor?.alertLevel, positionMentor?.reasonCode, settings.mentorAutoClose]);
+  }, [position?.id, position?.strategyFamily, positionMentor?.alertLevel, positionMentor?.reasonCode, settings.mentorAutoClose, settings.scalpAutoClose]);
 
   useEffect(() => {
     if (!position || !positionMentor || positionMentor.alertLevel !== 'exit') {
@@ -261,7 +266,12 @@ export default function AppV2() {
 
   function takeTrade(ticket) {
     if (position || !ticket?.quantity) return;
-    setPosition({ ...ticket, initiatedBy: ticket.initiatedBy || 'USER', openedByMentor: false });
+    const initiatedBy = ticket.initiatedBy || 'USER';
+    setPosition({
+      ...ticket,
+      initiatedBy,
+      openedByMentor: ticket.openedByMentor === true || initiatedBy === 'MENTOR'
+    });
   }
 
   function exitTrade(meta = {}) {
@@ -284,12 +294,34 @@ export default function AppV2() {
         heldMinutes,
         closedAt,
         closedBy: meta.closedBy || 'USER',
+        exitMethod: (meta.closedBy || 'USER') === 'MENTOR' ? 'AUTO' : 'MANUAL',
         exitReasonCode: meta.reasonCode || inferExitReason(current, underlyingExit),
         exitReason: meta.reason || 'Manual simulated exit.',
         exitMentorState: meta.mentorState || 'MANUAL EXIT',
         mentorSuggestionAtExit: snapshot?.decision?.headline || '',
         exitMandatoryPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).mandatoryPassCount,
         exitConfirmationPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).confirmationPassCount,
+        scalpExitEvaluation: current.strategyFamily === 'SCALP' && scalpStatus ? {
+          eligible: Boolean(scalpStatus.eligible),
+          manualEligible: Boolean(scalpStatus.manualEligible),
+          score: scalpStatus.score,
+          side: scalpStatus.side,
+          spot: scalpStatus.spot,
+          vwap: scalpStatus.vwap,
+          atr: scalpStatus.atr,
+          trigger: scalpStatus.trigger,
+          stop: scalpStatus.stop,
+          target: scalpStatus.target,
+          riskPoints: scalpStatus.riskPoints,
+          extension: scalpStatus.extension,
+          bodyRatio: scalpStatus.bodyRatio,
+          latestCompletedTime: scalpStatus.latestCompletedTime,
+          reason: scalpStatus.reason,
+          checks: scalpStatus.checks
+        } : null,
+        scalpScoreAtExit: current.strategyFamily === 'SCALP' ? scalpStatus?.score ?? null : null,
+        scalpChecksPassAtExit: current.strategyFamily === 'SCALP' && Array.isArray(scalpStatus?.checks) ? scalpStatus.checks.filter(item => item.pass).length : null,
+        autoCloseEnabledAtExit: current.strategyFamily === 'SCALP' ? settings.scalpAutoClose !== false : settings.mentorAutoClose !== false,
         exitSnapshot: snapshot ? { market: { ...snapshot.market }, decision: { ...snapshot.decision }, parameters: snapshot.parameters, structure: { ...snapshot.structure }, setup: { ...snapshot.setup } } : null
       };
       setHistory(previous => [closed, ...previous.filter(row => row.id !== closed.id)].slice(0, 1000));
