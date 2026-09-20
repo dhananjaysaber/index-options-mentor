@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 function checkedTime(value) {
   if (!value) return 'waiting';
   const date = new Date(value);
@@ -12,6 +14,7 @@ function checkedTime(value) {
 }
 
 export default function ScalpFooter({ snapshot, brokerStatus, refreshing, evaluation, positionMentor }) {
+  const footerRef = useRef(null);
   let label = 'SCALP MENTOR';
   let message = 'Waiting for 3-minute scalp structure.';
   let tone = 'live';
@@ -33,8 +36,26 @@ export default function ScalpFooter({ snapshot, brokerStatus, refreshing, evalua
     message = evaluation.reason;
   }
 
+  useEffect(() => {
+    const element = footerRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return undefined;
+    const publishHeight = () => {
+      const height = Math.ceil(element.getBoundingClientRect().height);
+      document.documentElement.style.setProperty('--scalp-footer-height', `${height}px`);
+    };
+    publishHeight();
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(element);
+    window.addEventListener('resize', publishHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', publishHeight);
+      document.documentElement.style.removeProperty('--scalp-footer-height');
+    };
+  }, []);
+
   return (
-    <footer className={`mentor-footer scalp-footer ${tone}`} aria-live="polite">
+    <footer ref={footerRef} className={`mentor-footer scalp-footer ${tone}`} aria-live="polite">
       <div className="mentor-footer-status" aria-hidden="true"><span className={`mentor-live-dot ${tone}`} /></div>
       <div className="mentor-footer-copy">
         <div className="mentor-footer-heading">
