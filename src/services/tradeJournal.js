@@ -56,7 +56,7 @@ export function startTradeJournalBridge() {
       eventId: `close:${trade.id}`,
       type: 'TRADE_CLOSED',
       trade: withStoredMetrics(trade),
-      source: 'browser_migration'
+      source: journalSource(trade, 'browser_migration')
     });
   }
 
@@ -66,7 +66,7 @@ export function startTradeJournalBridge() {
       eventId: `open:${existingPosition.id}`,
       type: 'TRADE_OPENED',
       trade: tracked,
-      source: 'browser_resume'
+      source: journalSource(tracked, 'browser_resume')
     });
   }
 
@@ -128,7 +128,7 @@ async function watchTick() {
         eventId: `open:${position.id}`,
         type: 'TRADE_OPENED',
         trade: tracked,
-        source: 'mentor'
+        source: journalSource(tracked, 'mentor')
       });
     }
 
@@ -139,7 +139,7 @@ async function watchTick() {
         eventId: `checkpoint:${position.id}:${minuteBucket}`,
         type: 'POSITION_CHECKPOINT',
         trade: tracked,
-        source: 'mentor'
+        source: journalSource(tracked, 'mentor')
       });
     }
   } else {
@@ -153,9 +153,18 @@ async function watchTick() {
       eventId: `close:${trade.id}`,
       type: 'TRADE_CLOSED',
       trade: withStoredMetrics(trade),
-      source: 'mentor'
+      source: journalSource(trade, 'mentor')
     });
   }
+}
+
+function journalSource(trade, fallback = 'mentor') {
+  if (trade?.strategyFamily === 'SCALP' || trade?.strategyTier === 'SCALP') {
+    const entry = trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL');
+    const exit = trade.exitMethod || (trade.closedBy === 'MENTOR' ? 'AUTO' : trade.closedAt ? 'MANUAL' : '');
+    return `scalp_${String(entry).toLowerCase()}${exit ? `_exit_${String(exit).toLowerCase()}` : ''}`;
+  }
+  return fallback;
 }
 
 function updateMetrics(position) {
