@@ -83,7 +83,8 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
     ? side === 'CE' ? spot + riskPoints * SCALP_TARGET_R : spot - riskPoints * SCALP_TARGET_R
     : null;
 
-  const hardReady = live && optionReady && candleReady && biasReady && liquidityOk && riskOk && extensionOk && timeOk;
+  const manualEligible = Boolean(live && optionReady && candleReady && biasReady && liquidityOk && timeOk && stop != null && riskPoints != null && riskPoints > 0);
+  const hardReady = manualEligible && riskOk && extensionOk;
   const eligible = Boolean(hardReady && trendOk && vwapOk && impulseOk && triggerBroken && score >= MIN_SCORE);
 
   const reason = !live
@@ -118,8 +119,27 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
     ? [snapshot?.market?.sessionDate || 'session', 'SCALP', side || 'none', latest.time, trigger.toFixed(2)].join(':')
     : null;
 
+  const manualReason = manualEligible
+    ? eligible
+      ? 'Manual entry is available, although this setup also qualifies for automatic scalp research.'
+      : `Manual scalp research is available even though automatic entry is blocked: ${reason}`
+    : !live
+      ? 'Manual scalp research is available only during the live regular session.'
+      : !optionReady
+        ? 'Wait for a live option candidate before opening a manual scalp.'
+        : !candleReady
+          ? 'Wait for at least two completed 3-minute candles before a manual scalp.'
+          : !biasReady
+            ? 'Wait for a CE or PE context before a manual scalp.'
+            : !liquidityOk
+              ? 'Option liquidity is a hard safety requirement for manual scalp research.'
+              : !timeOk
+                ? 'Manual scalp research is paused outside 09:30–14:45.'
+                : 'A measurable 3-minute stop is required before manual scalp research.';
+
   return {
     eligible,
+    manualEligible,
     researchOnly: true,
     score,
     minimumScore: MIN_SCORE,
@@ -138,12 +158,15 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
     latestCompletedTime: latest?.time || null,
     setupId,
     checks,
-    reason
+    reason,
+    manualReason
   };
 }
 
 export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = 'USER') {
-  if (!evaluation?.eligible || !snapshot?.option?.symbol) return null;
+  const automaticEntry = initiatedBy === 'MENTOR';
+  const allowed = automaticEntry ? evaluation?.eligible : evaluation?.manualEligible;
+  if (!allowed || !snapshot?.option?.symbol) return null;
 
   const quote = readLiveQuote();
   const optionEntry = quote?.optionSymbol === snapshot.option.symbol
@@ -175,10 +198,14 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     openedAt,
     initiatedBy,
     openedByMentor: initiatedBy === 'MENTOR',
+    entryMethod: initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL',
     strategyTier: 'SCALP',
-    strategyTierLabel: 'Scalp research',
+    strategyTierLabel: initiatedBy === 'MENTOR' ? 'Scalp research · Auto' : 'Scalp research · Manual',
     autoManaged: true,
     manualResearch: initiatedBy !== 'MENTOR',
+    scalpAutoEligibleAtEntry: Boolean(evaluation.eligible),
+    scalpManualOverride: initiatedBy !== 'MENTOR' && !evaluation.eligible,
+    scalpAutoRejectReason: evaluation.eligible ? '' : evaluation.reason,
     approvalState: 'SCALP_READY',
     mentorDecisionAtEntry: 'SCALP_READY',
     mentorSuggestionAtEntry: `SCALP RESEARCH — ${evaluation.reason}`,
@@ -206,7 +233,35 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     scalpMaxHoldMinutes: SCALP_MAX_HOLD_MINUTES,
     scalpTrigger: evaluation.trigger,
     scalpChecks: evaluation.checks,
+    scalpChecksPassCount: evaluation.checks.filter(item => item.pass).length,
+    scalpChecksTotal: evaluation.checks.length,
     scalpScoreAtEntry: evaluation.score,
+    scalpBodyRatioAtEntry: evaluation.bodyRatio,
+    scalpExtensionAtEntry: evaluation.extension,
+    scalpAtrAtEntry: evaluation.atr,
+    scalpVwapAtEntry: evaluation.vwap,
+    scalpLatestCompletedCandleTime: evaluation.latestCompletedTime,
+    scalpEntryEvaluation: {
+      eligible: Boolean(evaluation.eligible),
+      manualEligible: Boolean(evaluation.manualEligible),
+      score: evaluation.score,
+      minimumScore: evaluation.minimumScore,
+      side: evaluation.side,
+      spot: evaluation.spot,
+      vwap: evaluation.vwap,
+      atr: evaluation.atr,
+      trigger: evaluation.trigger,
+      stop: evaluation.stop,
+      target: evaluation.target,
+      riskPoints: evaluation.riskPoints,
+      rr: evaluation.rr,
+      extension: evaluation.extension,
+      bodyRatio: evaluation.bodyRatio,
+      latestCompletedTime: evaluation.latestCompletedTime,
+      reason: evaluation.reason,
+      manualReason: evaluation.manualReason,
+      checks: evaluation.checks
+    },
     riskBudgetEligible: false,
     requiredRiskAmount: null,
     requiredRiskPct: null,
@@ -218,7 +273,9 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
       defaultLots: lots,
       lotCap: Number(settings?.lotCap) || lots,
       mentorAutoOpen: Boolean(settings?.mentorAutoOpen),
-      mentorAutoClose: Boolean(settings?.mentorAutoClose)
+      mentorAutoClose: Boolean(settings?.mentorAutoClose),
+      scalpAutoOpen: settings?.scalpAutoOpen !== false,
+      scalpAutoClose: settings?.scalpAutoClose !== false
     },
     parameterSnapshot: snapshot.parameters,
     reasons: evaluation.checks.filter(item => !item.pass).map(item => item.detail),
