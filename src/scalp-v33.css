@@ -248,7 +248,7 @@ html[data-theme='dark'] .scalp-manual-note {
   height: var(--scalp-quickbar-height);
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0;
+  gap: 8px;
   padding: 6px max(10px, env(safe-area-inset-right, 0px)) 6px max(10px, env(safe-area-inset-left, 0px));
   border-top: 1px solid rgba(15,23,42,.12);
   border-bottom: 0;
@@ -271,8 +271,8 @@ html[data-theme='dark'] .scalp-manual-note {
   align-content: center;
   gap: 1px;
 }
-.scalp-quick-actions button:first-child { border-radius: 10px 0 0 10px; }
-.scalp-quick-actions button:last-child { border-radius: 0 10px 10px 0; }
+.scalp-quick-actions button:first-child,
+.scalp-quick-actions button:last-child { border-radius: 10px; }
 .scalp-quick-actions button span {
   display: block;
   font-size: 15px;
@@ -287,12 +287,11 @@ html[data-theme='dark'] .scalp-manual-note {
   opacity: .86;
 }
 .scalp-quick-buy {
-  background: #087d50;
+  background: #16a34a;
   color: #fff;
-  border-right: 1px solid rgba(255,255,255,.28) !important;
 }
 .scalp-quick-sell {
-  background: #bf303c;
+  background: #dc2626;
   color: #fff;
 }
 .scalp-quick-actions button:disabled {
