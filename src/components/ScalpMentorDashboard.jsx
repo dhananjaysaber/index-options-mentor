@@ -125,6 +125,14 @@ export default function ScalpMentorDashboard({
         </div>
       </section>
 
+      {position && position.strategyFamily !== 'SCALP' && (
+        <section className="scalp-existing-position">
+          <strong>13-point position still active</strong>
+          <span>Scalp research is paused until the existing simulated position is closed.</span>
+          <LivePositionPanel position={position} onExit={onExit} history={history} snapshot={snapshot} />
+        </section>
+      )}
+
       {position?.strategyFamily === 'SCALP' && (
         <>
           <PositionAlertBanner
