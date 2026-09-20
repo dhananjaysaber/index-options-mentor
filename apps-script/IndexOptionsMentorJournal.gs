@@ -4,22 +4,21 @@ const SETUPS_SHEET = 'SetupDecisions';
 
 const TRADE_HEADERS = [
   'trade_id','mode','status','session_date','opened_at','closed_at','held_minutes','side','symbol','strike','expiry',
-  'lot_size','lots','quantity','strategy_family','strategy_tier','strategy_label','initiated_by','entry_method','closed_by','exit_method','auto_managed','manual_research',
-  'approval_state','entry_score','current_score','exit_score','planned_rr','available_rr_entry',
+  'lot_size','lots','quantity','approval_state','entry_score','current_score','exit_score','planned_rr','available_rr_entry',
   'option_entry','option_current','option_exit','option_pnl','underlying_entry','underlying_current','underlying_exit','structural_stop','planned_target',
   'current_r','r_achieved','best_r','worst_r','best_option_price','worst_option_price','exit_reason_code','exit_reason','exit_mentor_state',
   'p01_regime_pct','p02_trend_pct','p03_vwap_pct','p04_risk_room_pct','p05_liquidity_pct','p06_orb_pct','p07_close_5m_pct',
   'p08_retest_pct','p09_pdh_pdl_pct','p10_volume_pct','p11_momentum_pct','p12_htf_15m_pct','p13_time_of_day_pct',
-  'vix_entry','pcr_entry','atr5_entry',
+  'vix_entry','pcr_entry','atr5_entry','entry_snapshot_json','last_snapshot_json','exit_snapshot_json','trade_json','source','notes','updated_at',
+  'strategy_family','strategy_tier','strategy_label','initiated_by','entry_method','closed_by','exit_method','auto_managed','manual_research',
   'scalp_auto_eligible_entry','scalp_manual_override','scalp_score_entry','scalp_score_exit','scalp_checks_pass_entry','scalp_checks_pass_exit',
-  'scalp_trigger','scalp_body_ratio_entry','scalp_extension_entry','scalp_vwap_entry','scalp_atr_entry','scalp_max_hold_minutes','scalp_auto_reject_reason',
-  'entry_snapshot_json','last_snapshot_json','exit_snapshot_json','trade_json','source','notes','updated_at'
+  'scalp_trigger','scalp_body_ratio_entry','scalp_extension_entry','scalp_vwap_entry','scalp_atr_entry','scalp_max_hold_minutes','scalp_auto_reject_reason'
 ];
 
 const JOURNEY_HEADERS = [
   'event_id','trade_id','event_time','event_type','status','side','symbol','underlying_price','option_price','r_multiple','best_r','worst_r',
-  'mentor_state','reason_code','score','current_bias','strategy_family','entry_method','exit_method','scalp_score','scalp_checks_pass',
-  'regime_pct','trend_pct','vwap_pct','payload_json','source','synced_at'
+  'mentor_state','reason_code','score','current_bias','regime_pct','trend_pct','vwap_pct','payload_json','source','synced_at',
+  'strategy_family','entry_method','exit_method','scalp_score','scalp_checks_pass'
 ];
 
 const SETUP_HEADERS = [
