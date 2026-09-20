@@ -11,7 +11,9 @@ import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import MobileMentorDashboard from './components/MobileMentorDashboard.jsx';
-import { derivePositionMentor } from './engine/positionMentor.js';
+import ScalpMentorDashboard from './components/ScalpMentorDashboard.jsx';
+import ScalpFooter from './components/ScalpFooter.jsx';
+import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positionMentor.js';
 import { buildSimulatedTicket, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
@@ -22,6 +24,7 @@ const ALERTS_KEY = 'index-options-mentor-alerts-enabled-v07';
 const THEME_KEY = 'index-options-mentor-theme-v1';
 const SETTINGS_KEY = 'index-options-mentor-settings-v2';
 const AUTO_SETUP_KEY = 'index-options-mentor-auto-setups-v1';
+const STRATEGY_MODE_KEY = 'index-options-mentor-strategy-mode-v1';
 
 const DEFAULT_SETTINGS = {
   capital: 50000,
@@ -37,6 +40,8 @@ const DEFAULT_SETTINGS = {
 export default function AppV2() {
   const [view, setView] = useState('dashboard');
   const [mode, setMode] = useState('simple');
+  const [strategyMode, setStrategyMode] = useState(() => readString(STRATEGY_MODE_KEY, 'core') === 'scalp' ? 'scalp' : 'core');
+  const [scalpStatus, setScalpStatus] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [brokerStatus, setBrokerStatus] = useState({ configured: false, authenticated: false });
   const [snapshot, setSnapshot] = useState(null);
@@ -67,6 +72,7 @@ export default function AppV2() {
     else localStorage.removeItem(POSITION_KEY);
   }, [position]);
   useEffect(() => { localStorage.setItem(ALERTS_KEY, alertsEnabled ? '1' : '0'); }, [alertsEnabled]);
+  useEffect(() => { localStorage.setItem(STRATEGY_MODE_KEY, strategyMode); }, [strategyMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,7 +162,7 @@ export default function AppV2() {
   const setupClassification = useMemo(() => classifyResearchSetup(snapshot), [snapshot]);
 
   useEffect(() => {
-    if (!position || !snapshot?.generatedAt) return;
+    if (!position || !snapshot?.generatedAt || position?.strategyFamily === 'SCALP') return;
     const currentClass = classifyResearchSetup(snapshot);
     setPosition(current => current ? {
       ...current,
@@ -174,11 +180,13 @@ export default function AppV2() {
     if (!position) return null;
     const currentUnderlying = Number(position.underlyingCurrent ?? snapshot?.market?.spot);
     if (!Number.isFinite(currentUnderlying)) return null;
-    return derivePositionMentor(position, snapshot, currentUnderlying);
+    return position?.strategyFamily === 'SCALP'
+      ? deriveScalpPositionMentor(position, snapshot, currentUnderlying)
+      : derivePositionMentor(position, snapshot, currentUnderlying);
   }, [position, snapshot]);
 
   useEffect(() => {
-    if (!settings.mentorAutoOpen || position || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
+    if (strategyMode === 'scalp' || !settings.mentorAutoOpen || position || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
     const ledger = readJson(AUTO_SETUP_KEY, {});
     const key = setupClassification.setupId;
     if (!key || ledger[key]) return;
@@ -188,7 +196,7 @@ export default function AppV2() {
     pruneLedger(ledger);
     localStorage.setItem(AUTO_SETUP_KEY, JSON.stringify(ledger));
     setPosition(ticket);
-  }, [snapshot?.generatedAt, position?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
+  }, [snapshot?.generatedAt, position?.id, strategyMode, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
 
   useEffect(() => {
     if (!position || !positionMentor || !settings.mentorAutoClose || positionMentor.alertLevel !== 'exit') {
@@ -280,8 +288,8 @@ export default function AppV2() {
         exitReason: meta.reason || 'Manual simulated exit.',
         exitMentorState: meta.mentorState || 'MANUAL EXIT',
         mentorSuggestionAtExit: snapshot?.decision?.headline || '',
-        exitMandatoryPassCount: classifyResearchSetup(snapshot).mandatoryPassCount,
-        exitConfirmationPassCount: classifyResearchSetup(snapshot).confirmationPassCount,
+        exitMandatoryPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).mandatoryPassCount,
+        exitConfirmationPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).confirmationPassCount,
         exitSnapshot: snapshot ? { market: { ...snapshot.market }, decision: { ...snapshot.decision }, parameters: snapshot.parameters, structure: { ...snapshot.structure }, setup: { ...snapshot.setup } } : null
       };
       setHistory(previous => [closed, ...previous.filter(row => row.id !== closed.id)].slice(0, 1000));
@@ -337,48 +345,69 @@ export default function AppV2() {
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
           <>
-            <section className="trader-toolbar mentor-v2-toolbar">
-              <div className="segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div>
-              <div className="toolbar-live"><span>DATA</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
-              <ToolbarStat label="Capital" value={`₹${Number(settings.capital).toLocaleString('en-IN')}`} />
-              <ToolbarStat label="Risk" value={`${settings.riskPct}%`} />
-              <ToolbarStat label="Sim lots" value={settings.defaultLots} />
-              <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
-            </section>
+            <StrategyModeBar strategyMode={strategyMode} setStrategyMode={setStrategyMode} />
 
-            <MobileMentorDashboard
-              mode={mode}
-              snapshot={snapshot}
-              loading={loading}
-              liveError={liveError}
-              position={position}
-              positionMentor={positionMentor}
-              alertsEnabled={alertsEnabled}
-              history={history}
-              settings={settings}
-              onReconnect={reconnectFyers}
-              onTakeTrade={takeTrade}
-              onExit={exitTrade}
-            />
-
-            {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={reconnectFyers}>Reconnect FYERS</button></div>}
-            {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
-            <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
-            <TraderDecisionBanner snapshot={snapshot} loading={loading} />
-            <ResearchStatus classification={setupClassification} position={position} settings={settings} />
-            <MentorWorkflow snapshot={snapshot} />
-            <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
-
-            {mode === 'simple' ? (
-              <section className="trader-workspace simple-workspace mentor-v2-workspace">
-                <div className="workspace-left"><TraderMarketPanel snapshot={snapshot} />{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
-                {positionCard}
-              </section>
+            {strategyMode === 'scalp' ? (
+              <ScalpMentorDashboard
+                snapshot={snapshot}
+                loading={loading}
+                liveError={liveError}
+                position={position}
+                positionMentor={positionMentor}
+                alertsEnabled={alertsEnabled}
+                history={history}
+                settings={settings}
+                onReconnect={reconnectFyers}
+                onTakeTrade={takeTrade}
+                onExit={exitTrade}
+                onStatusChange={setScalpStatus}
+              />
             ) : (
-              <section className="trader-workspace advanced-workspace mentor-v2-workspace">
-                <div className="workspace-left advanced-left">{snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
-                {positionCard}
-              </section>
+              <>
+                <section className="trader-toolbar mentor-v2-toolbar">
+                  <div className="segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div>
+                  <div className="toolbar-live"><span>DATA</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
+                  <ToolbarStat label="Capital" value={`₹${Number(settings.capital).toLocaleString('en-IN')}`} />
+                  <ToolbarStat label="Risk" value={`${settings.riskPct}%`} />
+                  <ToolbarStat label="Sim lots" value={settings.defaultLots} />
+                  <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
+                </section>
+
+                <MobileMentorDashboard
+                  mode={mode}
+                  snapshot={snapshot}
+                  loading={loading}
+                  liveError={liveError}
+                  position={position}
+                  positionMentor={positionMentor}
+                  alertsEnabled={alertsEnabled}
+                  history={history}
+                  settings={settings}
+                  onReconnect={reconnectFyers}
+                  onTakeTrade={takeTrade}
+                  onExit={exitTrade}
+                />
+
+                {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={reconnectFyers}>Reconnect FYERS</button></div>}
+                {position && <div className="position-lock-bar">SIMULATED POSITION ACTIVE · OPENED BY {position.initiatedBy || 'USER'} · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
+                <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => exitTrade({ ...meta, closedBy: 'USER' })} />
+                <TraderDecisionBanner snapshot={snapshot} loading={loading} />
+                <ResearchStatus classification={setupClassification} position={position} settings={settings} />
+                <MentorWorkflow snapshot={snapshot} />
+                <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />
+
+                {mode === 'simple' ? (
+                  <section className="trader-workspace simple-workspace mentor-v2-workspace">
+                    <div className="workspace-left"><TraderMarketPanel snapshot={snapshot} />{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
+                    {positionCard}
+                  </section>
+                ) : (
+                  <section className="trader-workspace advanced-workspace mentor-v2-workspace">
+                    <div className="workspace-left advanced-left">{snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}{!position && <LivePositionPanel position={null} history={history} snapshot={snapshot} onExit={exitTrade} />}</div>
+                    {positionCard}
+                  </section>
+                )}
+              </>
             )}
           </>
         )}
@@ -401,7 +430,7 @@ export default function AppV2() {
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
 
-      {view === 'dashboard' && <MentorFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} positionMentor={positionMentor} />}
+      {view === 'dashboard' && (strategyMode === 'scalp' ? <ScalpFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} evaluation={scalpStatus} positionMentor={position?.strategyFamily === 'SCALP' ? positionMentor : null} /> : <MentorFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} positionMentor={positionMentor} />)}
     </div>
   );
 }
@@ -446,6 +475,21 @@ function ResearchStatus({ classification, position, settings }) {
   if (position) return <section className={`research-status active tier-${String(position.strategyTier || '').toLowerCase()}`}><div><span>OPEN RESEARCH POSITION</span><strong>{position.strategyTierLabel || position.strategyTier}</strong></div><div><span>Initiated by</span><strong>{position.initiatedBy || 'USER'}</strong></div><div><span>Entry gates</span><strong>{position.entryMandatoryPassCount ?? '—'}/5 · {position.entryConfirmationPassCount ?? '—'}/8</strong></div><div><span>Opened</span><strong>{formatTime(position.openedAt)}</strong></div></section>;
   if (!classification?.eligible) return <section className="research-status"><div><span>AUTOMATED RESEARCH</span><strong>Watching</strong></div><div className="research-status-reason">{classification?.reason || 'Waiting for a completed setup.'}</div></section>;
   return <section className={`research-status ready tier-${classification.tier.toLowerCase()}`}><div><span>SETUP COHORT</span><strong>{classification.label}</strong></div><div><span>Mandatory</span><strong>{classification.mandatoryPassCount}/5</strong></div><div><span>Confirmations</span><strong>{classification.confirmationPassCount}/8</strong></div><div><span>Automation</span><strong>{settings.mentorAutoOpen ? 'Will open' : 'Manual'}</strong></div></section>;
+}
+
+function StrategyModeBar({ strategyMode, setStrategyMode }) {
+  const scalp = strategyMode === 'scalp';
+  return (
+    <section className="strategy-mode-bar" aria-label="Strategy mode">
+      <div className="strategy-mode-copy">
+        <span>STRATEGY MODE</span>
+        <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
+      </div>
+      <button type="button" className={`scalp-mode-switch ${scalp ? 'active' : ''}`} onClick={() => setStrategyMode(scalp ? 'core' : 'scalp')} aria-pressed={scalp}>
+        <span>SCALP</span><i aria-hidden="true" />
+      </button>
+    </section>
+  );
 }
 
 function ToolbarStat({ label, value }) { return <div className="toolbar-stat-v2"><span>{label}</span><strong>{value}</strong></div>; }
