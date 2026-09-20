@@ -6,9 +6,9 @@ const TIMEFRAMES = {
   '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56 }
 };
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '' }) {
   const liveQuote = useLiveQuote();
-  const [timeframe, setTimeframe] = useState('5');
+  const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -182,7 +182,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
             <LevelChip label="STOP" value={position?.underlyingStop ?? snapshot?.structure?.underlyingStop} />
             <LevelChip label="TARGET" value={position?.underlyingTarget ?? snapshot?.structure?.underlyingTarget} />
           </div>
-          <div className="nifty-chart-rule-note">Mentor entry logic remains based on completed 5-minute candles. The 3-minute tab changes the visual view only.</div>
+          <div className="nifty-chart-rule-note">{strategyNote || 'Mentor entry logic remains based on completed 5-minute candles. The 3-minute tab changes the visual view only.'}</div>
         </>
       ) : (
         <div className="nifty-chart-empty">Waiting for NIFTY chart data.</div>
