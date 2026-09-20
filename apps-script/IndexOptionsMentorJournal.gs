@@ -4,17 +4,22 @@ const SETUPS_SHEET = 'SetupDecisions';
 
 const TRADE_HEADERS = [
   'trade_id','mode','status','session_date','opened_at','closed_at','held_minutes','side','symbol','strike','expiry',
-  'lot_size','lots','quantity','approval_state','entry_score','current_score','exit_score','planned_rr','available_rr_entry',
+  'lot_size','lots','quantity','strategy_family','strategy_tier','strategy_label','initiated_by','entry_method','closed_by','exit_method','auto_managed','manual_research',
+  'approval_state','entry_score','current_score','exit_score','planned_rr','available_rr_entry',
   'option_entry','option_current','option_exit','option_pnl','underlying_entry','underlying_current','underlying_exit','structural_stop','planned_target',
   'current_r','r_achieved','best_r','worst_r','best_option_price','worst_option_price','exit_reason_code','exit_reason','exit_mentor_state',
   'p01_regime_pct','p02_trend_pct','p03_vwap_pct','p04_risk_room_pct','p05_liquidity_pct','p06_orb_pct','p07_close_5m_pct',
   'p08_retest_pct','p09_pdh_pdl_pct','p10_volume_pct','p11_momentum_pct','p12_htf_15m_pct','p13_time_of_day_pct',
-  'vix_entry','pcr_entry','atr5_entry','entry_snapshot_json','last_snapshot_json','exit_snapshot_json','trade_json','source','notes','updated_at'
+  'vix_entry','pcr_entry','atr5_entry',
+  'scalp_auto_eligible_entry','scalp_manual_override','scalp_score_entry','scalp_score_exit','scalp_checks_pass_entry','scalp_checks_pass_exit',
+  'scalp_trigger','scalp_body_ratio_entry','scalp_extension_entry','scalp_vwap_entry','scalp_atr_entry','scalp_max_hold_minutes','scalp_auto_reject_reason',
+  'entry_snapshot_json','last_snapshot_json','exit_snapshot_json','trade_json','source','notes','updated_at'
 ];
 
 const JOURNEY_HEADERS = [
   'event_id','trade_id','event_time','event_type','status','side','symbol','underlying_price','option_price','r_multiple','best_r','worst_r',
-  'mentor_state','reason_code','score','current_bias','regime_pct','trend_pct','vwap_pct','payload_json','source','synced_at'
+  'mentor_state','reason_code','score','current_bias','strategy_family','entry_method','exit_method','scalp_score','scalp_checks_pass',
+  'regime_pct','trend_pct','vwap_pct','payload_json','source','synced_at'
 ];
 
 const SETUP_HEADERS = [
@@ -214,6 +219,15 @@ function upsertTrade_(sheet, event) {
     lot_size: number_(trade.lotSize),
     lots: number_(trade.lots),
     quantity: number_(trade.quantity),
+    strategy_family: trade.strategyFamily || '',
+    strategy_tier: trade.strategyTier || '',
+    strategy_label: trade.strategyTierLabel || '',
+    initiated_by: trade.initiatedBy || '',
+    entry_method: trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL'),
+    closed_by: trade.closedBy || '',
+    exit_method: trade.exitMethod || '',
+    auto_managed: trade.autoManaged === true,
+    manual_research: trade.manualResearch === true,
     approval_state: trade.approvalState || (trade.entryDecision && trade.entryDecision.state) || '',
     entry_score: number_(trade.score),
     current_score: number_(snapshot && snapshot.decision ? snapshot.decision.score : trade.entryDecision && trade.entryDecision.score),
@@ -254,6 +268,19 @@ function upsertTrade_(sheet, event) {
     vix_entry: number_(trade.entryMarket && trade.entryMarket.vix),
     pcr_entry: number_(trade.entryMarket && trade.entryMarket.putCallOiRatio),
     atr5_entry: number_(trade.entryMarket && trade.entryMarket.atr5),
+    scalp_auto_eligible_entry: trade.strategyFamily === 'SCALP' ? trade.scalpAutoEligibleAtEntry === true : undefined,
+    scalp_manual_override: trade.strategyFamily === 'SCALP' ? trade.scalpManualOverride === true : undefined,
+    scalp_score_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpScoreAtEntry) : undefined,
+    scalp_score_exit: trade.strategyFamily === 'SCALP' ? number_(trade.scalpScoreAtExit) : undefined,
+    scalp_checks_pass_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpChecksPassCount) : undefined,
+    scalp_checks_pass_exit: trade.strategyFamily === 'SCALP' ? number_(trade.scalpChecksPassAtExit) : undefined,
+    scalp_trigger: trade.strategyFamily === 'SCALP' ? number_(trade.scalpTrigger) : undefined,
+    scalp_body_ratio_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpBodyRatioAtEntry) : undefined,
+    scalp_extension_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpExtensionAtEntry) : undefined,
+    scalp_vwap_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpVwapAtEntry) : undefined,
+    scalp_atr_entry: trade.strategyFamily === 'SCALP' ? number_(trade.scalpAtrAtEntry) : undefined,
+    scalp_max_hold_minutes: trade.strategyFamily === 'SCALP' ? number_(trade.scalpMaxHoldMinutes) : undefined,
+    scalp_auto_reject_reason: trade.strategyFamily === 'SCALP' ? (trade.scalpAutoRejectReason || '') : undefined,
     entry_snapshot_json: event.type === 'TRADE_OPENED' ? safeJson_(entrySnapshot) : undefined,
     last_snapshot_json: safeJson_({ parameters: currentParams, market: snapshot && snapshot.market, decision: snapshot && snapshot.decision }),
     exit_snapshot_json: event.type === 'TRADE_CLOSED' ? safeJson_(snapshot || {}) : undefined,
@@ -294,6 +321,11 @@ function appendJourney_(sheet, event) {
     reason_code: trade.exitReasonCode || '',
     score: number_(snapshot.decision && snapshot.decision.score),
     current_bias: snapshot.decision && snapshot.decision.side ? snapshot.decision.side : '',
+    strategy_family: trade.strategyFamily || '',
+    entry_method: trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL'),
+    exit_method: trade.exitMethod || '',
+    scalp_score: trade.strategyFamily === 'SCALP' ? number_(trade.scalpScoreAtExit != null ? trade.scalpScoreAtExit : trade.scalpScoreAtEntry) : '',
+    scalp_checks_pass: trade.strategyFamily === 'SCALP' ? number_(trade.scalpChecksPassAtExit != null ? trade.scalpChecksPassAtExit : trade.scalpChecksPassCount) : '',
     regime_pct: pct_(paramValue_(params, 'chop')),
     trend_pct: pct_(paramValue_(params, 'trend')),
     vwap_pct: pct_(paramValue_(params, 'vwap')),
@@ -314,8 +346,31 @@ function listTrades_(limit) {
     .filter(row => row.trade_id && String(row.status).toUpperCase() === 'CLOSED' && row.closed_at)
     .sort((a, b) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
     .slice(0, Math.max(1, Math.min(1000, Number(limit) || 500)))
-    .map(row => ({
+    .map(row => {
+      const stored = parseJson_(row.trade_json) || {};
+      return {
+      ...stored,
       id: row.trade_id,
+      strategyFamily: row.strategy_family || stored.strategyFamily || '',
+      strategyTier: row.strategy_tier || stored.strategyTier || '',
+      strategyTierLabel: row.strategy_label || stored.strategyTierLabel || '',
+      initiatedBy: row.initiated_by || stored.initiatedBy || '',
+      entryMethod: row.entry_method || stored.entryMethod || '',
+      closedBy: row.closed_by || stored.closedBy || '',
+      exitMethod: row.exit_method || stored.exitMethod || '',
+      scalpAutoEligibleAtEntry: row.scalp_auto_eligible_entry !== '' ? row.scalp_auto_eligible_entry === true || String(row.scalp_auto_eligible_entry).toUpperCase() === 'TRUE' : stored.scalpAutoEligibleAtEntry,
+      scalpManualOverride: row.scalp_manual_override !== '' ? row.scalp_manual_override === true || String(row.scalp_manual_override).toUpperCase() === 'TRUE' : stored.scalpManualOverride,
+      scalpScoreAtEntry: number_(row.scalp_score_entry) !== '' ? number_(row.scalp_score_entry) : stored.scalpScoreAtEntry,
+      scalpScoreAtExit: number_(row.scalp_score_exit) !== '' ? number_(row.scalp_score_exit) : stored.scalpScoreAtExit,
+      scalpChecksPassCount: number_(row.scalp_checks_pass_entry) !== '' ? number_(row.scalp_checks_pass_entry) : stored.scalpChecksPassCount,
+      scalpChecksPassAtExit: number_(row.scalp_checks_pass_exit) !== '' ? number_(row.scalp_checks_pass_exit) : stored.scalpChecksPassAtExit,
+      scalpTrigger: number_(row.scalp_trigger) !== '' ? number_(row.scalp_trigger) : stored.scalpTrigger,
+      scalpBodyRatioAtEntry: number_(row.scalp_body_ratio_entry) !== '' ? number_(row.scalp_body_ratio_entry) : stored.scalpBodyRatioAtEntry,
+      scalpExtensionAtEntry: number_(row.scalp_extension_entry) !== '' ? number_(row.scalp_extension_entry) : stored.scalpExtensionAtEntry,
+      scalpVwapAtEntry: number_(row.scalp_vwap_entry) !== '' ? number_(row.scalp_vwap_entry) : stored.scalpVwapAtEntry,
+      scalpAtrAtEntry: number_(row.scalp_atr_entry) !== '' ? number_(row.scalp_atr_entry) : stored.scalpAtrAtEntry,
+      scalpMaxHoldMinutes: number_(row.scalp_max_hold_minutes) !== '' ? number_(row.scalp_max_hold_minutes) : stored.scalpMaxHoldMinutes,
+      scalpAutoRejectReason: row.scalp_auto_reject_reason || stored.scalpAutoRejectReason || '',
       openedAt: iso_(row.opened_at),
       closedAt: iso_(row.closed_at),
       heldMinutes: number_(row.held_minutes),
@@ -346,7 +401,8 @@ function listTrades_(limit) {
       exitReasonCode: row.exit_reason_code,
       exitReason: row.exit_reason,
       exitMentorState: row.exit_mentor_state
-    }));
+      };
+    });
 }
 
 function ensureSheet_(ss, name, headers) {
@@ -417,6 +473,11 @@ function number_(value) {
 
 function hasValue_(value) {
   return value !== undefined && value !== null && value !== '';
+}
+
+function parseJson_(value) {
+  if (!value) return null;
+  try { return JSON.parse(String(value)); } catch (error) { return null; }
 }
 
 function safeJson_(value) {
