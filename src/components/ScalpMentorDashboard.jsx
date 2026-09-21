@@ -25,7 +25,12 @@ export default function ScalpMentorDashboard({
   const [candles, setCandles] = useState([]);
   const [candleLoading, setCandleLoading] = useState(false);
   const [candleError, setCandleError] = useState('');
+  const [manualLots, setManualLots] = useState(() => clampLots(settings?.defaultLots, settings?.lotCap));
   const sessionDate = snapshot?.market?.sessionDate || '';
+
+  useEffect(() => {
+    if (!position) setManualLots(current => clampLots(current || settings?.defaultLots, settings?.lotCap));
+  }, [settings?.defaultLots, settings?.lotCap, position?.id]);
 
   useEffect(() => {
     if (!sessionDate) {
@@ -90,7 +95,7 @@ export default function ScalpMentorDashboard({
 
   function openManualScalp() {
     if (position || !evaluation?.manualEligible) return;
-    const ticket = buildScalpTicket(snapshot, evaluation, settings, 'USER');
+    const ticket = buildScalpTicket(snapshot, evaluation, settings, 'USER', { lots: manualLots });
     if (ticket) onTakeTrade(ticket);
   }
 
@@ -197,7 +202,7 @@ export default function ScalpMentorDashboard({
           onClick={openManualScalp}
         >
           <span>BUY</span>
-          <small>{position ? 'Position open' : evaluation.manualEligible ? `Open ${evaluation.side || 'scalp'}` : 'Waiting'}</small>
+          <small>{position ? 'Position open' : evaluation.manualEligible ? `${manualLots} ${manualLots === 1 ? 'lot' : 'lots'} · Open ${evaluation.side || 'scalp'}` : 'Waiting'}</small>
         </button>
         <button
           type="button"
@@ -224,6 +229,28 @@ export default function ScalpMentorDashboard({
           <Metric label="Auto entry" value={settings?.scalpAutoOpen === false ? 'OFF' : 'ON'} />
           <Metric label="Auto close" value={settings?.scalpAutoClose === false ? 'OFF' : 'ON'} />
         </div>
+        {!position && (
+          <div className="scalp-lot-editor">
+            <div className="scalp-lot-copy">
+              <span>MANUAL POSITION SIZE</span>
+              <strong>{manualLots} {manualLots === 1 ? 'lot' : 'lots'} · {Number(snapshot?.option?.lotSize || 0) * manualLots || '—'} qty</strong>
+              <small>Manual scalp only · maximum {Math.max(1, Number(settings?.lotCap) || 5)} lots</small>
+            </div>
+            <div className="scalp-lot-stepper" role="group" aria-label="Manual scalp lots">
+              <button type="button" onClick={() => setManualLots(value => clampLots(Number(value) - 1, settings?.lotCap))} disabled={manualLots <= 1}>−</button>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="1"
+                max={Math.max(1, Number(settings?.lotCap) || 5)}
+                value={manualLots}
+                onChange={event => setManualLots(clampLots(event.target.value, settings?.lotCap))}
+                aria-label="Manual scalp lots"
+              />
+              <button type="button" onClick={() => setManualLots(value => clampLots(Number(value) + 1, settings?.lotCap))} disabled={manualLots >= Math.max(1, Number(settings?.lotCap) || 5)}>+</button>
+            </div>
+          </div>
+        )}
         {candleLoading && <div className="scalp-data-note">Refreshing 3-minute structure…</div>}
         {candleError && <div className="scalp-data-note warning">{candleError}</div>}
         {!position && (
@@ -263,6 +290,12 @@ function readJson(key, fallback) {
 function writeJson(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
+function clampLots(value, cap) {
+  const max = Math.max(1, Number(cap) || 5);
+  const parsed = Math.round(Number(value) || 1);
+  return Math.max(1, Math.min(max, parsed));
+}
+
 function pruneLedger(ledger) {
   const keys = Object.keys(ledger);
   if (keys.length <= 160) return;
