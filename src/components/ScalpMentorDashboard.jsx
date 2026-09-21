@@ -3,6 +3,7 @@ import useLiveQuote from '../hooks/useLiveQuote.js';
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
+import FyersLiveHandoff from './FyersLiveHandoff.jsx';
 import { buildScalpTicket, evaluateScalpSetup } from '../engine/scalpStrategy.js';
 
 const LEDGER_KEY = 'index-options-mentor-scalp-ledger-v1';
@@ -251,6 +252,33 @@ export default function ScalpMentorDashboard({
             </div>
           </div>
         )}
+        {!position && (
+          <FyersLiveHandoff
+            enabled={settings?.liveHandoffEnabled !== false}
+            strategyLabel="Scalp Mentor"
+            ready={Boolean(evaluation.eligible)}
+            riskStatus="review"
+            reason={evaluation.eligible
+              ? 'Strict scalp rules qualify, but live capital risk still needs your review inside FYERS before any order is placed.'
+              : evaluation.manualEligible
+                ? 'Manual scalp research is available, but the strict automatic scalp rules do not qualify this as a live handoff.'
+                : evaluation.reason}
+            plan={{
+              side: evaluation.side,
+              symbol: snapshot?.option?.symbol,
+              strike: snapshot?.option?.strike,
+              lots: manualLots,
+              quantity: Number(snapshot?.option?.lotSize || 0) * manualLots || null,
+              optionPrice: liveQuote?.optionSymbol === snapshot?.option?.symbol ? liveQuote?.optionPrice : snapshot?.option?.ltp,
+              niftyEntry: liveSpot,
+              stop: evaluation.stop,
+              target: evaluation.target,
+              rr: evaluation.rr,
+              mentorState: evaluation.eligible ? 'STRICT SCALP READY' : 'SCALP REVIEW'
+            }}
+          />
+        )}
+
         {candleLoading && <div className="scalp-data-note">Refreshing 3-minute structure…</div>}
         {candleError && <div className="scalp-data-note warning">{candleError}</div>}
         {!position && (
