@@ -327,3 +327,93 @@ html[data-theme='dark'] .scalp-quick-actions button:disabled {
   .scalp-quick-actions button span { font-size: 16px; }
   .scalp-quick-actions button small { font-size: 7px; }
 }
+
+
+/* v38 — editable lot size for manual scalp research. */
+.scalp-lot-editor {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid #dce6ef;
+  border-radius: 11px;
+  background: #f8fbfd;
+}
+.scalp-lot-copy { min-width: 0; }
+.scalp-lot-copy span,
+.scalp-lot-copy strong,
+.scalp-lot-copy small { display: block; }
+.scalp-lot-copy span {
+  color: #8798aa;
+  font-size: 7px;
+  font-weight: 950;
+  letter-spacing: .09em;
+}
+.scalp-lot-copy strong {
+  margin-top: 2px;
+  color: #17324f;
+  font-size: 11px;
+}
+.scalp-lot-copy small {
+  margin-top: 2px;
+  color: #75899c;
+  font-size: 7px;
+}
+.scalp-lot-stepper {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 34px 48px 34px;
+  gap: 4px;
+}
+.scalp-lot-stepper button,
+.scalp-lot-stepper input {
+  height: 34px;
+  border: 1px solid #ccd9e5;
+  border-radius: 8px;
+  background: #fff;
+  color: #17324f;
+  font: inherit;
+  font-weight: 900;
+  text-align: center;
+}
+.scalp-lot-stepper button {
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.scalp-lot-stepper input {
+  width: 48px;
+  padding: 0 3px;
+  font-size: 11px;
+  -moz-appearance: textfield;
+}
+.scalp-lot-stepper input::-webkit-inner-spin-button,
+.scalp-lot-stepper input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.scalp-lot-stepper button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+html[data-theme='dark'] .scalp-lot-editor {
+  border-color: #2d4258;
+  background: #132135;
+}
+html[data-theme='dark'] .scalp-lot-copy strong { color: #eef6ff; }
+html[data-theme='dark'] .scalp-lot-stepper button,
+html[data-theme='dark'] .scalp-lot-stepper input {
+  border-color: #354b63;
+  background: #0f1b2b;
+  color: #eef6ff;
+}
+@media (max-width: 820px) {
+  .scalp-lot-editor { padding: 8px; gap: 7px; }
+  .scalp-lot-copy strong { font-size: 10px; }
+  .scalp-lot-stepper { grid-template-columns: 32px 44px 32px; }
+  .scalp-lot-stepper button,
+  .scalp-lot-stepper input { height: 32px; }
+  .scalp-lot-stepper input { width: 44px; }
+}
