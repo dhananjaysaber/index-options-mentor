@@ -163,7 +163,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
   };
 }
 
-export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = 'USER') {
+export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = 'USER', overrides = {}) {
   const automaticEntry = initiatedBy === 'MENTOR';
   const allowed = automaticEntry ? evaluation?.eligible : evaluation?.manualEligible;
   if (!allowed || !snapshot?.option?.symbol) return null;
@@ -185,7 +185,9 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     ? underlyingEntry + riskPoints * SCALP_TARGET_R
     : underlyingEntry - riskPoints * SCALP_TARGET_R;
 
-  const lots = clampInt(settings?.defaultLots, 1, Math.max(1, Number(settings?.lotCap) || 5));
+  const maxLots = Math.max(1, Number(settings?.lotCap) || 5);
+  const requestedLots = initiatedBy === 'MENTOR' ? settings?.defaultLots : (overrides?.lots ?? settings?.defaultLots);
+  const lots = clampInt(requestedLots, 1, maxLots);
   const lotSize = Number(snapshot.option.lotSize) || 0;
   if (!lotSize) return null;
   const openedAt = new Date().toISOString();
@@ -271,6 +273,7 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
       capital: Number(settings?.capital) || 0,
       riskPct: Number(settings?.riskPct) || 0,
       defaultLots: lots,
+      selectedLots: lots,
       lotCap: Number(settings?.lotCap) || lots,
       mentorAutoOpen: Boolean(settings?.mentorAutoOpen),
       mentorAutoClose: Boolean(settings?.mentorAutoClose),
