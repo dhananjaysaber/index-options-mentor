@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { buildSimulatedTicket, calculateSimulationSizing, classifyResearchSetup, tierEnabled } from '../engine/researchStrategy.js';
 import ManualResearchPanel from './ManualResearchPanel.jsx';
 import useLiveQuote from '../hooks/useLiveQuote.js';
+import FyersLiveHandoff from './FyersLiveHandoff.jsx';
 
 function fmtNumber(value) {
   return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -129,6 +130,31 @@ export default function LiveTradeTicket({ snapshot, settings, onTakeTrade, block
           )}
 
           <div className="premium-guide"><span>Premium guide</span><strong>Stop ~ ₹{fmtNumber(option.estimatedPremiumStop)}</strong><strong>Target ~ ₹{fmtNumber(option.estimatedPremiumTarget)}</strong><small>Underlying structure remains the actual invalidation reference.</small></div>
+
+          <FyersLiveHandoff
+            enabled={settings?.liveHandoffEnabled !== false}
+            strategyLabel="13-point Mentor"
+            ready={Boolean(canTake && sizing?.riskBudgetEligible)}
+            riskStatus={sizing?.riskBudgetEligible ? 'pass' : 'fail'}
+            reason={sizing?.riskBudgetEligible
+              ? 'The current simulated size fits the configured capital-risk budget. Review the order in FYERS before placing it.'
+              : canTake
+                ? 'The setup qualifies for research, but this size is outside the configured live-risk budget.'
+                : actionCopy}
+            plan={{
+              side: option.optionType,
+              symbol: option.symbol,
+              strike: option.strike,
+              lots: sizing?.lots,
+              quantity: sizing?.quantity,
+              optionPrice: liveOption,
+              niftyEntry: liveSpot,
+              stop: structure.underlyingStop,
+              target: structure.underlyingTarget,
+              rr: decision.rr,
+              mentorState: actionTitle
+            }}
+          />
 
           <button className={`mega-trade-button ${canTake ? 'go' : 'locked'}`} disabled={!canTake} onClick={() => { const ticket = buildSimulatedTicket(executionSnapshot, settings, 'USER'); if (ticket) onTakeTrade(ticket); }}>
             {canTake ? `OPEN ${classification.label.toUpperCase()} SIMULATION` : actionTitle}
