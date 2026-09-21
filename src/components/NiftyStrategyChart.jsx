@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 
 const TIMEFRAMES = {
-  '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48 },
-  '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56 }
+  '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48, rightPaddingSlots: 6 },
+  '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 }
 };
 
 export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '' }) {
@@ -75,8 +75,8 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
   const chart = useMemo(
-    () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles),
-    [displayCandles, snapshot, position, timeframeConfig.visibleCandles]
+    () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots),
+    [displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots]
   );
   const side = position?.side || snapshot?.decision?.side || '';
   const retest = snapshot?.setup?.retestStatus || 'NOT_STARTED';
@@ -227,7 +227,7 @@ function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) 
   return next.slice(-maxCandles);
 }
 
-function buildChartModel(rows, snapshot, position, visibleCount = 52) {
+function buildChartModel(rows, snapshot, position, visibleCount = 52, rightPaddingSlots = 6) {
   if (!rows.length) return null;
 
   const visibleRows = rows.slice(-visibleCount);
@@ -249,10 +249,15 @@ function buildChartModel(rows, snapshot, position, visibleCount = 52) {
   const range = Math.max(1, max - min);
   const yFor = value => top + ((max - value) / range) * plotHeight;
 
-  const slots = visibleCount;
-  const spacing = width / slots;
-  const offsetSlots = Math.max(0, slots - visibleRows.length);
-  const bodyWidth = Math.max(4, Math.min(10, spacing * 0.6));
+  // Keep a small "future" area to the right, like a broker chart.
+  // This keeps the newest candle clearly visible instead of pinning it
+  // underneath the live-price marker / right-hand price scale.
+  const dataSlots = visibleCount;
+  const futureSlots = Math.max(4, Number(rightPaddingSlots) || 6);
+  const totalSlots = dataSlots + futureSlots;
+  const spacing = width / totalSlots;
+  const offsetSlots = Math.max(0, dataSlots - visibleRows.length);
+  const bodyWidth = Math.max(4, Math.min(10, spacing * 0.62));
 
   const candles = visibleRows.map((row, index) => {
     const x = left + spacing * (offsetSlots + index) + spacing / 2;
@@ -306,7 +311,7 @@ function buildChartModel(rows, snapshot, position, visibleCount = 52) {
     levels,
     grid,
     timeLabels,
-    current: { x: Math.min(right - spacing / 2, last.x), y: yFor(last.close), value: last.close }
+    current: { x: last.x, y: yFor(last.close), value: last.close }
   };
 }
 
