@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS = {
   mentorAutoClose: true,
   scalpAutoOpen: true,
   scalpAutoClose: true,
+  liveHandoffEnabled: true,
   controlledResearch: true,
   experimentalResearch: true
 };
