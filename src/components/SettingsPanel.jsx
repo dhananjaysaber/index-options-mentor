@@ -73,6 +73,11 @@ export default function SettingsPanel({ settings, onSave }) {
           <Toggle checked={draft.experimentalResearch} onChange={value => update('experimentalResearch', value)} title="3/5 experimental research" copy="Track 3/5 mandatory + at least 6/8 confirmation setups when hard safety gates still pass. Research only." />
         </SettingsCard>
 
+        <SettingsCard title="FYERS live handoff" copy="Prepare the Mentor's current order plan for manual review in FYERS. No broker order is submitted from this PWA.">
+          <Toggle checked={draft.liveHandoffEnabled !== false} onChange={value => update('liveHandoffEnabled', value)} title="Show live handoff" copy="Show the current symbol, lots, quantity, reference price, NIFTY stop and target with Copy Plan and Open FYERS actions." />
+          <div className="settings-note"><strong>Execution boundary:</strong> the Mentor can prepare and validate the order plan, but placing, modifying and cancelling a real FYERS order remains a separate confirmation inside FYERS.</div>
+        </SettingsCard>
+
         <SettingsCard title="What stays non-negotiable" copy="Automation does not override these protections.">
           <div className="locked-rules">
             <span>Live regular-session data</span>
