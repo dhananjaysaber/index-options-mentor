@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import TraderDecisionBanner from './components/TraderDecisionBanner.jsx';
 import MentorWorkflow from './components/MentorWorkflow.jsx';
 import QuickChecklist from './components/QuickChecklist.jsx';
@@ -7,7 +7,6 @@ import LiveTradeTicket from './components/LiveTradeTicket.jsx';
 import LivePositionPanel from './components/LivePositionPanel.jsx';
 import ParameterGrid from './components/ParameterGrid.jsx';
 import History from './components/History.jsx';
-import ResearchAnalysis from './components/ResearchAnalysis.jsx';
 import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
@@ -18,6 +17,8 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
+
+const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
@@ -461,7 +462,11 @@ export default function AppV2() {
         )}
 
         {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>Mentor-opened and user-opened simulations share the same journal so entry quality, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><History history={history} /></div>}
-        {view === 'analysis' && <ResearchAnalysis history={history} brokerStatus={brokerStatus} />}
+        {view === 'analysis' && (
+          <Suspense fallback={<AnalysisPageLoading />}>
+            <ResearchAnalysis history={history} brokerStatus={brokerStatus} />
+          </Suspense>
+        )}
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
 
@@ -525,6 +530,17 @@ function StrategyModeBar({ strategyMode, setStrategyMode }) {
         <span>SCALP</span><i aria-hidden="true" />
       </button>
     </section>
+  );
+}
+
+function AnalysisPageLoading() {
+  return (
+    <div className="mentor-page">
+      <div className="analysis-route-loading">
+        <span />
+        <div><strong>Opening Analysis…</strong><small>Mentor trading screens stay lightweight; the Replay Lab loads only when you open it.</small></div>
+      </div>
+    </div>
   );
 }
 
