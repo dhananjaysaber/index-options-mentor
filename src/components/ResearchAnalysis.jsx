@@ -1,58 +1,135 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   analyseExpiryProxy,
-  buildCohortAnalysis,
-  buildMarketEvidence
+  buildCohortAnalysis
 } from '../services/researchAnalysis.js';
 import {
-  buildReplayLab,
   REPLAY_MODELS,
   STRUCTURE_PROBES
 } from '../services/researchReplay.js';
 
 export default function ResearchAnalysis({ history, brokerStatus }) {
   const [months, setMonths] = useState(6);
-  const [marketData, setMarketData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [evidence, setEvidence] = useState(null);
+  const [replay, setReplay] = useState(null);
+  const [loadStage, setLoadStage] = useState('idle');
   const [error, setError] = useState('');
+  const [replayError, setReplayError] = useState('');
+  const workerRef = useRef(null);
+  const fiveMinuteRef = useRef([]);
+  const historyRef = useRef(history);
+  const evidenceRef = useRef(null);
+  const activeRequestRef = useRef(0);
+  historyRef.current = history;
   const cohorts = useMemo(() => buildCohortAnalysis(history), [history]);
   const expiryJournal = useMemo(() => analyseExpiryProxy(history), [history]);
-  const evidence = useMemo(
-    () => marketData ? buildMarketEvidence(marketData.fiveMinute, marketData.threeMinute) : null,
-    [marketData]
-  );
-  const replay = useMemo(
-    () => marketData ? buildReplayLab(history, marketData.fiveMinute, marketData.threeMinute) : null,
-    [history, marketData]
-  );
+  const loading = loadStage === 'five' || loadStage === 'three' || loadStage === 'replay';
 
   useEffect(() => {
-    if (!brokerStatus?.authenticated) {
-      setMarketData(null);
-      return undefined;
-    }
+    const worker = new Worker(new URL('../workers/researchReplayWorker.js', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
 
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const response = await fetch('/api/fyers/research-history?months=' + months, { cache: 'no-store' });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data?.error || 'Historical NIFTY data could not be loaded.');
-        if (!cancelled) setMarketData(data);
-      } catch (err) {
-        if (!cancelled) {
-          setMarketData(null);
-          setError(err?.message || 'Historical NIFTY data could not be loaded.');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+    worker.onmessage = event => {
+      const message = event?.data || {};
+      if (message.requestId !== activeRequestRef.current) return;
+
+      if (message.type === 'evidence') {
+        evidenceRef.current = message.evidence || null;
+        setEvidence(message.evidence || null);
+        return;
+      }
+
+      if (message.type === 'replay') {
+        const nextReplay = message.replay || null;
+        setReplay(nextReplay);
+        setLoadStage('ready');
+        writeAnalysisCache(months, {
+          evidence: evidenceRef.current,
+          replay: nextReplay,
+          savedAt: Date.now()
+        });
+        return;
+      }
+
+      if (message.type === 'error') {
+        setReplayError(message.message || 'Replay calculation failed.');
+        setLoadStage('ready');
       }
     };
 
-    void load();
-    return () => { cancelled = true; };
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, [months]);
+
+  useEffect(() => {
+    const requestId = activeRequestRef.current + 1;
+    activeRequestRef.current = requestId;
+    fiveMinuteRef.current = [];
+    evidenceRef.current = null;
+    setError('');
+    setReplayError('');
+
+    const cached = readAnalysisCache(months);
+    if (cached) {
+      evidenceRef.current = cached.evidence || null;
+      setEvidence(cached.evidence || null);
+      setReplay(cached.replay || null);
+      setLoadStage('ready');
+    } else {
+      setEvidence(null);
+      setReplay(null);
+      setLoadStage(brokerStatus?.authenticated ? 'five' : 'idle');
+    }
+
+    if (!brokerStatus?.authenticated) return undefined;
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        if (!cached) setLoadStage('five');
+        const fiveResponse = await fetch('/api/fyers/research-history?months=' + months + '&resolution=5', { cache: 'no-store' });
+        const fiveData = await fiveResponse.json().catch(() => ({}));
+        if (!fiveResponse.ok) throw new Error(fiveData?.error || 'Historical NIFTY data could not be loaded.');
+        if (cancelled || requestId !== activeRequestRef.current) return;
+
+        const fiveMinute = Array.isArray(fiveData?.fiveMinute) ? fiveData.fiveMinute : [];
+        fiveMinuteRef.current = fiveMinute;
+        workerRef.current?.postMessage({ type: 'evidence', requestId, fiveMinute });
+
+        setLoadStage('three');
+        const threeResponse = await fetch('/api/fyers/research-history?months=' + months + '&resolution=3', { cache: 'no-store' });
+        const threeData = await threeResponse.json().catch(() => ({}));
+        if (!threeResponse.ok) throw new Error(threeData?.error || '3-minute historical NIFTY data could not be loaded.');
+        if (cancelled || requestId !== activeRequestRef.current) return;
+
+        const threeMinute = Array.isArray(threeData?.threeMinute) ? threeData.threeMinute : [];
+        setLoadStage('replay');
+        workerRef.current?.postMessage({
+          type: 'replay',
+          requestId,
+          history: historyRef.current,
+          fiveMinute,
+          threeMinute
+        });
+      } catch (err) {
+        if (cancelled || requestId !== activeRequestRef.current) return;
+        const message = err?.message || 'Historical NIFTY data could not be loaded.';
+        if (fiveMinuteRef.current.length) {
+          setReplayError(message);
+          setLoadStage('ready');
+        } else {
+          setError(message);
+          setLoadStage('error');
+        }
+      }
+    }, cached ? 900 : 80);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [months, brokerStatus?.authenticated]);
 
   return (
@@ -70,6 +147,14 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
         <strong>This page observes; it does not trade.</strong>
         <p>The 13-point Mentor, Shadow Research and Scalp rules remain untouched. Any future rule change should be tested separately only after enough evidence is collected.</p>
       </section>
+
+      <AnalysisLoadStatus
+        stage={loadStage}
+        months={months}
+        hasEvidence={Boolean(evidence)}
+        hasReplay={Boolean(replay)}
+        error={error || replayError}
+      />
 
       <section className="analysis-section">
         <div className="analysis-section-head">
@@ -130,12 +215,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
             <strong>Connect FYERS to load historical NIFTY candles.</strong>
             <p>The journal analysis above still works without FYERS.</p>
           </div>
-        ) : loading ? (
-          <div className="analysis-empty">
-            <strong>Loading {months} months of NIFTY evidence…</strong>
-            <p>Fetching 5-minute and 3-minute candles in safe date chunks.</p>
-          </div>
-        ) : error ? (
+        ) : error && !evidence ? (
           <div className="analysis-empty error">
             <strong>Historical data unavailable</strong>
             <p>{error}</p>
@@ -170,7 +250,12 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
               Tuesday is shown only as a scheduled NIFTY-expiry proxy. Exchange-holiday shifts are not inferred here. Market-regime figures describe NIFTY movement; they are not trade signals.
             </p>
           </>
-        ) : null}
+        ) : (
+          <div className="analysis-empty">
+            <strong>Loading {months} months of NIFTY evidence…</strong>
+            <p>5-minute context loads first so this section can appear before the heavier replay work.</p>
+          </div>
+        )}
       </section>
 
       <section className="analysis-section">
@@ -201,10 +286,10 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
             <strong>Connect FYERS to run Stage 2.</strong>
             <p>The Replay Lab needs historical NIFTY candles after each recorded entry.</p>
           </div>
-        ) : loading ? (
-          <div className="analysis-empty">
-            <strong>Preparing Replay Lab…</strong>
-            <p>The same historical dataset is being aligned with your recorded entry timestamps.</p>
+        ) : replayError && !replay ? (
+          <div className="analysis-empty error">
+            <strong>Replay calculation unavailable</strong>
+            <p>{replayError}</p>
           </div>
         ) : replay ? (
           <>
@@ -257,7 +342,12 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
               This comparison holds the entry and structural stop constant. Legacy and Shadow target/stop paths can be replayed directly from NIFTY candles. The current runner card is intentionally marked as a path proxy because historical live-bias and score deterioration are not available for every old candle.
             </p>
           </>
-        ) : null}
+        ) : (
+          <div className="analysis-empty">
+            <strong>{loadStage === 'three' ? 'Loading 3-minute replay data…' : loadStage === 'replay' ? 'Calculating Replay Lab in the background…' : 'Preparing Replay Lab…'}</strong>
+            <p>The calculation runs outside the main app thread, so Mentor remains responsive while this finishes.</p>
+          </div>
+        )}
       </section>
 
       <section className="analysis-section replay-lab-section">
@@ -329,6 +419,31 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
           That distinction protects us from improving a strategy on fabricated hindsight. Historical NIFTY context is useful now; exact option-strategy replay should only be labelled complete when the required point-in-time option evidence is available.
         </p>
       </section>
+    </div>
+  );
+}
+
+function AnalysisLoadStatus({ stage, months, hasEvidence, hasReplay, error }) {
+  const ready = hasEvidence && hasReplay;
+  const label = error
+    ? 'PARTIAL DATA'
+    : ready
+      ? 'ANALYSIS READY'
+      : stage === 'five'
+        ? 'LOADING 5M CONTEXT'
+        : stage === 'three'
+          ? 'LOADING 3M REPLAY DATA'
+          : stage === 'replay'
+            ? 'CALCULATING REPLAY'
+            : 'READY TO LOAD';
+
+  return (
+    <div className={'analysis-load-status ' + (ready ? 'ready' : error ? 'warning' : 'working')}>
+      <span className="analysis-load-dot" />
+      <div>
+        <strong>{label}</strong>
+        <small>{ready ? months + '-month evidence is cached for fast reopening.' : error || 'The page stays usable while historical work continues in the background.'}</small>
+      </div>
     </div>
   );
 }
@@ -482,4 +597,29 @@ function profitFactor(value) {
   if (value === Infinity) return '∞';
   const number = Number(value);
   return Number.isFinite(number) ? number.toFixed(2) : '—';
+}
+
+
+const ANALYSIS_CACHE_PREFIX = 'index-options-mentor-analysis-v42-';
+const ANALYSIS_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function readAnalysisCache(months) {
+  try {
+    const raw = sessionStorage.getItem(ANALYSIS_CACHE_PREFIX + months);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > ANALYSIS_CACHE_TTL_MS) {
+      sessionStorage.removeItem(ANALYSIS_CACHE_PREFIX + months);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeAnalysisCache(months, value) {
+  try {
+    sessionStorage.setItem(ANALYSIS_CACHE_PREFIX + months, JSON.stringify(value));
+  } catch {}
 }

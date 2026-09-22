@@ -7,7 +7,7 @@ const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
 const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
-let researchHistoryCache = { key: '', at: 0, data: null };
+const researchHistoryCache = new Map();
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -404,20 +404,28 @@ async function handleResearchHistory(request) {
 
   const url = new URL(request.url);
   const months = Math.max(1, Math.min(6, Number(url.searchParams.get('months')) || 6));
+  const requestedResolution = String(url.searchParams.get('resolution') || 'both').toLowerCase();
+  const resolution = requestedResolution === '5' || requestedResolution === '3' ? requestedResolution : 'both';
   const to = dateKeyIST();
   const from = dateMonthsAgoIST(months);
-  const cacheKey = months + ':' + from + ':' + to;
-  const cacheFresh = researchHistoryCache.key === cacheKey &&
-    researchHistoryCache.data &&
-    Date.now() - researchHistoryCache.at < 10 * 60 * 1000;
-
-  if (cacheFresh) return json(researchHistoryCache.data);
+  const cacheKey = months + ':' + resolution + ':' + from + ':' + to;
+  const cached = researchHistoryCache.get(cacheKey);
+  if (cached?.data && Date.now() - cached.at < 10 * 60 * 1000) return json(cached.data);
 
   try {
-    const [fiveMinute, threeMinute] = await Promise.all([
-      fetchHistoryChunks('5', from, to, auth.token),
-      fetchHistoryChunks('3', from, to, auth.token)
-    ]);
+    let fiveMinute = [];
+    let threeMinute = [];
+
+    if (resolution === '5') {
+      fiveMinute = await fetchHistoryChunks('5', from, to, auth.token);
+    } else if (resolution === '3') {
+      threeMinute = await fetchHistoryChunks('3', from, to, auth.token);
+    } else {
+      [fiveMinute, threeMinute] = await Promise.all([
+        fetchHistoryChunks('5', from, to, auth.token),
+        fetchHistoryChunks('3', from, to, auth.token)
+      ]);
+    }
 
     const data = {
       ok: true,
@@ -426,13 +434,18 @@ async function handleResearchHistory(request) {
       months,
       from,
       to,
-      fiveMinute,
-      threeMinute,
+      resolution,
+      ...(resolution !== '3' ? { fiveMinute } : {}),
+      ...(resolution !== '5' ? { threeMinute } : {}),
       generatedAt: new Date().toISOString(),
       note: 'NIFTY candles only. No historical option chain, Greeks or bid/ask data are fabricated.'
     };
 
-    researchHistoryCache = { key: cacheKey, at: Date.now(), data };
+    researchHistoryCache.set(cacheKey, { at: Date.now(), data });
+    if (researchHistoryCache.size > 12) {
+      const oldest = [...researchHistoryCache.entries()].sort((a, b) => a[1].at - b[1].at)[0]?.[0];
+      if (oldest) researchHistoryCache.delete(oldest);
+    }
     return json(data);
   } catch (error) {
     console.error('Research history failed:', error);

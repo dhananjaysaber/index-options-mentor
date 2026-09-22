@@ -1,3 +1,20 @@
+const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+const IST_TIME_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false
+});
+const IST_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  weekday: 'short'
+});
+
 export const REPLAY_MODELS = [
   {
     id: 'actual',
@@ -81,6 +98,8 @@ export function buildJournalCounterfactual(history = [], fiveMinute = [], threeM
   const three = normaliseCandles(threeMinute);
   const rows = dedupeTrades(history);
   const cases = [];
+  const fiveSessions = new Map(groupSessions(five).map(session => [session.date, session.rows]));
+  const threeSessions = new Map(groupSessions(three).map(session => [session.date, session.rows]));
 
   for (const trade of rows) {
     const side = normaliseSide(trade?.side);
@@ -93,9 +112,9 @@ export function buildJournalCounterfactual(history = [], fiveMinute = [], threeM
     if (!(risk > 0)) continue;
 
     const scalp = isScalpTrade(trade);
-    const candles = scalp ? three : five;
     const resolution = scalp ? 3 : 5;
-    const path = futureSessionPath(candles, openMs, resolution);
+    const sessionRows = (scalp ? threeSessions : fiveSessions).get(dateKeyIST(openMs)) || [];
+    const path = futureSessionPath(sessionRows, openMs, resolution);
     if (!path.length) continue;
 
     const rr = Math.max(1, finite(trade?.rr) ?? 1);
@@ -401,7 +420,7 @@ function buildCoreProbeTrades(five, { requireRetest, label }) {
 
     for (let i = 3; i < rows.length - 1; i += 1) {
       const row = rows[i];
-      const minute = minuteOfDayIST(row.time * 1000);
+      const minute = row.minuteOfDay;
       if (minute < 570 || minute > 885) continue;
 
       const atr = rollingAtr(rows, i, 14);
@@ -491,7 +510,7 @@ function makeCoreProbe(rows, index, side, atr, label, retestHeld) {
     ...result,
     id: label + ':' + row.time,
     model: label,
-    date: dateKeyIST(row.time * 1000),
+    date: row.sessionDate,
     openedAt: new Date(entryMs).toISOString(),
     entryTime: row.time,
     side,
@@ -500,7 +519,7 @@ function makeCoreProbe(rows, index, side, atr, label, retestHeld) {
     target,
     risk,
     retestHeld,
-    scheduledTuesday: weekdayIST(row.time * 1000) === 2
+    scheduledTuesday: row.weekday === 2
   };
 }
 
@@ -515,19 +534,22 @@ function buildScalpProbeTrades(five, three) {
     if (rows3.length < 6 || rows5.length < 6) continue;
 
     let blockedUntilMs = 0;
+    let completed5Count = 0;
 
     for (let i = 2; i < rows3.length - 1; i += 1) {
       const row = rows3[i];
-      const rowMs = row.time * 1000;
+      const rowMs = row.timeMs;
       if (rowMs < blockedUntilMs) continue;
 
       const minute = minuteOfDayIST(rowMs);
       if (minute < 570 || minute > 885) continue;
 
-      const completed5 = rows5.filter(item => item.time * 1000 + 5 * 60000 <= rowMs);
-      if (completed5.length < 6) continue;
-      const recent5 = completed5.slice(-6);
-      const atr = rollingAtr(completed5, completed5.length - 1, 14);
+      while (completed5Count < rows5.length && rows5[completed5Count].timeMs + 5 * 60000 <= rowMs) {
+        completed5Count += 1;
+      }
+      if (completed5Count < 6) continue;
+      const recent5 = rows5.slice(Math.max(0, completed5Count - 6), completed5Count);
+      const atr = rollingAtr(rows5, completed5Count - 1, 14);
       if (!(atr > 0)) continue;
 
       const slope = regressionSlope(recent5.map(item => item.close));
@@ -591,7 +613,7 @@ function buildScalpProbeTrades(five, three) {
         risk,
         bodyRatio,
         extension,
-        scheduledTuesday: weekdayIST(rowMs) === 2
+        scheduledTuesday: row.weekday === 2
       });
 
       const exitMs = result.exitAt ? new Date(result.exitAt).getTime() : entryMs + 12 * 60000;
@@ -611,14 +633,10 @@ function splitTuesday(rows) {
   };
 }
 
-function futureSessionPath(candles, openMs, resolutionMinutes) {
-  const sessionDate = dateKeyIST(openMs);
+function futureSessionPath(sessionRows, openMs, resolutionMinutes) {
   const step = resolutionMinutes * 60000;
   const safeStart = Math.ceil(openMs / step) * step;
-
-  return candles
-    .filter(row => dateKeyIST(row.time * 1000) === sessionDate && row.time * 1000 >= safeStart)
-    .map(withTimeMs);
+  return sessionRows.filter(row => row.timeMs >= safeStart);
 }
 
 function withTimeMs(row) {
@@ -681,29 +699,39 @@ function regressionSlope(values) {
 
 function normaliseCandles(rows) {
   return (Array.isArray(rows) ? rows : []).map(row => {
+    let item;
     if (Array.isArray(row)) {
       const [time, open, high, low, close, volume] = row.map(Number);
       if (![time, open, high, low, close].every(Number.isFinite)) return null;
-      return { time, open, high, low, close, volume: Number(volume) || 0 };
+      item = { time, open, high, low, close, volume: Number(volume) || 0 };
+    } else {
+      if (!row || typeof row !== 'object') return null;
+      item = {
+        time: Number(row.time),
+        open: Number(row.open),
+        high: Number(row.high),
+        low: Number(row.low),
+        close: Number(row.close),
+        volume: Number(row.volume) || 0
+      };
+      if (![item.time, item.open, item.high, item.low, item.close].every(Number.isFinite)) return null;
     }
 
-    if (!row || typeof row !== 'object') return null;
-    const item = {
-      time: Number(row.time),
-      open: Number(row.open),
-      high: Number(row.high),
-      low: Number(row.low),
-      close: Number(row.close),
-      volume: Number(row.volume) || 0
+    const timeMs = item.time * 1000;
+    return {
+      ...item,
+      timeMs,
+      sessionDate: dateKeyIST(timeMs),
+      minuteOfDay: minuteOfDayIST(timeMs),
+      weekday: weekdayIST(timeMs)
     };
-    return [item.time, item.open, item.high, item.low, item.close].every(Number.isFinite) ? item : null;
   }).filter(Boolean).sort((a, b) => a.time - b.time);
 }
 
 function groupSessions(rows) {
   const map = new Map();
   for (const row of rows) {
-    const date = dateKeyIST(row.time * 1000);
+    const date = row.sessionDate || dateKeyIST(row.timeMs || row.time * 1000);
     if (!date) continue;
     if (!map.has(date)) map.set(date, []);
     map.get(date).push(row);
@@ -713,12 +741,7 @@ function groupSessions(rows) {
 
 function dateKeyIST(ms) {
   try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).formatToParts(new Date(ms));
+    const parts = IST_DATE_FORMATTER.formatToParts(new Date(ms));
     const year = parts.find(part => part.type === 'year')?.value;
     const month = parts.find(part => part.type === 'month')?.value;
     const day = parts.find(part => part.type === 'day')?.value;
@@ -730,12 +753,7 @@ function dateKeyIST(ms) {
 
 function minuteOfDayIST(ms) {
   try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).formatToParts(new Date(ms));
+    const parts = IST_TIME_FORMATTER.formatToParts(new Date(ms));
     const hour = Number(parts.find(part => part.type === 'hour')?.value);
     const minute = Number(parts.find(part => part.type === 'minute')?.value);
     return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : -1;
@@ -746,10 +764,7 @@ function minuteOfDayIST(ms) {
 
 function weekdayIST(ms) {
   try {
-    const label = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata',
-      weekday: 'short'
-    }).format(new Date(ms));
+    const label = IST_WEEKDAY_FORMATTER.format(new Date(ms));
     return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(label);
   } catch {
     return -1;
