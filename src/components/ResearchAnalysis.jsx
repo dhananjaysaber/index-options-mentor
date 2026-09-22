@@ -17,8 +17,10 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
   const [replayError, setReplayError] = useState('');
   const workerRef = useRef(null);
   const fiveMinuteRef = useRef([]);
+  const historyRef = useRef(history);
   const evidenceRef = useRef(null);
   const activeRequestRef = useRef(0);
+  historyRef.current = history;
   const cohorts = useMemo(() => buildCohortAnalysis(history), [history]);
   const expiryJournal = useMemo(() => analyseExpiryProxy(history), [history]);
   const loading = loadStage === 'five' || loadStage === 'three' || loadStage === 'replay';
@@ -107,7 +109,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
         workerRef.current?.postMessage({
           type: 'replay',
           requestId,
-          history,
+          history: historyRef.current,
           fiveMinute,
           threeMinute
         });
@@ -128,7 +130,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [months, brokerStatus?.authenticated, history]);
+  }, [months, brokerStatus?.authenticated]);
 
   return (
     <div className="mentor-page research-analysis-page">
