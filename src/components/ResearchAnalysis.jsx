@@ -98,16 +98,20 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
         if (cancelled || requestId !== activeRequestRef.current) return;
 
         const fiveMinute = Array.isArray(fiveData?.fiveMinute) ? fiveData.fiveMinute : [];
+        const bundledThreeMinute = Array.isArray(fiveData?.threeMinute) ? fiveData.threeMinute : [];
         fiveMinuteRef.current = fiveMinute;
         workerRef.current?.postMessage({ type: 'evidence', requestId, fiveMinute });
 
-        setLoadStage('three');
-        const threeResponse = await fetch('/api/fyers/research-history?months=' + months + '&resolution=3', { cache: 'no-store' });
-        const threeData = await threeResponse.json().catch(() => ({}));
-        if (!threeResponse.ok) throw new Error(threeData?.error || '3-minute historical NIFTY data could not be loaded.');
-        if (cancelled || requestId !== activeRequestRef.current) return;
+        let threeMinute = bundledThreeMinute;
+        if (!threeMinute.length) {
+          setLoadStage('three');
+          const threeResponse = await fetch('/api/fyers/research-history?months=' + months + '&resolution=3', { cache: 'no-store' });
+          const threeData = await threeResponse.json().catch(() => ({}));
+          if (!threeResponse.ok) throw new Error(threeData?.error || '3-minute historical NIFTY data could not be loaded.');
+          if (cancelled || requestId !== activeRequestRef.current) return;
+          threeMinute = Array.isArray(threeData?.threeMinute) ? threeData.threeMinute : [];
+        }
 
-        const threeMinute = Array.isArray(threeData?.threeMinute) ? threeData.threeMinute : [];
         setLoadStage('replay');
         workerRef.current?.postMessage({
           type: 'replay',
