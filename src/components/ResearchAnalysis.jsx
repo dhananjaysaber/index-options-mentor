@@ -4,6 +4,11 @@ import {
   buildCohortAnalysis,
   buildMarketEvidence
 } from '../services/researchAnalysis.js';
+import {
+  buildReplayLab,
+  REPLAY_MODELS,
+  STRUCTURE_PROBES
+} from '../services/researchReplay.js';
 
 export default function ResearchAnalysis({ history, brokerStatus }) {
   const [months, setMonths] = useState(6);
@@ -15,6 +20,10 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
   const evidence = useMemo(
     () => marketData ? buildMarketEvidence(marketData.fiveMinute, marketData.threeMinute) : null,
     [marketData]
+  );
+  const replay = useMemo(
+    () => marketData ? buildReplayLab(history, marketData.fiveMinute, marketData.threeMinute) : null,
+    [history, marketData]
   );
 
   useEffect(() => {
@@ -178,6 +187,127 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
         <p className="analysis-method-note">This becomes meaningful only after enough recorded trades exist. A few trades can look excellent or poor purely by chance.</p>
       </section>
 
+      <section className="analysis-section replay-lab-section">
+        <div className="analysis-section-head">
+          <div>
+            <span>STAGE 2 · SAME-ENTRY COUNTERFACTUAL</span>
+            <h2>What if the same recorded entry used a different exit manager?</h2>
+          </div>
+          <small>R-based · NIFTY path only</small>
+        </div>
+
+        {!brokerStatus?.authenticated ? (
+          <div className="analysis-empty">
+            <strong>Connect FYERS to run Stage 2.</strong>
+            <p>The Replay Lab needs historical NIFTY candles after each recorded entry.</p>
+          </div>
+        ) : loading ? (
+          <div className="analysis-empty">
+            <strong>Preparing Replay Lab…</strong>
+            <p>The same historical dataset is being aligned with your recorded entry timestamps.</p>
+          </div>
+        ) : replay ? (
+          <>
+            <div className="replay-model-grid">
+              <ReplayModelCard
+                definition={REPLAY_MODELS.find(row => row.id === 'actual')}
+                stats={replay.journal.summaries.actualCore}
+                note={replay.journal.coreCases + ' matched 13-point / Shadow / Legacy records'}
+              />
+              <ReplayModelCard
+                definition={REPLAY_MODELS.find(row => row.id === 'legacy')}
+                stats={replay.journal.summaries.legacy}
+              />
+              <ReplayModelCard
+                definition={REPLAY_MODELS.find(row => row.id === 'runner')}
+                stats={replay.journal.summaries.runner}
+              />
+              <ReplayModelCard
+                definition={REPLAY_MODELS.find(row => row.id === 'shadow')}
+                stats={replay.journal.summaries.shadow}
+              />
+            </div>
+
+            <div className="replay-head-to-head">
+              <div>
+                <span>LEGACY vs CURRENT RUNNER</span>
+                <strong>{replay.journal.legacyVsRunner.matched} matched entries</strong>
+              </div>
+              <div><span>Legacy finished higher</span><strong>{replay.journal.legacyVsRunner.leftBetter}</strong></div>
+              <div><span>Runner finished higher</span><strong>{replay.journal.legacyVsRunner.rightBetter}</strong></div>
+              <div><span>Near equal</span><strong>{replay.journal.legacyVsRunner.equal}</strong></div>
+              <div><span>Legacy average difference</span><strong className={tone(replay.journal.legacyVsRunner.avgDifferenceR)}>{r(replay.journal.legacyVsRunner.avgDifferenceR)}</strong></div>
+            </div>
+
+            <div className="replay-scalp-strip">
+              <ReplayModelCard
+                definition={{ ...REPLAY_MODELS.find(row => row.id === 'actual'), label: 'Recorded Scalp outcome', short: 'Scalp actual' }}
+                stats={replay.journal.summaries.actualScalp}
+                note={replay.journal.scalpCases + ' matched scalp records'}
+              />
+              <ReplayModelCard
+                definition={REPLAY_MODELS.find(row => row.id === 'scalp')}
+                stats={replay.journal.summaries.scalp}
+              />
+            </div>
+
+            <ReplayCaseTable rows={replay.journal.cases.slice(-12).reverse()} />
+
+            <p className="analysis-method-note">
+              This comparison holds the entry and structural stop constant. Legacy and Shadow target/stop paths can be replayed directly from NIFTY candles. The current runner card is intentionally marked as a path proxy because historical live-bias and score deterioration are not available for every old candle.
+            </p>
+          </>
+        ) : null}
+      </section>
+
+      <section className="analysis-section replay-lab-section">
+        <div className="analysis-section-head">
+          <div>
+            <span>STAGE 2 · SIX-MONTH STRUCTURAL SCAN</span>
+            <h2>How did comparable NIFTY structures behave across the historical window?</h2>
+          </div>
+          <small>{replay ? replay.coverage.from + ' → ' + replay.coverage.to : ''}</small>
+        </div>
+
+        {replay ? (
+          <>
+            <div className="replay-model-grid structural-probe-grid">
+              {STRUCTURE_PROBES.map(definition => {
+                const probe = replay.structural.probes[definition.id];
+                return (
+                  <ReplayModelCard
+                    key={definition.id}
+                    definition={{ ...definition, integrity: 'NIFTY-only probe' }}
+                    stats={probe?.stats}
+                  />
+                );
+              })}
+            </div>
+
+            <div className="replay-expiry-grid">
+              {STRUCTURE_PROBES.map(definition => {
+                const split = replay.structural.tuesday[definition.id];
+                return (
+                  <article key={definition.id}>
+                    <span>{definition.short.toUpperCase()}</span>
+                    <strong>Tuesday {r(split?.tuesday?.avgR || 0)} avg R</strong>
+                    <p>{split?.tuesday?.total || 0} Tuesday probes · {pct(split?.tuesday?.winRate || 0)} positive</p>
+                    <strong>Other days {r(split?.other?.avgR || 0)} avg R</strong>
+                    <p>{split?.other?.total || 0} other-day probes · {pct(split?.other?.winRate || 0)} positive</p>
+                  </article>
+                );
+              })}
+            </div>
+
+            <p className="analysis-method-note">
+              These are deliberately called structural probes, not exact strategy trades. They use only information available from historical NIFTY candles and never fabricate historical option liquidity, Greeks, PCR or option-chain state. Their purpose is to test whether the underlying market structure itself repeatedly carried an edge.
+            </p>
+          </>
+        ) : (
+          <div className="analysis-empty"><strong>Historical replay waits for the NIFTY dataset.</strong></div>
+        )}
+      </section>
+
       <section className="analysis-section analysis-integrity">
         <div className="analysis-section-head">
           <div>
@@ -201,6 +331,106 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
       </section>
     </div>
   );
+}
+
+function ReplayModelCard({ definition, stats, note = '' }) {
+  if (!definition) return null;
+  const safe = stats || { total: 0, winRate: 0, avgR: 0, totalR: 0, maxDrawdownR: 0, avgHold: 0, exits: {} };
+
+  return (
+    <article className="replay-model-card">
+      <div className="replay-model-title">
+        <div><span>{definition.short || definition.label}</span><strong>{definition.label}</strong></div>
+        <em>{definition.integrity || 'Replay'}</em>
+      </div>
+      <p>{definition.copy}</p>
+      <div className="analysis-stat-grid">
+        <Stat label="Cases" value={safe.total || 0} />
+        <Stat label="Positive" value={pct(safe.winRate || 0)} />
+        <Stat label="Avg R" value={r(safe.avgR || 0)} tone={tone(safe.avgR || 0)} />
+        <Stat label="Total R" value={r(safe.totalR || 0)} tone={tone(safe.totalR || 0)} />
+        <Stat label="Max DD" value={r(-(safe.maxDrawdownR || 0))} tone={safe.maxDrawdownR > 0 ? 'negative' : ''} />
+        <Stat label="Avg hold" value={minutes(safe.avgHold || 0)} />
+      </div>
+      <div className="replay-exit-row">
+        <span>Stops {safe.exits?.stop || 0}</span>
+        <span>Targets {safe.exits?.target || 0}</span>
+        <span>Time {safe.exits?.time || 0}</span>
+        <span>Protect {safe.exits?.protect || 0}</span>
+      </div>
+      {note && <small className="replay-card-note">{note}</small>}
+    </article>
+  );
+}
+
+function ReplayCaseTable({ rows }) {
+  if (!rows?.length) {
+    return <div className="analysis-empty replay-case-empty"><strong>No journal entries could be aligned to the selected historical period yet.</strong></div>;
+  }
+
+  return (
+    <div className="replay-case-wrap">
+      <div className="replay-case-title"><span>RECENT MATCHED ENTRIES</span><strong>Same entry · different management</strong></div>
+      <div className="replay-case-scroll">
+        <table className="replay-case-table">
+          <thead>
+            <tr><th>Entry</th><th>Type</th><th>Actual</th><th>Legacy</th><th>Runner</th><th>Shadow</th><th>Scalp</th></tr>
+          </thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.id}>
+                <td><strong>{row.side}</strong><small>{shortDate(row.openedAt)}</small></td>
+                <td>{cohortLabel(row.cohort)}</td>
+                <ReplayCell result={row.models.actual} />
+                <ReplayCell result={row.models.legacy} />
+                <ReplayCell result={row.models.runner} />
+                <ReplayCell result={row.models.shadow} />
+                <ReplayCell result={row.models.scalp} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReplayCell({ result }) {
+  if (!result) return <td className="muted">—</td>;
+  return (
+    <td className={tone(result.r)}>
+      <strong>{r(result.r)}</strong>
+      <small>{replayReason(result.exitReason)}</small>
+    </td>
+  );
+}
+
+function replayReason(value) {
+  const code = String(value || '');
+  if (code.includes('STOP')) return 'Stop';
+  if (code.includes('TARGET')) return 'Target';
+  if (code.includes('GIVEBACK')) return 'Protect';
+  if (code.includes('TIME')) return 'Time';
+  if (code.includes('SESSION')) return 'Session';
+  return 'Recorded';
+}
+
+function cohortLabel(value) {
+  const labels = {
+    LEGACY: 'Legacy',
+    SHADOW: 'Shadow',
+    CORE_AUTO: '13pt Auto',
+    CORE_MANUAL: '13pt Manual',
+    SCALP_AUTO: 'Scalp Auto',
+    SCALP_MANUAL: 'Scalp Manual'
+  };
+  return labels[value] || value || 'Research';
+}
+
+function shortDate(value) {
+  const date = new Date(value || 0);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
 function JournalContext({ title, stats }) {
