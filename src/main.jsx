@@ -33,6 +33,7 @@ import './mentor-ux-v31.css';
 import './reconnect-v32.css';
 import './scalp-v33.css';
 import './live-handoff-v39.css';
+import './research-analysis-v40.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is

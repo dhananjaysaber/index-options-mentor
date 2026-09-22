@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { explainTrade } from '../services/researchAnalysis.js';
 
 export default function History({ history }) {
   const [filter, setFilter] = useState('all');
@@ -89,6 +90,7 @@ export default function History({ history }) {
                       {trade.mentorSuggestionAtExit && <p><span>Mentor at exit</span>{trade.mentorSuggestionAtExit}</p>}
                     </div>
                   )}
+                  <TradeAnalysisPanel trade={trade} />
                 </div>
               </details>
             ))}
@@ -97,6 +99,27 @@ export default function History({ history }) {
         </>
       )}
     </section>
+  );
+}
+
+function TradeAnalysisPanel({ trade }) {
+  const [open, setOpen] = useState(false);
+  const analysis = explainTrade(trade);
+
+  return (
+    <div className="history-trade-analysis">
+      <button type="button" onClick={() => setOpen(value => !value)}>
+        {open ? 'Hide analysis' : 'Analyse trade'}
+      </button>
+      {open && (
+        <div className="history-analysis-copy">
+          <strong>{analysis.cohortLabel}</strong>
+          <ul>
+            {analysis.reasons.map((reason, index) => <li key={index}>{reason}</li>)}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

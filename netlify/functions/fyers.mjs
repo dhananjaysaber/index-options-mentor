@@ -7,6 +7,7 @@ const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
 const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
+let researchHistoryCache = { key: '', at: 0, data: null };
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -236,6 +237,75 @@ function normalisePendingDirection(snapshot) {
   };
 }
 
+function dateKeyForIST(value) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(value instanceof Date ? value : new Date(value));
+  const year = parts.find(part => part.type === 'year')?.value;
+  const month = parts.find(part => part.type === 'month')?.value;
+  const day = parts.find(part => part.type === 'day')?.value;
+  return year && month && day ? year + '-' + month + '-' + day : '';
+}
+
+function dateMonthsAgoIST(months) {
+  const now = new Date();
+  const shifted = new Date(now.getTime());
+  shifted.setUTCMonth(shifted.getUTCMonth() - Math.max(1, Math.min(6, Number(months) || 6)));
+  return dateKeyForIST(shifted);
+}
+
+function addDaysIST(dateKey, days) {
+  const date = new Date(dateKey + 'T00:00:00+05:30');
+  date.setTime(date.getTime() + Number(days || 0) * 86400000);
+  return dateKeyForIST(date);
+}
+
+function buildHistoryChunks(from, to, chunkDays = 55) {
+  const chunks = [];
+  let cursor = from;
+  while (cursor && cursor <= to) {
+    const candidateEnd = addDaysIST(cursor, chunkDays - 1);
+    const end = candidateEnd > to ? to : candidateEnd;
+    chunks.push({ from: cursor, to: end });
+    if (end >= to) break;
+    cursor = addDaysIST(end, 1);
+  }
+  return chunks;
+}
+
+function dedupeCandles(rows) {
+  const map = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!Array.isArray(row) || !Number.isFinite(Number(row[0]))) continue;
+    map.set(Number(row[0]), row);
+  }
+  return [...map.values()].sort((a, b) => Number(a[0]) - Number(b[0]));
+}
+
+async function fetchHistoryChunks(resolution, from, to, accessToken) {
+  const chunks = buildHistoryChunks(from, to);
+  const responses = await Promise.all(chunks.map(chunk => fyersGet('/history', {
+    symbol: 'NSE:NIFTY50-INDEX',
+    resolution,
+    date_format: '1',
+    range_from: chunk.from,
+    range_to: chunk.to,
+    cont_flag: '1'
+  }, accessToken)));
+
+  const candles = [];
+  for (const response of responses) {
+    if (response?.s === 'error') {
+      throw new Error(response?.message || 'FYERS historical data request failed.');
+    }
+    if (Array.isArray(response?.candles)) candles.push(...response.candles);
+  }
+  return dedupeCandles(candles);
+}
+
 async function handleStatus(request) {
   return json({
     configured: configured(request),
@@ -328,6 +398,51 @@ async function handleHistory(request) {
   }
 }
 
+async function handleResearchHistory(request) {
+  const auth = requireToken(request);
+  if (auth.error) return auth.error;
+
+  const url = new URL(request.url);
+  const months = Math.max(1, Math.min(6, Number(url.searchParams.get('months')) || 6));
+  const to = dateKeyIST();
+  const from = dateMonthsAgoIST(months);
+  const cacheKey = months + ':' + from + ':' + to;
+  const cacheFresh = researchHistoryCache.key === cacheKey &&
+    researchHistoryCache.data &&
+    Date.now() - researchHistoryCache.at < 10 * 60 * 1000;
+
+  if (cacheFresh) return json(researchHistoryCache.data);
+
+  try {
+    const [fiveMinute, threeMinute] = await Promise.all([
+      fetchHistoryChunks('5', from, to, auth.token),
+      fetchHistoryChunks('3', from, to, auth.token)
+    ]);
+
+    const data = {
+      ok: true,
+      source: 'FYERS historical candles',
+      symbol: 'NSE:NIFTY50-INDEX',
+      months,
+      from,
+      to,
+      fiveMinute,
+      threeMinute,
+      generatedAt: new Date().toISOString(),
+      note: 'NIFTY candles only. No historical option chain, Greeks or bid/ask data are fabricated.'
+    };
+
+    researchHistoryCache = { key: cacheKey, at: Date.now(), data };
+    return json(data);
+  } catch (error) {
+    console.error('Research history failed:', error);
+    return json({
+      error: 'Could not load the historical NIFTY research dataset.',
+      detail: error?.message || 'Unknown error'
+    }, 502);
+  }
+}
+
 async function handleOptionChain(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
@@ -410,6 +525,7 @@ export default async (request) => {
     case 'logout': response = await handleLogout(request); break;
     case 'quote': response = await handleQuote(request); break;
     case 'history': response = await handleHistory(request); break;
+    case 'research-history': response = await handleResearchHistory(request); break;
     case 'option-chain': response = await handleOptionChain(request); break;
     case 'mentor-snapshot': response = await handleMentorSnapshot(request); break;
     default: response = json({ error: 'Unknown FYERS route.' }, 404);
