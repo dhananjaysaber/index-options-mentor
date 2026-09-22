@@ -41,10 +41,13 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
 
       if (message.type === 'replay') {
         const nextReplay = message.replay || null;
+        const nextEvidence = message.evidence || evidenceRef.current || null;
+        evidenceRef.current = nextEvidence;
+        setEvidence(nextEvidence);
         setReplay(nextReplay);
         setLoadStage('ready');
         writeAnalysisCache(months, {
-          evidence: evidenceRef.current,
+          evidence: nextEvidence,
           replay: nextReplay,
           savedAt: Date.now()
         });
