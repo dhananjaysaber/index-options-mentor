@@ -134,14 +134,16 @@ export function buildJournalCounterfactual(history = [], fiveMinute = [], threeM
           stop,
           target: legacyTarget,
           risk,
-          sessionLabel: 'LEGACY_SESSION'
+          sessionLabel: 'LEGACY_SESSION',
+          openedAtMs: openMs
         }),
         runner: scalp ? null : simulateRunnerProxy({
           path,
           side,
           entry,
           stop,
-          risk
+          risk,
+          openedAtMs: openMs
         }),
         shadow: scalp ? null : simulateStopTarget({
           path,
@@ -150,7 +152,8 @@ export function buildJournalCounterfactual(history = [], fiveMinute = [], threeM
           stop,
           target: shadowTarget,
           risk,
-          sessionLabel: 'SHADOW_SESSION'
+          sessionLabel: 'SHADOW_SESSION',
+          openedAtMs: openMs
         }),
         scalp: scalp ? simulateScalpManager({
           path,
@@ -276,10 +279,10 @@ function compareModels(cases, leftKey, rightKey) {
   };
 }
 
-function simulateStopTarget({ path, side, entry, stop, target, risk, sessionLabel }) {
+function simulateStopTarget({ path, side, entry, stop, target, risk, sessionLabel, openedAtMs = null }) {
   let bestR = 0;
   let worstR = 0;
-  const opened = path[0]?.timeMs || 0;
+  const opened = openedAtMs || path[0]?.timeMs || 0;
 
   for (const candle of path) {
     const favourable = favourableExtremeR(side, entry, risk, candle);
@@ -307,10 +310,10 @@ function simulateStopTarget({ path, side, entry, stop, target, risk, sessionLabe
   return replayResult(r, last, opened, sessionLabel || 'SESSION_CLOSE', last.close, bestR, worstR);
 }
 
-function simulateRunnerProxy({ path, side, entry, stop, risk }) {
+function simulateRunnerProxy({ path, side, entry, stop, risk, openedAtMs = null }) {
   let bestR = 0;
   let worstR = 0;
-  const opened = path[0]?.timeMs || 0;
+  const opened = openedAtMs || path[0]?.timeMs || 0;
 
   for (const candle of path) {
     const favourable = favourableExtremeR(side, entry, risk, candle);
@@ -340,7 +343,7 @@ function simulateScalpManager({ path, side, entry, stop, risk, openedAtMs, maxHo
   let worstR = 0;
   const target = targetFromR(side, entry, risk, 1);
   const deadline = openedAtMs + maxHoldMinutes * 60000;
-  const opened = path[0]?.timeMs || openedAtMs;
+  const opened = openedAtMs || path[0]?.timeMs || 0;
 
   for (const candle of path) {
     const favourable = favourableExtremeR(side, entry, risk, candle);
@@ -469,6 +472,7 @@ function makeCoreProbe(rows, index, side, atr, label, retestHeld) {
   const risk = Math.abs(entry - stop);
   if (!(risk >= Math.max(2, atr * 0.12) && risk <= atr * 1.4)) return null;
 
+  const entryMs = row.time * 1000 + 5 * 60000;
   const future = rows.slice(index + 1).map(withTimeMs);
   if (!future.length) return null;
   const target = targetFromR(side, entry, risk, 1);
@@ -479,7 +483,8 @@ function makeCoreProbe(rows, index, side, atr, label, retestHeld) {
     stop,
     target,
     risk,
-    sessionLabel: 'PROBE_SESSION_CLOSE'
+    sessionLabel: 'PROBE_SESSION_CLOSE',
+    openedAtMs: entryMs
   });
 
   return {
@@ -487,7 +492,7 @@ function makeCoreProbe(rows, index, side, atr, label, retestHeld) {
     id: label + ':' + row.time,
     model: label,
     date: dateKeyIST(row.time * 1000),
-    openedAt: new Date(row.time * 1000).toISOString(),
+    openedAt: new Date(entryMs).toISOString(),
     entryTime: row.time,
     side,
     entry,
@@ -558,6 +563,7 @@ function buildScalpProbeTrades(five, three) {
       const extension = Math.abs(entry - trigger);
       if (extension > atr * 0.35) continue;
 
+      const entryMs = rowMs + 3 * 60000;
       const future = rows3.slice(i + 1).map(withTimeMs);
       if (!future.length) continue;
       const target = targetFromR(side, entry, risk, 1);
@@ -567,7 +573,7 @@ function buildScalpProbeTrades(five, three) {
         entry,
         stop,
         risk,
-        openedAtMs: rowMs,
+        openedAtMs: entryMs,
         maxHoldMinutes: 12
       });
 
@@ -576,7 +582,7 @@ function buildScalpProbeTrades(five, three) {
         id: 'SCALP_STRUCTURE_PROBE:' + row.time,
         model: 'SCALP_STRUCTURE_PROBE',
         date: session.date,
-        openedAt: new Date(rowMs).toISOString(),
+        openedAt: new Date(entryMs).toISOString(),
         entryTime: row.time,
         side,
         entry,
@@ -588,8 +594,8 @@ function buildScalpProbeTrades(five, three) {
         scheduledTuesday: weekdayIST(rowMs) === 2
       });
 
-      const exitMs = result.exitAt ? new Date(result.exitAt).getTime() : rowMs + 12 * 60000;
-      blockedUntilMs = Math.max(rowMs + 3 * 60000, exitMs);
+      const exitMs = result.exitAt ? new Date(result.exitAt).getTime() : entryMs + 12 * 60000;
+      blockedUntilMs = Math.max(entryMs, exitMs);
     }
   }
 
