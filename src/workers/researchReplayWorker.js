@@ -15,15 +15,19 @@ self.onmessage = event => {
     }
 
     if (payload.type === 'replay') {
+      const fiveMinute = payload.fiveMinute || [];
+      const threeMinute = payload.threeMinute || [];
       const raw = buildReplayLab(
         payload.history || [],
-        payload.fiveMinute || [],
-        payload.threeMinute || []
+        fiveMinute,
+        threeMinute
       );
+      const evidenceRaw = buildMarketEvidence(fiveMinute, threeMinute);
       self.postMessage({
         type: 'replay',
         requestId: payload.requestId,
-        replay: compactReplay(raw)
+        replay: compactReplay(raw),
+        evidence: compactEvidence(evidenceRaw)
       });
     }
   } catch (error) {
