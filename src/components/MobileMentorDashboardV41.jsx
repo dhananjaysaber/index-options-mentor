@@ -17,6 +17,7 @@ export default function MobileMentorDashboardV41({
   positionMentor,
   alertsEnabled,
   history,
+  settings,
   onReconnect,
   onExit
 }) {
@@ -36,7 +37,7 @@ export default function MobileMentorDashboardV41({
         <PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta => onExit({ ...meta, closedBy: 'USER' })} />
         {position
           ? <LivePositionPanel position={position} onExit={onExit} history={history} snapshot={snapshot} />
-          : <CoreResearchPanel snapshot={snapshot} settings={{}} />}
+          : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
       </section>
 
       <section className="mobile-flow-block mobile-live-path-block" aria-label="Live path">
