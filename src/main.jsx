@@ -4,6 +4,7 @@ import AppV3 from './AppV3.jsx';
 import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import FyersConnectButton from './FyersConnectButton.jsx';
 import ManualRefreshUX from './components/ManualRefreshUX.jsx';
+import FooterClearanceSync from './components/FooterClearanceSync.jsx';
 import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
 import { installShadowResearchEngine } from './services/shadowResearch.js';
@@ -35,6 +36,7 @@ import './scalp-v33.css';
 import './live-handoff-v39.css';
 import './research-analysis-v40.css';
 import './research-cockpit-v41.css';
+import './footer-clearance-v42.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
@@ -66,6 +68,7 @@ installShadowResearchEngine();
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <AppV3 />
+    <FooterClearanceSync />
     <ManualRefreshUX />
     <FyersConnectButton />
     <PWAInstallPrompt />
