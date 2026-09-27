@@ -1,0 +1,18 @@
+/* v42 — keep the 13-point fixed trade dock clear of the variable-height Mentor footer. */
+:root {
+  --mentor-footer-clearance: 62px;
+}
+
+.strategy-quick-actions {
+  bottom: var(--mentor-footer-clearance) !important;
+}
+
+.research-v41-shell .mentor-v2-content {
+  padding-bottom: calc(var(--research-quickbar-height, 66px) + var(--mentor-footer-clearance) + 24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+@media (max-width: 820px) {
+  .research-v41-shell .mentor-v2-content {
+    padding-bottom: calc(var(--research-quickbar-height, 62px) + var(--mentor-footer-clearance) + 18px) !important;
+  }
+}
