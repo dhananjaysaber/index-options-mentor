@@ -1,6 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import AppV2 from './AppV2.jsx';
+import AppV3 from './AppV3.jsx';
 import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import FyersConnectButton from './FyersConnectButton.jsx';
 import ManualRefreshUX from './components/ManualRefreshUX.jsx';
@@ -34,6 +34,7 @@ import './reconnect-v32.css';
 import './scalp-v33.css';
 import './live-handoff-v39.css';
 import './research-analysis-v40.css';
+import './research-cockpit-v41.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
@@ -64,7 +65,7 @@ installShadowResearchEngine();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AppV2 />
+    <AppV3 />
     <ManualRefreshUX />
     <FyersConnectButton />
     <PWAInstallPrompt />
