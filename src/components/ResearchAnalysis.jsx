@@ -15,8 +15,10 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
   const [loadStage, setLoadStage] = useState('idle');
   const [error, setError] = useState('');
   const [replayError, setReplayError] = useState('');
+  const [exportStatus, setExportStatus] = useState('');
   const workerRef = useRef(null);
   const fiveMinuteRef = useRef([]);
+  const threeMinuteRef = useRef([]);
   const historyRef = useRef(history);
   const evidenceRef = useRef(null);
   const activeRequestRef = useRef(0);
@@ -70,7 +72,9 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
     const requestId = activeRequestRef.current + 1;
     activeRequestRef.current = requestId;
     fiveMinuteRef.current = [];
+    threeMinuteRef.current = [];
     evidenceRef.current = null;
+    setExportStatus('');
     setError('');
     setReplayError('');
 
@@ -112,6 +116,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
           threeMinute = Array.isArray(threeData?.threeMinute) ? threeData.threeMinute : [];
         }
 
+        threeMinuteRef.current = threeMinute;
         setLoadStage('replay');
         workerRef.current?.postMessage({
           type: 'replay',
@@ -138,6 +143,66 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
       window.clearTimeout(timer);
     };
   }, [months, brokerStatus?.authenticated]);
+
+  const twoMonthReady = months === 2
+    && loadStage === 'ready'
+    && fiveMinuteRef.current.length > 0
+    && threeMinuteRef.current.length > 0;
+
+  async function exportTwoMonthData() {
+    if (!twoMonthReady) return;
+    try {
+      const fiveMinute = fiveMinuteRef.current;
+      const threeMinute = threeMinuteRef.current;
+      const from = new Date(Number(fiveMinute[0][0]) * 1000).toISOString().slice(0, 10);
+      const to = new Date(Number(fiveMinute.at(-1)[0]) * 1000).toISOString().slice(0, 10);
+      const startMs = new Date(from + 'T00:00:00+05:30').getTime();
+      const endMs = new Date(to + 'T23:59:59+05:30').getTime();
+      const recordedTrades = (Array.isArray(historyRef.current) ? historyRef.current : [])
+        .filter(trade => {
+          const stamp = new Date(trade?.openedAt || trade?.closedAt || 0).getTime();
+          return Number.isFinite(stamp) && stamp >= startMs && stamp <= endMs;
+        });
+      const payload = {
+        schema: 'index-options-mentor-research-export-v1',
+        exportedAt: new Date().toISOString(),
+        source: 'Authenticated FYERS NIFTY 50 intraday history via Index Options Mentor',
+        symbol: 'NSE:NIFTY50-INDEX',
+        requestedMonths: 2,
+        from, to,
+        candleFormat: '[Unix seconds, open, high, low, close, volume]',
+        caveat: 'NIFTY-only structural replays are not exact 13-point option-strategy backtests. Historical option quotes, liquidity and fills are not reconstructed.',
+        fiveMinute,
+        threeMinute,
+        recordedTrades,
+        replay
+      };
+      const filename = 'NIFTY50_2M_' + from + '_to_' + to + '.json';
+      const file = new File([JSON.stringify(payload)], filename, { type: 'application/json' });
+      // iOS PWA users can save the JSON to Files directly from the native share sheet.
+      if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'NIFTY 50 two-month strategy research' });
+          setExportStatus('Export shared. If saved to Files, attach the JSON in ChatGPT.');
+          return;
+        } catch (shareError) {
+          if (shareError?.name === 'AbortError') return;
+          // Some embedded browsers decline file sharing; fall back to a download.
+        }
+      }
+      const href = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 60000);
+      setExportStatus('Download requested: ' + filename + '. Attach this file in ChatGPT.');
+    } catch (exportError) {
+      setExportStatus('Could not export data: ' + (exportError?.message || 'unknown error'));
+    }
+  }
 
   return (
     <div className="mentor-page research-analysis-page">
@@ -204,7 +269,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
             <h2>Same market, longer evidence window</h2>
           </div>
           <div className="analysis-period-control" role="group" aria-label="Historical analysis period">
-            {[1, 3, 6].map(value => (
+            {[1, 2, 3, 6].map(value => (
               <button
                 type="button"
                 key={value}
@@ -216,6 +281,19 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
             ))}
           </div>
         </div>
+
+        {months === 2 && (
+          <div className="analysis-export-strip">
+            <div>
+              <strong>Two-month NIFTY research data</strong>
+              <span>Export actual FYERS 3m / 5m candles, matched journal records and structural replay results. No login credentials.</span>
+            </div>
+            <button type="button" disabled={!twoMonthReady} onClick={exportTwoMonthData}>
+              {twoMonthReady ? 'Export 2-Month Test Data' : loading ? 'Loading candles…' : 'Export available after loading'}
+            </button>
+            {exportStatus && <small role="status">{exportStatus}</small>}
+          </div>
+        )}
 
         {!brokerStatus?.authenticated ? (
           <div className="analysis-empty">
