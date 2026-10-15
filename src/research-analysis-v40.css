@@ -15,3 +15,13 @@ html[data-theme="dark"] .replay-model-card,html[data-theme="dark"] .replay-expir
 
 /* v42 performance/loading states */
 .analysis-route-loading,.analysis-load-status{display:flex;align-items:center;gap:11px;border:1px solid rgba(15,23,42,.08);border-radius:14px;padding:12px 14px;background:rgba(248,250,252,.78)}.analysis-route-loading>span,.analysis-load-dot{width:10px;height:10px;border-radius:50%;background:#0ea5e9;box-shadow:0 0 0 5px rgba(14,165,233,.12);flex:0 0 auto}.analysis-route-loading strong,.analysis-load-status strong{display:block;font-size:12px}.analysis-route-loading small,.analysis-load-status small{display:block;margin-top:2px;color:#64748b;font-size:10px;line-height:1.4}.analysis-load-status.ready{border-color:rgba(16,185,129,.22);background:rgba(16,185,129,.05)}.analysis-load-status.ready .analysis-load-dot{background:#10b981;box-shadow:0 0 0 5px rgba(16,185,129,.12)}.analysis-load-status.warning{border-color:rgba(245,158,11,.24);background:rgba(245,158,11,.06)}.analysis-load-status.warning .analysis-load-dot{background:#f59e0b;box-shadow:0 0 0 5px rgba(245,158,11,.12)}.analysis-load-status.working .analysis-load-dot{animation:analysisPulse 1.4s ease-in-out infinite}@keyframes analysisPulse{0%,100%{transform:scale(.9);opacity:.65}50%{transform:scale(1.15);opacity:1}}html[data-theme="dark"] .analysis-route-loading,html[data-theme="dark"] .analysis-load-status{background:rgba(15,23,42,.65);border-color:rgba(148,163,184,.16)}
+
+/* Two-month research export - compact and touch-friendly on PWA */
+.analysis-export-strip{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;margin:-2px 0 14px;border:1px solid rgba(15,23,42,.12);background:rgba(148,163,184,.07);border-radius:12px}
+.analysis-export-strip>div{flex:1 1 220px;min-width:0}
+.analysis-export-strip strong{display:block;font-size:13px;color:var(--text,#0f172a)}
+.analysis-export-strip span{display:block;margin-top:3px;font-size:11px;line-height:1.4;color:#64748b}
+.analysis-export-strip>button{flex:0 0 auto;border:0;border-radius:10px;background:#0f766e;color:white;padding:11px 13px;min-height:42px;font-weight:800;font-size:12px;cursor:pointer}
+.analysis-export-strip>button:disabled{background:#cbd5e1;color:#475569;cursor:not-allowed}
+.analysis-export-strip>small{flex-basis:100%;font-size:11px;line-height:1.4;color:#0f766e;overflow-wrap:anywhere}
+@media(max-width:680px){.analysis-export-strip>button{width:100%}.analysis-period-control button{padding:6px 8px}}
