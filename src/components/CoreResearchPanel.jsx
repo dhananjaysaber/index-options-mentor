@@ -22,6 +22,7 @@ export default function CoreResearchPanel({ snapshot, settings }) {
   const checkpoint = checkpointForState({ decision, setup, failedMandatory, weakConfirmations, structure, classification });
   const action = actionForState(decision, market, classification);
   const rr = Number(decision?.rr);
+  const blockers = coreBlockers({ decision, market, parameters, classification, option });
 
   const cards = [
     { label: 'Action', value: action, tone: classification.eligible ? 'positive' : '' },
@@ -44,6 +45,11 @@ export default function CoreResearchPanel({ snapshot, settings }) {
       <div className="core-checkpoint-card">
         <span>NEXT CHECKPOINT</span>
         <strong>{checkpoint}</strong>
+      </div>
+      <div className="core-checkpoint-card" aria-live="polite">
+        <span>13-POINT GATE AUDIT · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
+        <strong>{classification.eligible ? 'Research setup qualified.' : blockers.length ? blockers.slice(0, 3).join(' · ') : classification.reason}</strong>
+        <small>Candidate monitoring is not a trade. The full Mentor, 4/5 controlled and 3/5 experimental tiers still require real option liquidity, an adequate structural stop and room, a confirmed 5m close and a held retest.</small>
       </div>
 
       <div className="core-compact-grid">
@@ -109,6 +115,21 @@ function checkpointForState({ decision, setup, failedMandatory, weakConfirmation
   if (state === 'RETEST_HELD_WAIT' || state === 'RETEST_HELD_WATCH') return weakConfirmations[0] ? `${weakConfirmations[0].label} is the weakest remaining confirmation.` : classification?.reason || 'Wait for cohort conditions.';
   if (state === 'QUALIFIED' || state === 'STRONG_SETUP') return 'The 13-point setup is ready for simulation.';
   return setup?.approvalReady ? 'Setup ready for review.' : classification?.reason || 'Wait for the next confirmed stage.';
+}
+
+function coreBlockers({ decision, market, parameters, classification, option }) {
+  const blockers = [];
+  if (market?.phase !== 'LIVE') return ['Market is not in an active live session.'];
+  if (!['CE', 'PE'].includes(decision?.side)) blockers.push('No confirmed CE/PE bias');
+  if (!option?.symbol || !(Number(option?.lotSize) > 0)) blockers.push('No tradable option selected');
+  for (const row of parameters.filter(item => item.mandatory && item.gatePassed === false)) {
+    blockers.push(`${row.label}: gate failed (${Math.round(Number(row.value || 0) * 100)}%)`);
+  }
+  if (!classification.closeConfirmed) blockers.push('5-minute breakout close missing');
+  if (!classification.retestHeld) blockers.push('Held retest not confirmed');
+  if (Number(decision?.score) < 80) blockers.push(`Score ${Math.round(Number(decision?.score) || 0)} below 80`);
+  if (!(Number(decision?.rr) >= 1)) blockers.push('Available R:R below 1:1');
+  return blockers;
 }
 
 function positive(value) {
