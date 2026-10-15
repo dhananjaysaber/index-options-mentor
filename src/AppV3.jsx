@@ -672,21 +672,30 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot) {
   };
 
   if (current.strategyFamily === 'SCALP') {
-    const trail = scalpTrail(bestR, currentR);
+    const trail = scalpTrail(bestR, current.scalpTrailingFloorR);
     next.scalpTrailingActive = trail.active;
     next.scalpTrailingPeakR = bestR;
     next.scalpTrailingFloorR = trail.floorR;
     next.scalpTrailingGivebackR = Math.max(0, bestR - currentR);
-    next.scalpTrailPolicy = 'Research trail: activate at +0.50R; protect approximately bestR - 0.30R';
+    next.scalpTrailPolicy = 'SIMULATION ONLY, using NIFTY-index R (not an exchange or FYERS stop): +0.50R protects 0R gross; +0.60R protects +0.50R; +0.75R protects +0.55R; +0.90R protects +0.75R; never lower the floor.';
     if (trail.active && !current.scalpTrailingActivatedAt) next.scalpTrailingActivatedAt = new Date().toISOString();
   }
   return next;
 }
 
-function scalpTrail(bestR, currentR) {
+function scalpTrail(bestR, previousFloorR = null) {
+  // Paper-trade trail driven by observed NIFTY R. The PWA does not place or
+  // modify exchange-side FYERS stop orders; quotes may gap past a floor.
   if (!Number.isFinite(bestR) || bestR < 0.5) return { active: false, floorR: null };
-  const floorR = Math.max(0.15, Math.min(0.75, bestR - 0.30));
-  return { active: true, floorR: Math.min(floorR, Math.max(0, bestR - 0.05)), currentR };
+  let proposedFloorR = 0;
+  if (bestR >= 0.90) proposedFloorR = Math.max(0.75, bestR - 0.15);
+  else if (bestR >= 0.75) proposedFloorR = 0.55;
+  else if (bestR >= 0.60) proposedFloorR = 0.50;
+  const previous = previousFloorR == null || previousFloorR === '' ? null : Number(previousFloorR);
+  const protectedFloorR = Number.isFinite(previous)
+    ? Math.max(previous, proposedFloorR)
+    : proposedFloorR;
+  return { active: true, floorR: Math.min(bestR, protectedFloorR) };
 }
 
 function findQuoteNode(nodes, symbol) {
