@@ -1,15 +1,18 @@
 {
   "id": "./",
-  "name": "Index Options Mentor",
-  "short_name": "Options Mentor",
-  "description": "Data-driven NIFTY options trading mentor with live FYERS market data and risk controls.",
+  "name": "Mentor AI Paper Lab",
+  "short_name": "Mentor AI",
+  "description": "Claude autonomous NIFTY options paper research. Never places live broker orders.",
   "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#edf2f8",
-  "theme_color": "#0b1220",
-  "categories": ["finance", "productivity"],
+  "background_color": "#080c15",
+  "theme_color": "#080c15",
+  "categories": [
+    "finance",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "./icon.svg",
