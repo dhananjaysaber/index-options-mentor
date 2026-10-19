@@ -1,7 +1,9 @@
 name: Publish Mentor AI Paper Lab (separate GitHub Pages site)
 
-# Deliberately manual during setup. Never touches the existing Mentor PWA repo.
+# Scoped exclusively to the AI branch, never touches the original Mentor PWA repo.
 on:
+  push:
+    branches: [mentor-ai-paper-lab]
   workflow_dispatch:
 
 permissions:
