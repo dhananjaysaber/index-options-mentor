@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AiPaperStore } from './aiPaperStore.mjs';
 import { AiPaperWorker } from './aiPaperWorker.mjs';
+import { startAiPaperService } from './aiPaperService.mjs';
+import { once } from 'node:events';
 import { createPaperPosition, updatePrices, applyAssessment } from '../src/ai-paper/engine.js';
 
 process.env.TRADING_MODE='paper';
@@ -70,4 +72,35 @@ test('Paper worker reports pause state, never places live orders',()=>{
   worker.setEnabled(false);
   assert.equal(worker.enabled,false);
  }finally{worker.stop();store.close()}
+});
+
+test('Standalone server requires signed login before it exposes paper positions',async()=>{
+ process.env.MENTOR_AI_ACCESS_KEY='unit-test-only-remember-password';
+ const store=new AiPaperStore(':memory:');
+ const worker=new AiPaperWorker({store,clock:()=>new Date('2026-10-19T03:00:00.000Z')});
+ const hosted=startAiPaperService({port:0,worker});
+ await once(hosted.server,'listening');
+ const origin='http://127.0.0.1:'+hosted.server.address().port;
+ try{
+  const health=await fetch(origin+'/health');
+  assert.equal(health.status,200);
+  assert.equal((await health.json()).paperOnly,true);
+  const unauthorised=await fetch(origin+'/api/ai-paper/state');
+  assert.equal(unauthorised.status,401);
+  const invalidLogin=await fetch(origin+'/.netlify/functions/ai-session',{method:'POST',
+    headers:{'content-type':'application/json'},body:JSON.stringify({action:'login',password:'wrong'})});
+  assert.equal(invalidLogin.status,401);
+  const login=await fetch(origin+'/.netlify/functions/ai-session',{method:'POST',
+    headers:{'content-type':'application/json'},body:JSON.stringify({action:'login',password:process.env.MENTOR_AI_ACCESS_KEY,remember:true})});
+  assert.equal(login.status,200);
+  const token=(await login.json()).token;
+  assert.ok(token);
+  const withAuth={authorization:'Bearer '+token};
+  const state=await fetch(origin+'/api/ai-paper/state',{headers:withAuth});
+  assert.equal(state.status,200);
+  assert.equal((await state.json()).managed,true);
+  const pause=await fetch(origin+'/api/ai-paper/control',{method:'POST',headers:{...withAuth,'content-type':'application/json'},body:JSON.stringify({enabled:false})});
+  assert.equal(pause.status,200);
+  assert.equal((await pause.json()).enabled,false);
+ }finally{await new Promise(resolve=>hosted.server.close(resolve));hosted.worker.stop();store.close()}
 });
