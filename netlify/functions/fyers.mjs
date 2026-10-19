@@ -6,7 +6,7 @@ const API_BASE = 'https://api-t1.fyers.in/api/v3';
 const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
-const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
+const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/', '/mentor-ai-paper-lab-pwa/'];
 const researchHistoryCache = new Map();
 
 function json(data, status = 200, headers = {}) {
