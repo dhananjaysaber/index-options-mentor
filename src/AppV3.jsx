@@ -56,6 +56,7 @@ export default function AppV3() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [liveError, setLiveError] = useState('');
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [clockTick, setClockTick] = useState(0);
   const [theme, setTheme] = useState(() => readString(THEME_KEY, 'light') === 'dark' ? 'dark' : 'light');
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...readJson(SETTINGS_KEY, {}) }));
@@ -108,10 +109,13 @@ export default function AppV3() {
     try {
       const response = await fetch('/api/fyers/status');
       const data = await response.json();
+      if (!response.ok || !data || typeof data.authenticated !== 'boolean') throw new Error('FYERS status unavailable.');
       setBrokerStatus(data);
+      setSessionExpired(data.needsReconnect === true);
       return data;
     } catch {
-      return { configured: false, authenticated: false };
+      // Do not mistake a temporary status service outage for expired credentials.
+      return { configured: false, authenticated: false, verified: false };
     }
   }
 
@@ -120,16 +124,20 @@ export default function AppV3() {
     if (manual) setRefreshing(true);
     try {
       const response = await fetch('/api/fyers/mentor-snapshot', { cache: 'no-store' });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Live mentor data is unavailable.');
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.s === 'error' || data?.error || data?.ok !== true || !data?.generatedAt) {
+        const error = new Error(data?.error || data?.message || 'FYERS live market snapshot is unavailable.');
+        error.needsReconnect = response.status === 401 || data?.needsReconnect === true;
+        throw error;
       }
-      const data = await response.json();
       setSnapshot(data);
+      setSessionExpired(false);
       setLiveError('');
+      setBrokerStatus(current => ({ ...current, authenticated: true, verified: true, dataHealthy: true, needsReconnect: false }));
       return data;
     } catch (error) {
-      setLiveError(error.message || 'Live mentor data is unavailable.');
+      setSessionExpired(error?.needsReconnect === true);
+      setLiveError(error.message || 'FYERS live market snapshot is unavailable.');
       return null;
     } finally {
       setLoading(false);
@@ -190,7 +198,13 @@ export default function AppV3() {
 
   const setupClassification = useMemo(() => classifyResearchSetup(snapshot), [snapshot]);
   const manualClassification = useMemo(() => classifyManualResearchSetup(snapshot), [snapshot]);
-  const coreManualReady = Boolean(!corePosition && manualClassification?.eligible && setupClassification?.hardSafetyPassed);
+  const snapshotTimestamp = Date.parse(snapshot?.generatedAt || '');
+  const hasFreshSnapshot = Boolean(
+    snapshot?.ok === true && !liveError && brokerStatus.authenticated &&
+    Number.isFinite(snapshotTimestamp) && Date.now() - snapshotTimestamp >= -3000 &&
+    Date.now() - snapshotTimestamp < 90000
+  );
+  const coreManualReady = Boolean(hasFreshSnapshot && !corePosition && manualClassification?.eligible && setupClassification?.hardSafetyPassed);
 
   useEffect(() => {
     if (!corePosition || !snapshot?.generatedAt) return;
@@ -220,7 +234,7 @@ export default function AppV3() {
   }, [scalpPosition, snapshot, clockTick]);
 
   useEffect(() => {
-    if (strategyMode !== 'core' || !settings.mentorAutoOpen || corePosition || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
+    if (!hasFreshSnapshot || strategyMode !== 'core' || !settings.mentorAutoOpen || corePosition || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
     const ledger = readJson(AUTO_SETUP_KEY, {});
     const key = setupClassification.setupId;
     if (!key || ledger[key]) return;
@@ -377,11 +391,13 @@ export default function AppV3() {
     setBrokerStatus(current => ({ ...current, authenticated: false }));
     setSnapshot(null);
     setLiveError('');
+    setSessionExpired(false);
     setMobileMenuOpen(false);
     window.location.assign(getFyersLoginUrl());
   }
 
-  const reconnectRequired = brokerStatus.authenticated && Boolean(liveError);
+  const reconnectRequired = sessionExpired || brokerStatus.needsReconnect === true;
+  const marketDataIssue = Boolean(liveError) && !reconnectRequired;
 
   return (
     <div className="app-shell mentor-v2-shell research-v41-shell">
@@ -421,6 +437,8 @@ export default function AppV3() {
                 history={history}
                 settings={{ ...settings, liveHandoffEnabled: false }}
                 onReconnect={reconnectFyers}
+                needsReconnect={reconnectRequired}
+                onRetry={() => refreshSnapshot({ manual: true })}
                 onTakeTrade={takeTrade}
                 onExit={meta => exitStrategy('scalp', meta)}
                 onStatusChange={setScalpStatus}
@@ -447,10 +465,12 @@ export default function AppV3() {
                   history={history}
                   settings={settings}
                   onReconnect={reconnectFyers}
+                  needsReconnect={reconnectRequired}
+                  onRetry={() => refreshSnapshot({ manual: true })}
                   onExit={meta => exitStrategy('core', meta)}
                 />
 
-                {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={reconnectFyers}>Reconnect FYERS</button></div>}
+                {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} {reconnectRequired ? 'FYERS authorization needs renewal.' : 'Market feed temporarily unavailable; new entries are paused.'}</span><button type="button" onClick={reconnectRequired ? reconnectFyers : () => refreshSnapshot({ manual: true })}>{reconnectRequired ? 'Reconnect FYERS' : 'Retry market data'}</button></div>}
                 {corePosition && <div className="position-lock-bar">13-POINT POSITION ACTIVE · OPENED BY {corePosition.initiatedBy || 'USER'} · {corePosition.strategyTierLabel || corePosition.strategyTier || 'RESEARCH'}</div>}
                 <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta => exitStrategy('core', { ...meta, closedBy: 'USER' })} />
                 <TraderDecisionBanner snapshot={snapshot} loading={loading} />
@@ -468,7 +488,7 @@ export default function AppV3() {
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
 
-                <CoreQuickActions snapshot={snapshot} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
+                <CoreQuickActions snapshot={hasFreshSnapshot ? snapshot : null} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
               </>
             )}
           </>
