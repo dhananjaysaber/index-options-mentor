@@ -50,12 +50,14 @@ export default function ScalpMentorDashboard({
           to: sessionDate
         });
         const response = await fetch(`/api/fyers/history?${params.toString()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error('3-minute scalp candles are unavailable.');
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.s === 'error' || data?.error) {
+          throw new Error(data?.message || data?.error || 'FYERS could not provide verified 3-minute candles.');
+        }
         const rows = Array.isArray(data?.candles) ? data.candles : [];
         if (!cancelled) {
-          setCandles(rows);
-          setCandleError(rows.length ? '' : 'Waiting for 3-minute candles.');
+          if (rows.length) setCandles(rows);
+          setCandleError(rows.length ? '' : 'No verified 3-minute candles returned; simulated entry is paused.');
         }
       } catch (error) {
         if (!cancelled) setCandleError(error?.message || '3-minute scalp candles are unavailable.');
@@ -72,10 +74,14 @@ export default function ScalpMentorDashboard({
     };
   }, [sessionDate]);
 
-  const liveSpot = Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
+  const quoteAt = Date.parse(liveQuote?.at || '');
+  const isFreshQuote = Number.isFinite(quoteAt) && Date.now() - quoteAt < 12000 && Date.now() >= quoteAt - 2000;
+  const liveSpot = isFreshQuote && Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
+  // A failed FYERS history request or snapshot must never enable a new scalp trade.
+  const verifiedForEntry = !liveError && !candleError;
   const evaluation = useMemo(
-    () => evaluateScalpSetup(snapshot, candles, liveSpot),
-    [snapshot, candles, liveSpot]
+    () => evaluateScalpSetup(verifiedForEntry ? snapshot : null, verifiedForEntry ? candles : [], liveSpot),
+    [snapshot, candles, liveSpot, verifiedForEntry]
   );
 
   useEffect(() => {
