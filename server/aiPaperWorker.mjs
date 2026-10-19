@@ -175,9 +175,10 @@ export class AiPaperWorker {
    if(snapshot.market.sessionDate!==dateKeyIST(this.clock()))
       return {skipped:true,reason:'No current-session NIFTY candles. Market may be closed or data may be stale'};
    const clockParts=istParts(this.clock());
-   const reported=/^(\\d{1,2}):(\\d{2})$/.exec(String(snapshot.market.lastCandleTime||''));
-   if(!reported) return {skipped:true,reason:'Snapshot candle time is not verifiable'};
-   const candleMinute=Number(reported[1])*60+Number(reported[2]);
+   const candleParts=String(snapshot.market.lastCandleTime||'').split(':');
+   if(candleParts.length!==2 || candleParts.some(part=>part==='' || !Number.isInteger(Number(part))))
+      return {skipped:true,reason:'Snapshot candle time is not verifiable'};
+   const candleMinute=Number(candleParts[0])*60+Number(candleParts[1]);
    const currentMinute=Number(clockParts.hour)*60+Number(clockParts.minute);
    if(currentMinute-candleMinute>12 || candleMinute>currentMinute+2)
       return {skipped:true,reason:'Market candles are stale or in the future'};
