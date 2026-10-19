@@ -58,6 +58,24 @@ async function fyersGet(path, params, accessToken) {
   return data;
 }
 
+function fyersFailure(data, operation = 'Market data') {
+  if (data?.s !== 'error' && !data?.error) return null;
+  const code = Number(data?.code);
+  const message = String(data?.message || data?.error || '').slice(0, 180);
+  const needsReconnect = [401, 403, -16, -15].includes(code) ||
+    /(?:access|auth|session).*(?:token|expired|invalid)|token.*(?:expired|invalid|unauthori[sz]ed)/i.test(message);
+  return {
+    error: needsReconnect ? 'FYERS authorization has expired. Reconnect FYERS.' : operation + ' is temporarily unavailable from FYERS.',
+    needsReconnect,
+    providerCode: Number.isFinite(code) ? code : null
+  };
+}
+function marketFailureResponse(data, operation) {
+  const problem = fyersFailure(data, operation);
+  if (!problem) return null;
+  return json(problem, problem.needsReconnect ? 401 : 502);
+}
+
 function loginUrl(request) {
   const requestUrl = new URL(request.url);
   const url = new URL(`${API_BASE}/generate-authcode`);
@@ -307,12 +325,36 @@ async function fetchHistoryChunks(resolution, from, to, accessToken) {
 }
 
 async function handleStatus(request) {
-  return json({
+  const token = accessTokenFromRequest(request);
+  const base = {
     configured: configured(request),
-    authenticated: Boolean(accessTokenFromRequest(request)),
+    authenticated: Boolean(token),
     redirectUri: redirectUri(request),
-    runtime: 'netlify-functions-rest'
-  });
+    runtime: 'netlify-functions-rest',
+    verified: false,
+    dataHealthy: false,
+    needsReconnect: false
+  };
+  if (!token) return json(base);
+  try {
+    // Only a real FYERS response can confirm a valid session. A decryptable
+    // saved token is NOT proof that market data or authorization still works.
+    const sample = await fyersGet('/quotes', { symbols: 'NSE:NIFTY50-INDEX' }, token);
+    const problem = fyersFailure(sample, 'FYERS quote validation');
+    if (problem) return json({
+      ...base,
+      authenticated: !problem.needsReconnect,
+      needsReconnect: problem.needsReconnect,
+      error: problem.error
+    });
+    const good = Array.isArray(sample?.d) &&
+      sample.d.some(node => Number(node?.v?.lp) > 0 &&
+        (node?.n === 'NSE:NIFTY50-INDEX' || node?.v?.symbol === 'NSE:NIFTY50-INDEX'));
+    return json({ ...base, authenticated: true, verified: good, dataHealthy: good,
+      error: good ? undefined : 'FYERS returned no valid NIFTY quote.' });
+  } catch {
+    return json({ ...base, error: 'FYERS is temporarily unreachable; cannot verify saved session.' });
+  }
 }
 
 async function handleLogin(request) {
@@ -369,7 +411,8 @@ async function handleQuote(request) {
   const raw = new URL(request.url).searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
   const symbols = raw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);
   try {
-    return json(await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token));
+    const result = await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token);
+    return marketFailureResponse(result, 'FYERS quotes') || json(result);
   } catch (error) {
     console.error('Quote failed:', error);
     return json({ error: 'Could not load quote.' }, 500);
@@ -384,14 +427,15 @@ async function handleHistory(request) {
   const resolution = url.searchParams.get('resolution') || '5';
   const today = dateKeyIST();
   try {
-    return json(await fyersGet('/history', {
+    const result = await fyersGet('/history', {
       symbol,
       resolution,
       date_format: '1',
       range_from: url.searchParams.get('from') || today,
       range_to: url.searchParams.get('to') || today,
       cont_flag: '1'
-    }, auth.token));
+    }, auth.token);
+    return marketFailureResponse(result, 'Historical candles') || json(result);
   } catch (error) {
     console.error('History failed:', error);
     return json({ error: 'Could not load historical candles.' }, 500);
@@ -498,7 +542,19 @@ async function handleMentorSnapshot(request) {
       }, auth.token)
     ]);
 
+    for (const [operation, source] of [
+      ['NIFTY quotes', quoteResponse],
+      ['5-minute NIFTY history', historyResponse],
+      ['NIFTY option chain', chainResponse]
+    ]) {
+      const failure = marketFailureResponse(source, operation);
+      if (failure) return failure;
+    }
     const snapshot = await buildMentorSnapshot({ quoteResponse, historyResponse, chainResponse, now: new Date() });
+    if (!snapshot || snapshot.ok !== true || !snapshot.generatedAt) {
+      return json({ error: 'FYERS returned an incomplete mentor snapshot. Research entries paused.',
+        needsReconnect: false }, 503);
+    }
     return json(normalisePendingDirection(snapshot));
   } catch (error) {
     console.error('Mentor snapshot failed:', error);
