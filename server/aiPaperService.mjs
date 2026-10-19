@@ -164,6 +164,9 @@ export function startAiPaperService({port=Number(process.env.AI_PAPER_PORT)||878
    }
    if(req.method==='POST'&&path==='/api/ai-paper/control'){
     const body=await readJson(req);
+    if(body.enabled===true && process.env.AI_WORKER_ENABLED!=='true'){
+     respond(res,req,{error:'Server-side paper worker is disabled by AI_WORKER_ENABLED; connect an always-on host first.'},503);return;
+    }
     if(typeof body.enabled==='boolean')model.setEnabled(body.enabled);
     const capital=Number(body.capital),riskPct=Number(body.riskPct);
     if(Number.isFinite(capital)&&Number.isFinite(riskPct))model.setConfig({capital,riskPct});
@@ -177,7 +180,7 @@ export function startAiPaperService({port=Number(process.env.AI_PAPER_PORT)||878
    respond(res,req,{error:'Unknown paper API route'},404);
   }catch(error){console.error('AI paper service:',sanitizeError(error));respond(res,req,{error:sanitizeError(error)},500)}
  });
- server.listen(port,'0.0.0.0',()=>{console.log('Mentor AI PAPER service listening on port '+port);model.start()});
+ server.listen(port,process.env.AI_PAPER_HOST||'127.0.0.1',()=>{console.log('Mentor AI PAPER service listening on port '+port);model.start()});
  const close=()=>{model.stop();server.close(()=>model.store.close())};
  return {server,worker:model,close};
 }
