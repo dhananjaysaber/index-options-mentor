@@ -131,31 +131,14 @@ export default function ScalpMentorDashboard({
         <div className="scalp-decision-top">
           <div>
             <div className="eyebrow">SCALP MENTOR · RESEARCH ONLY</div>
-            <h1>{loading ? 'Reading scalp conditions…' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.manualEligible ? 'Manual scalp research available' : evaluation.blockers?.length ? 'Scalp entry blocked' : 'Wait for scalp trigger'}</h1>
+            <h1>{loading ? 'Reading scalp conditions…' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.manualEligible ? 'Manual scalp research available' : 'Wait for scalp trigger'}</h1>
             <p>{evaluation.reason}</p>
           </div>
           <div className={`scalp-score ${evaluation.eligible ? 'ready' : ''}`}>
-            <span>SIGNAL SCORE</span>
+            <span>SCORE</span>
             <strong>{Number.isFinite(evaluation.score) ? evaluation.score : '—'}</strong>
-            <small>/100 · not entry approval</small>
+            <small>/100</small>
           </div>
-        </div>
-        <div className={`scalp-entry-eligibility ${evaluation.eligible ? 'qualified' : 'blocked'}`} role="status" aria-live="polite">
-          <div className="scalp-eligibility-head">
-            <strong>{evaluation.eligible ? '✓ AUTOMATIC SCALP QUALIFIED' : evaluation.manualEligible ? 'AUTO ENTRY NOT QUALIFIED' : '⛔ ENTRY NOT QUALIFIED'}</strong>
-            <span>{evaluation.eligible ? 'Signal + mandatory checks passed' : `${evaluation.blockers?.length || 0} unmet automatic ${evaluation.blockers?.length === 1 ? 'check' : 'checks'}`}</span>
-          </div>
-          {!evaluation.eligible && Array.isArray(evaluation.blockers) && evaluation.blockers.length > 0 && (
-            <div className="scalp-eligibility-reasons">
-              {evaluation.blockers.map(blocker => (
-                <div className="scalp-eligibility-reason" key={blocker.id}>
-                  <strong>{blocker.title}</strong>
-                  <span>{blocker.detail}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {!evaluation.eligible && <small>A high score alone never activates automatic BUY. Manual research has separate eligibility checks; assess the risk before any manual entry.</small>}
         </div>
         <div className="scalp-decision-strip">
           <Metric label="Direction" value={evaluation.side || '—'} />
@@ -165,9 +148,9 @@ export default function ScalpMentorDashboard({
           <Metric label="Plan" value="1:1 · 12 min max" />
         </div>
         <div className="scalp-automation-strip" aria-label="Scalp automation status">
-          <div><span>AUTO ENTRY</span><strong className={settings?.scalpAutoOpen === false ? 'off' : 'on'}>{settings?.scalpAutoOpen === false ? 'OFF' : 'ON'}</strong><small>Strict scalp rules only</small></div>
-          <div><span>AUTO CLOSE</span><strong className={settings?.scalpAutoClose === false ? 'off' : 'on'}>{settings?.scalpAutoClose === false ? 'OFF' : 'ON'}</strong><small>Target, stop, time & context</small></div>
-          <div><span>MANUAL ENTRY</span><strong className={evaluation.manualEligible ? 'on' : 'off'}>{evaluation.manualEligible ? 'READY' : 'WAIT'}</strong><small>Research override with hard safety intact</small></div>
+          <div><span>AUTO ENTRY</span><strong className={settings?.scalpAutoOpen === false ? 'off' : 'on'}>{settings?.scalpAutoOpen === false ? 'OFF' : 'ON'}</strong><small>Rules-based</small></div>
+          <div><span>AUTO CLOSE</span><strong className={settings?.scalpAutoClose === false ? 'off' : 'on'}>{settings?.scalpAutoClose === false ? 'OFF' : 'ON'}</strong><small>Risk exits</small></div>
+          <div><span>MANUAL ENTRY</span><strong className={evaluation.manualEligible ? 'on' : 'off'}>{evaluation.manualEligible ? 'READY' : 'WAIT'}</strong><small>Safety checks</small></div>
         </div>
       </section>
 
