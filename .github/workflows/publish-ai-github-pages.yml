@@ -1,0 +1,53 @@
+name: Publish Mentor AI Paper Lab (separate GitHub Pages site)
+
+# Deliberately manual during setup. Never touches the existing Mentor PWA repo.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish-ai-site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout AI source branch
+        uses: actions/checkout@v4
+        with:
+          ref: mentor-ai-paper-lab
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build GitHub Pages AI PWA
+        env:
+          VITE_PUBLIC_BASE: /mentor-ai-paper-lab-pwa/
+          VITE_AI_API_BASE: https://mentor-ai-paper-lab.netlify.app
+        run: npm run build
+
+      - name: Mark as static GitHub Pages site
+        run: touch dist/.nojekyll
+
+      - name: Push AI build to separate GitHub Pages repository only
+        env:
+          AI_PWA_PUBLISH_TOKEN: ${{ secrets.AI_PWA_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "$AI_PWA_PUBLISH_TOKEN" ]; then
+            echo "::error::Configure AI_PWA_PUBLISH_TOKEN as a GitHub Actions secret first."
+            exit 1
+          fi
+          cd dist
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish Mentor AI paper PWA from ${GITHUB_SHA}"
+          git branch -M main
+          git remote add origin "https://x-access-token:${AI_PWA_PUBLISH_TOKEN}@github.com/dhananjaysaber/mentor-ai-paper-lab-pwa.git"
+          git push --force origin main
