@@ -23,6 +23,12 @@ function exchangeSession(date=new Date()) {
 function beforeEntryCutoff(date=new Date()) {
   const p=istParts(date);return (Number(p.hour)*60+Number(p.minute))<915;
 }
+function atEndOfSession(date=new Date()) {
+  const p=istParts(date);return (Number(p.hour)*60+Number(p.minute))>=925;
+}
+function istDay(value) {
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value));
+}
 function digestAssessment(raw,existing) {
   if(!['WAIT','ENTER'].includes(raw?.action)) throw Error('Claude provided an unsupported paper action');
   const positions=new Set(existing.map(x=>x.id));
@@ -135,6 +141,19 @@ export class AiPaperWorker {
    if(!existing.length)return;
    const quotes=await this.quoteMap(existing.map(p=>p.symbol));
    const next=updatePrices(existing,quotes,quotes['NSE:NIFTY50-INDEX'],this.clock().toISOString());
+   // Intraday paper research: end-of-session simulated exit uses a real observed quote.
+   // Never fabricate an exit if the broker has not supplied a price.
+   if(atEndOfSession(this.clock())) {
+    const active=[];
+    for(const p of next.positions) {
+     const mark=price(quotes[p.symbol]);
+     if(!mark){active.push(p);continue}
+     next.closed.push({...p,status:'CLOSED',currentPrice:mark,exitPrice:mark,
+      closedAt:this.clock().toISOString(),exitReason:'Intraday end-of-session paper close',
+      pnl:(mark-p.entry)*p.quantity,exitMethod:'SIMULATED_QUOTE'});
+    }
+    next.positions=active;
+   }
    const events=next.closed.map(p=>({type:'PAPER_EXIT',positionId:p.id,price:p.exitPrice,reason:p.exitReason,pnl:p.pnl,source:'SERVER_CLAUDE_PAPER',model:p.model}));
    this.store.save(next.positions,next.closed,events);
    this.state.lastQuoteAt=this.clock().toISOString();this.state.lastError=null;
@@ -161,7 +180,15 @@ export class AiPaperWorker {
     eventCaution:assessment.eventCaution,model:assessment.model,spot:snapshot.market.spot,at:this.clock().toISOString()}];
    for(const trail of applied.changes)events.push({type:'TRAIL',source:'SERVER_CLAUDE_PAPER',positionId:trail.id,price:trail.newStop,reason:trail.reason});
    if(assessment.action==='ENTER') {
-    if(!beforeEntryCutoff(this.clock()))events.push({type:'ENTRY_REJECTED',reason:'Late-session paper entry cutoff (15:15 IST)'});
+    const capital=this.store.getSetting('capital',50000);
+    const day=istDay(this.clock());
+    const realised=this.store.getClosed(2000)
+       .filter(p=>p.closedAt&&istDay(p.closedAt)===day)
+       .reduce((sum,p)=>sum+Number(p.pnl||0),0);
+    const floating=positions.reduce((sum,p)=>sum+(Number(p.currentPrice||p.entry)-p.entry)*p.quantity,0);
+    if(realised+floating<=-capital*0.03)
+      events.push({type:'ENTRY_REJECTED',reason:'3% daily paper drawdown protection activated'});
+    else if(!beforeEntryCutoff(this.clock()))events.push({type:'ENTRY_REJECTED',reason:'Late-session paper entry cutoff (15:15 IST)'});
     else if(open.length>=MAX_POSITIONS)events.push({type:'ENTRY_REJECTED',reason:'25-position safety cap reached'});
     else {
      const created=createPaperPosition({snapshot,assessment,open:positions,
