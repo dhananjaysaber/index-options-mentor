@@ -126,3 +126,28 @@ test('scalp ticket rechecks its gates and refuses an expired live price', () => 
     globalThis.window = saved;
   }
 });
+
+test('13-point controlled and experimental tiers keep their intended quality-only relaxation', () => {
+  const controlled = coreSnapshot();
+  controlled.parameters.find(row => row.id === 'chop').gatePassed = false;
+  controlled.decision.canSuggestTrade = false;
+  assert.equal(classifyResearchSetup(controlled).tier, 'CONTROLLED');
+  const experimental = coreSnapshot();
+  experimental.parameters.find(row => row.id === 'chop').gatePassed = false;
+  experimental.parameters.find(row => row.id === 'trend').gatePassed = false;
+  experimental.decision.canSuggestTrade = false;
+  assert.equal(classifyResearchSetup(experimental).tier, 'EXPERIMENTAL');
+});
+
+test('13-point refuses incomplete checks rather than counting them as passed', () => {
+  const missing = coreSnapshot();
+  missing.parameters = missing.parameters.filter(row => row.id !== 'orb');
+  assert.equal(classifyResearchSetup(missing).eligible, false);
+  assert.equal(classifyManualResearchSetup(missing).eligible, false);
+  const unverified = coreSnapshot();
+  delete unverified.parameters.find(row => row.id === 'trend').gatePassed;
+  unverified.decision.canSuggestTrade = false;
+  const result = classifyResearchSetup(unverified);
+  assert.equal(result.mandatoryPassCount, 4);
+  assert.equal(result.tier, 'CONTROLLED');
+});

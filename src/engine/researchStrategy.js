@@ -1,12 +1,15 @@
 const HARD_GATE_IDS = new Set(['risk', 'liquidity']);
 const QUALITY_GATE_IDS = new Set(['chop', 'trend', 'vwap']);
+const REQUIRED_MANDATORY = ['chop', 'trend', 'vwap', 'risk', 'liquidity'];
+const REQUIRED_CONFIRMATIONS = ['orb', 'close', 'retest', 'pd', 'volume', 'momentum', 'htf', 'time'];
 
 export function classifyResearchSetup(snapshot) {
   const parameters = Array.isArray(snapshot?.parameters) ? snapshot.parameters : [];
   const mandatory = parameters.filter(row => row.mandatory);
   const confirmations = parameters.filter(row => !row.mandatory);
-  const failedMandatory = mandatory.filter(row => row.gatePassed === false);
-  const mandatoryPassCount = mandatory.length - failedMandatory.length;
+  const failedMandatory = mandatory.filter(row => row.gatePassed !== true);
+  const mandatoryPassCount = mandatory.filter(row => row.gatePassed === true).length;
+  const checksComplete = hasExpectedChecks(parameters);
   const confirmationPassCount = confirmations.filter(row => row.status === 'green').length;
   const hardSafetyPassed = [...HARD_GATE_IDS].every(id => parameters.find(row => row.id === id)?.gatePassed === true);
   const onlyQualityFailures = failedMandatory.every(row => QUALITY_GATE_IDS.has(row.id));
@@ -22,7 +25,7 @@ export function classifyResearchSetup(snapshot) {
   const stop = positiveNumber(snapshot?.structure?.underlyingStop);
   const hasStructure = Boolean(spot && stop && positiveNumber(snapshot?.structure?.riskPoints) &&
     (side === 'CE' ? stop < spot : side === 'PE' ? stop > spot : false));
-  const baseSafety = live && hasDirection && hasOption && hasStructure && closeConfirmed && retestHeld && hardSafetyPassed && Number.isFinite(score) && score >= 80 && Number.isFinite(rr) && rr >= 1;
+  const baseSafety = live && checksComplete && hasDirection && hasOption && hasStructure && closeConfirmed && retestHeld && hardSafetyPassed && Number.isFinite(score) && score >= 80 && Number.isFinite(rr) && rr >= 1;
 
   let tier = null;
   if (baseSafety && mandatoryPassCount === 5 && snapshot?.decision?.canSuggestTrade === true) {
@@ -69,7 +72,7 @@ export function classifyManualResearchSetup(snapshot) {
   const parameters = Array.isArray(snapshot?.parameters) ? snapshot.parameters : [];
   const automatic = classifyResearchSetup(snapshot);
   const live = isFreshResearchSession(snapshot);
-  const hasAllChecks = new Set(parameters.map(row => row.id)).size >= 13;
+  const hasAllChecks = hasExpectedChecks(parameters);
   const hasOption = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && positiveNumber(snapshot?.option?.ltp));
   const side = snapshot?.decision?.side;
   const hasDirection = ['CE', 'PE'].includes(side) && snapshot?.option?.optionType === side;
@@ -299,6 +302,13 @@ function resolveLiveExecution(optionSymbol, snapshotSpot, snapshotOption) {
     option: liveOption ?? snapshotPremium ?? 0,
     at: quoteFresh ? quote.at : null
   };
+}
+
+function hasExpectedChecks(parameters) {
+  if (!Array.isArray(parameters) || parameters.length !== 13 ||
+      new Set(parameters.map(row => row.id)).size !== 13) return false;
+  return REQUIRED_MANDATORY.every(id => parameters.some(row => row.id === id && row.mandatory === true)) &&
+    REQUIRED_CONFIRMATIONS.every(id => parameters.some(row => row.id === id && row.mandatory === false));
 }
 
 export function isFreshResearchSession(snapshot, nowMs = Date.now()) {
