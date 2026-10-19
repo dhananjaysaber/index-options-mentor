@@ -131,7 +131,7 @@ export default function ScalpMentorDashboard({
         <div className="scalp-decision-top">
           <div>
             <div className="eyebrow">SCALP MENTOR · RESEARCH ONLY</div>
-            <h1>{loading ? 'Reading scalp conditions…' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.blockers?.length ? 'Scalp entry blocked' : 'Wait for scalp trigger'}</h1>
+            <h1>{loading ? 'Reading scalp conditions…' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.manualEligible ? 'Manual scalp research available' : evaluation.blockers?.length ? 'Scalp entry blocked' : 'Wait for scalp trigger'}</h1>
             <p>{evaluation.reason}</p>
           </div>
           <div className={`scalp-score ${evaluation.eligible ? 'ready' : ''}`}>
@@ -142,8 +142,8 @@ export default function ScalpMentorDashboard({
         </div>
         <div className={`scalp-entry-eligibility ${evaluation.eligible ? 'qualified' : 'blocked'}`} role="status" aria-live="polite">
           <div className="scalp-eligibility-head">
-            <strong>{evaluation.eligible ? '✓ AUTOMATIC SCALP QUALIFIED' : '⛔ ENTRY NOT QUALIFIED'}</strong>
-            <span>{evaluation.eligible ? 'Signal + mandatory checks passed' : `${evaluation.blockers?.length || 0} mandatory ${evaluation.blockers?.length === 1 ? 'blocker' : 'blockers'}`}</span>
+            <strong>{evaluation.eligible ? '✓ AUTOMATIC SCALP QUALIFIED' : evaluation.manualEligible ? 'AUTO ENTRY NOT QUALIFIED' : '⛔ ENTRY NOT QUALIFIED'}</strong>
+            <span>{evaluation.eligible ? 'Signal + mandatory checks passed' : `${evaluation.blockers?.length || 0} unmet automatic ${evaluation.blockers?.length === 1 ? 'check' : 'checks'}`}</span>
           </div>
           {!evaluation.eligible && Array.isArray(evaluation.blockers) && evaluation.blockers.length > 0 && (
             <div className="scalp-eligibility-reasons">
@@ -155,7 +155,7 @@ export default function ScalpMentorDashboard({
               ))}
             </div>
           )}
-          {!evaluation.eligible && <small>A high score alone never activates BUY. Automatic and manual entries have separate safety requirements.</small>}
+          {!evaluation.eligible && <small>A high score alone never activates automatic BUY. Manual research has separate eligibility checks; assess the risk before any manual entry.</small>}
         </div>
         <div className="scalp-decision-strip">
           <Metric label="Direction" value={evaluation.side || '—'} />
