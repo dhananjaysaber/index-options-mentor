@@ -8,6 +8,10 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
   const completed = rows.filter(row => row.time < currentBucket).slice(-8);
   const latest = completed.at(-1) || null;
   const previous = completed.at(-2) || null;
+  const snapshotAt = Date.parse(snapshot?.generatedAt || '');
+  const snapshotFresh = Number.isFinite(snapshotAt) && nowMs >= snapshotAt - 3000 && nowMs - snapshotAt < 90000;
+  const candlesFresh = Boolean(latest && previous && currentBucket >= latest.time && currentBucket - latest.time <= 720);
+
 
   const side = ['CE', 'PE'].includes(snapshot?.decision?.side)
     ? snapshot.decision.side
@@ -22,7 +26,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
   const trend = params.find(row => row.id === 'trend');
   const liquidity = params.find(row => row.id === 'liquidity');
 
-  const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE';
+  const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE' && snapshotFresh && candlesFresh;
   const optionReady = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && Number(snapshot?.option?.ltp) > 0);
   const biasReady = Boolean(side);
   const trendScore = Number(trend?.value);
@@ -87,9 +91,13 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
   const hardReady = manualEligible && riskOk && extensionOk;
   const eligible = Boolean(hardReady && trendOk && vwapOk && impulseOk && triggerBroken && score >= MIN_SCORE);
 
-  const reason = !live
-    ? 'Scalp research waits for the live regular session.'
-    : !optionReady
+  const reason = !snapshotFresh
+    ? 'Waiting for a fresh FYERS mentor snapshot. No scalp entry on stale market data.'
+    : !candlesFresh
+      ? 'Waiting for recent verified 3-minute candles. No scalp entry on missing history.'
+      : !live
+        ? 'Scalp research waits for the live regular session.'
+        : !optionReady
       ? 'Waiting for a live option candidate.'
       : !candleReady
         ? 'Waiting for at least two completed 3-minute candles.'
