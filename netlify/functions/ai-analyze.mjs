@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { verifyAiSession } from '../../server/aiSessionAuth.mjs';
 
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 const MAX_BODY_BYTES = 35000;
@@ -8,7 +9,7 @@ function corsHeaders(request) {
   const headers = {'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'};
   if (request?.headers?.get('origin') === GITHUB_PAGES_ORIGIN) {
     headers['Access-Control-Allow-Origin'] = GITHUB_PAGES_ORIGIN;
-    headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Mentor-AI-Key';
+    headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Mentor-AI-Key, Authorization';
     headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
     headers['Vary'] = 'Origin';
   }
@@ -60,8 +61,13 @@ export default async function handler(request) {
   }
   if (!process.env.ANTHROPIC_API_KEY) return reply({error:'ANTHROPIC_API_KEY is not configured in this Netlify project.'},503);
   if (!process.env.MENTOR_AI_ACCESS_KEY) return reply({error:'Set MENTOR_AI_ACCESS_KEY in Netlify before enabling AI calls.'},503);
-  if (!sameSecret(request.headers.get('x-mentor-ai-key'),process.env.MENTOR_AI_ACCESS_KEY)) {
-    return reply({error:'Access denied'},401);
+  const authorization = request.headers.get('authorization') || '';
+  const validSession = authorization.startsWith('Bearer ') &&
+    verifyAiSession(authorization.slice(7)).valid;
+  // Temporary compatibility for the existing password-only Netlify frontend.
+  const legacyPassword = sameSecret(request.headers.get('x-mentor-ai-key'), process.env.MENTOR_AI_ACCESS_KEY);
+  if (!validSession && !legacyPassword) {
+    return reply({ error: 'AI login required or session expired' }, 401);
   }
   const bodyText=await request.text();
   if (bodyText.length>MAX_BODY_BYTES) return reply({error:'Request too large'},413);
