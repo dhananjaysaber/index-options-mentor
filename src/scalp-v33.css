@@ -417,3 +417,41 @@ html[data-theme='dark'] .scalp-lot-stepper input {
   .scalp-lot-stepper input { height: 32px; }
   .scalp-lot-stepper input { width: 44px; }
 }
+
+
+/* v47 — distinguish signal score from mandatory trade eligibility */
+.scalp-entry-eligibility {
+  margin-top: 11px; padding: 11px 12px; border-radius: 12px;
+  border: 1px solid #f1d2a0; background: #fff8e9;
+  color: #77501e;
+}
+.scalp-entry-eligibility.qualified { background: #edfaf3; border-color: #b5e3cb; color: #086845; }
+.scalp-eligibility-head {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 5px 12px;
+}
+.scalp-eligibility-head > strong { font-size: 12px; font-weight: 900; letter-spacing: .035em; }
+.scalp-eligibility-head > span { font-size: 10px; font-weight: 700; }
+.scalp-eligibility-reasons { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin-top: 10px; }
+.scalp-eligibility-reason {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  border: 1px solid #ecd6af; background: rgba(255,255,255,.65);
+  border-radius: 8px; padding: 8px 10px;
+}
+.scalp-eligibility-reason strong { font-size: 10px; font-weight: 850; color: #6b4318; }
+.scalp-eligibility-reason span { font-size: 10px; color: #725d40; line-height: 1.4; overflow-wrap: anywhere; }
+.scalp-entry-eligibility > small { display:block; margin-top: 9px; line-height: 1.45; color:#775c37; }
+.scalp-score small { text-align: center; line-height: 1.25; }
+@media(max-width:640px) {
+  .scalp-eligibility-reasons { grid-template-columns: 1fr; }
+  .scalp-entry-eligibility { padding: 10px; }
+}
+html[data-theme='dark'] .scalp-entry-eligibility.blocked {
+  border-color: #795d35; background: #332819; color: #ffd99c;
+}
+html[data-theme='dark'] .scalp-entry-eligibility.blocked .scalp-eligibility-reason {
+  border-color: #72532c; background: #3f321f;
+}
+html[data-theme='dark'] .scalp-entry-eligibility.blocked .scalp-eligibility-reason strong { color: #ffe1aa; }
+html[data-theme='dark'] .scalp-entry-eligibility.blocked .scalp-eligibility-reason span,
+html[data-theme='dark'] .scalp-entry-eligibility.blocked > small { color: #e6c99f; }
