@@ -145,9 +145,23 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
                 ? 'Manual scalp research is paused outside 09:30–14:45.'
                 : 'A measurable 3-minute stop is required before manual scalp research.';
 
+  // Report all mandatory blockers independently of the signal score.
+  // These are explanations only: they do not weaken the eligibility formula.
+  const blockers = [
+    !snapshotFresh && {id:'snapshot',title:'Market data',detail:'FYERS market snapshot is not current'},
+    !candlesFresh && {id:'candles',title:'3-minute candles',detail:'Recent completed 3-minute candles are unavailable'},
+    !optionReady && {id:'option',title:'Option contract',detail:'Option contract or quoted premium is unavailable'},
+    !biasReady && {id:'direction',title:'Direction',detail:'No confirmed CE/PE context'},
+    !liquidityOk && {id:'liquidity',title:'Liquidity',detail:'Selected option liquidity gate has not passed'},
+    !riskOk && {id:'risk',title:'Structural stop',detail:`Modeled risk ${riskPoints == null ? 'unknown' : riskPoints.toFixed(2)} NIFTY points; permitted ${minRisk.toFixed(2)}–${maxRisk.toFixed(2)} points`},
+    !extensionOk && {id:'extension',title:'Price extension',detail:'NIFTY has moved too far beyond the latest 3-minute trigger'},
+    !timeOk && {id:'time',title:'Scalp entry window',detail:'New entries allowed only 09:30–14:45 IST'}
+  ].filter(Boolean);
+
   return {
     eligible,
     manualEligible,
+    blockers,
     researchOnly: true,
     score,
     minimumScore: MIN_SCORE,
