@@ -1,0 +1,24 @@
+name: Verify isolated Mentor AI paper worker
+
+on:
+  push:
+    branches: [mentor-ai-paper-lab]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  paper-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify non-trading paper-worker journal, restart and risk limits
+        run: node --test server/aiPaperWorker.test.mjs
+      - name: Check service syntax
+        run: node --check server/aiPaperService.mjs
