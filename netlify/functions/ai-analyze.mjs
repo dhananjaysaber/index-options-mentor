@@ -3,8 +3,20 @@ import crypto from 'node:crypto';
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
 const MAX_BODY_BYTES = 35000;
 
+const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
+function corsHeaders(request) {
+  const headers = {'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'};
+  if (request?.headers?.get('origin') === GITHUB_PAGES_ORIGIN) {
+    headers['Access-Control-Allow-Origin'] = GITHUB_PAGES_ORIGIN;
+    headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Mentor-AI-Key';
+    headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS';
+    headers['Vary'] = 'Origin';
+  }
+  return headers;
+}
+let currentRequest = null;
 function reply(body, status = 200) {
-  return new Response(JSON.stringify(body), {status, headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
+  return new Response(JSON.stringify(body), {status, headers:corsHeaders(currentRequest)});
 }
 function sameSecret(a,b) {
   const x=crypto.createHash('sha256').update(String(a||'')).digest();
@@ -41,6 +53,8 @@ function limitedSnapshot(src) {
   };
 }
 export default async function handler(request) {
+  currentRequest = request;
+  if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:corsHeaders(request)});
   if (request.method!=='POST') return reply({error:'POST only'},405);
   if (process.env.LIVE_ORDER_EXECUTION_ENABLED!=='false' || process.env.TRADING_MODE!=='paper') {
     return reply({error:'Paper-only protection is not configured.'},503);
