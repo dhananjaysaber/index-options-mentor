@@ -18,6 +18,8 @@ export default function ScalpMentorDashboard({
   history,
   settings,
   onReconnect,
+  needsReconnect = false,
+  onRetry,
   onTakeTrade,
   onExit,
   onStatusChange
@@ -120,8 +122,8 @@ export default function ScalpMentorDashboard({
     <div className="scalp-dashboard">
       {liveError && (
         <div className="alert-bar reconnect-alert scalp-reconnect">
-          <span>{liveError} The saved FYERS session may have expired.</span>
-          <button type="button" onClick={onReconnect}>Reconnect FYERS</button>
+          <span>{liveError} {needsReconnect ? 'FYERS login has expired.' : 'Market data is temporarily unavailable; entries are paused.'}</span>
+          <button type="button" onClick={needsReconnect ? onReconnect : onRetry}>{needsReconnect ? 'Reconnect FYERS' : 'Retry market data'}</button>
         </div>
       )}
 
