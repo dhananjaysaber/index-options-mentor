@@ -19,6 +19,8 @@ export default function MobileMentorDashboardV41({
   history,
   settings,
   onReconnect,
+  needsReconnect = false,
+  onRetry,
   onExit
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -26,7 +28,7 @@ export default function MobileMentorDashboardV41({
 
   return (
     <div className={`mobile-mentor-flow mode-${mode}`}>
-      {liveError && <div className="alert-bar mobile-flow-alert reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={onReconnect}>Reconnect FYERS</button></div>}
+      {liveError && <div className="alert-bar mobile-flow-alert reconnect-alert"><span>{liveError} {needsReconnect ? 'FYERS login has expired.' : 'Market data is temporarily unavailable; entries are paused.'}</span><button type="button" onClick={needsReconnect ? onReconnect : onRetry}>{needsReconnect ? 'Reconnect FYERS' : 'Retry market data'}</button></div>}
 
       <div className="mobile-flow-block mobile-decision-block">
         <TraderDecisionBanner snapshot={snapshot} loading={loading} />
