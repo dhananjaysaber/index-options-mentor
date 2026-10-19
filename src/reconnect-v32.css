@@ -75,3 +75,23 @@ html[data-theme='dark'] .drawer-actions .drawer-reconnect-btn {
     margin-bottom: 8px;
   }
 }
+
+
+/* v46 — FYERS token state must not be confused with data-feed health. */
+.connection-pill.data-unavailable,
+.drawer-connection.data-unavailable {
+  color: #995f05 !important;
+  background: #fff6e2 !important;
+  border-color: #e6bb65 !important;
+}
+.mentor-v2-mobile-status > span.data-wait {
+  background: #d9a446 !important;
+  box-shadow: 0 0 0 7px rgba(217,164,70,.16) !important;
+}
+.drawer-connection.data-unavailable > span { background:#d9a446 !important; }
+html[data-theme='dark'] .connection-pill.data-unavailable,
+html[data-theme='dark'] .drawer-connection.data-unavailable {
+  color: #f9d28f !important;
+  background: #3b2d1e !important;
+  border-color: #836137 !important;
+}
