@@ -222,18 +222,18 @@ function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) 
   const bucket = Math.floor(epochSeconds / timeframeSeconds) * timeframeSeconds;
   const next = rows.map(row => ({ ...row }));
   const last = next.at(-1);
-
-  if (!last || last.time < bucket) {
+  // An old historical series must not jump to a synthetic current-price candle.
+  // Let FYERS refill missing history before displaying a current candle.
+  if (!last || last.time > bucket || bucket - last.time > timeframeSeconds * 3) {
+    return next.slice(-maxCandles);
+  }
+  if (last.time < bucket) {
     next.push({ time: bucket, open: price, high: price, low: price, close: price, volume: 0, live: true });
-  } else if (last.time === bucket) {
+  } else {
     last.high = Math.max(last.high, price);
     last.low = Math.min(last.low, price);
     last.close = price;
     last.live = true;
-  } else {
-    last.close = price;
-    last.high = Math.max(last.high, price);
-    last.low = Math.min(last.low, price);
   }
 
   return next.slice(-maxCandles);
