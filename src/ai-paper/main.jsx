@@ -2,6 +2,8 @@ import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPaperPosition,applyAssessment,updatePrices,estimatePnL,tradeMetrics,riskCommitted} from './engine.js';
 import './styles.css';
+import { installAiBridge, getAiFyersLoginUrl } from './bridge.js';
+installAiBridge();
 
 const STORAGE='mentor-ai-paper-lab-v1';
 const starting={positions:[],closed:[],decisions:[],settings:{capital:50000,riskPct:1},auto:false};
@@ -133,7 +135,7 @@ function App(){
   <section className="hero">
    <div><p className="overline">SEPARATE RESEARCH ENVIRONMENT</p><h1>Autonomous intelligence.<br/><span>Zero live orders.</span></h1>
    <p>Claude reviews verified market snapshots, decides whether to enter, and manages simulated exits and trailing stops. Multiple independent positions can coexist.</p>
-   <div className="heroActions"><button onClick={()=>location.assign('/api/fyers/login')} className="accent">{broker?.authenticated?'Reconnect FYERS':'Connect FYERS'}</button><button className="secondary" onClick={()=>void refreshStatus()}>Check connection</button></div>
+   <div className="heroActions"><button onClick={()=>location.assign(getAiFyersLoginUrl())} className="accent">{broker?.authenticated?'Reconnect FYERS':'Connect FYERS'}</button><button className="secondary" onClick={()=>void refreshStatus()}>Check connection</button></div>
    </div><div className="heroCard"><small>MARKET CONTEXT</small><div className="big">{fmt(snapshot?.market?.spot)}</div><span>NIFTY 50 · {snapshot?.market?.phase||'Waiting'}</span><hr/><div className="split"><span>Session</span><strong>{snapshot?.market?.sessionDate||'—'}</strong></div><div className="split"><span>Last refresh</span><strong>{stamp(snapshot?.generatedAt)}</strong></div><div className="split"><span>Clock (IST)</span><strong>{new Date(now).toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata'})}</strong></div></div>
   </section>
   <section className="metrics">
