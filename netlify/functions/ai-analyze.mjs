@@ -14,9 +14,8 @@ function corsHeaders(request) {
   }
   return headers;
 }
-let currentRequest = null;
-function reply(body, status = 200) {
-  return new Response(JSON.stringify(body), {status, headers:corsHeaders(currentRequest)});
+function jsonResponse(body, status = 200, request) {
+  return new Response(JSON.stringify(body), {status, headers:corsHeaders(request)});
 }
 function sameSecret(a,b) {
   const x=crypto.createHash('sha256').update(String(a||'')).digest();
@@ -53,7 +52,7 @@ function limitedSnapshot(src) {
   };
 }
 export default async function handler(request) {
-  currentRequest = request;
+  const reply = (body, status = 200) => jsonResponse(body, status, request);
   if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:corsHeaders(request)});
   if (request.method!=='POST') return reply({error:'POST only'},405);
   if (process.env.LIVE_ORDER_EXECUTION_ENABLED!=='false' || process.env.TRADING_MODE!=='paper') {
