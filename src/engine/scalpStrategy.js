@@ -3,14 +3,17 @@ const SCALP_MAX_HOLD_MINUTES = 12;
 const MIN_SCORE = 70;
 
 export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowMs = Date.now()) {
-  const rows = Array.isArray(candles) ? candles.map(normaliseCandle).filter(Boolean) : [];
+  const rows = Array.isArray(candles) ? candles.map(normaliseCandle).filter(Boolean).sort((a, b) => a.time - b.time) : [];
   const currentBucket = Math.floor(Math.floor(nowMs / 1000) / 180) * 180;
-  const completed = rows.filter(row => row.time < currentBucket).slice(-8);
+  // History providers may return reversed or duplicated candles; use distinct completed bars.
+  const completed = rows.filter((row, index) => row.time < currentBucket &&
+    (index === rows.length - 1 || rows[index + 1].time !== row.time)).slice(-8);
   const latest = completed.at(-1) || null;
   const previous = completed.at(-2) || null;
   const snapshotAt = Date.parse(snapshot?.generatedAt || '');
   const snapshotFresh = Number.isFinite(snapshotAt) && nowMs >= snapshotAt - 3000 && nowMs - snapshotAt < 90000;
-  const candlesFresh = Boolean(latest && previous && currentBucket >= latest.time && currentBucket - latest.time <= 720);
+  const candlesFresh = Boolean(latest && previous && latest.time > previous.time &&
+    currentBucket >= latest.time && currentBucket - latest.time <= 720);
 
 
   const side = ['CE', 'PE'].includes(snapshot?.decision?.side)
@@ -27,8 +30,9 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
   const liquidity = params.find(row => row.id === 'liquidity');
 
   const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE' && snapshotFresh && candlesFresh;
-  const optionReady = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && Number(snapshot?.option?.ltp) > 0);
-  const biasReady = Boolean(side);
+  const biasReady = ['CE', 'PE'].includes(snapshot?.decision?.side);
+  const optionReady = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 &&
+    positive(snapshot?.option?.ltp) != null && snapshot?.option?.optionType === side && biasReady);
   const trendScore = Number(trend?.value);
   const trendOk = Number.isFinite(trendScore) && trendScore >= 0.50;
   const liquidityOk = liquidity?.gatePassed === true;
@@ -64,9 +68,11 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
       : null;
 
   const riskPoints = spot != null && stop != null ? Math.abs(spot - stop) : null;
+  const stopProtects = Boolean(spot != null && stop != null &&
+    (side === 'CE' ? stop < spot : side === 'PE' ? stop > spot : false));
   const minRisk = atr != null ? Math.max(2, atr * 0.12) : 2;
   const maxRisk = atr != null ? Math.max(6, atr * 0.75) : 30;
-  const riskOk = riskPoints != null && riskPoints >= minRisk && riskPoints <= maxRisk;
+  const riskOk = stopProtects && riskPoints != null && riskPoints >= minRisk && riskPoints <= maxRisk;
 
   const extension = spot != null && trigger != null ? Math.abs(spot - trigger) : null;
   const extensionOk = extension != null && (atr == null || extension <= atr * 0.35);
@@ -87,7 +93,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
     ? side === 'CE' ? spot + riskPoints * SCALP_TARGET_R : spot - riskPoints * SCALP_TARGET_R
     : null;
 
-  const manualEligible = Boolean(live && optionReady && candleReady && biasReady && liquidityOk && timeOk && stop != null && riskPoints != null && riskPoints > 0);
+  const manualEligible = Boolean(live && optionReady && candleReady && biasReady && liquidityOk && timeOk && stopProtects && riskPoints > 0);
   const hardReady = manualEligible && riskOk && extensionOk;
   const eligible = Boolean(hardReady && trendOk && vwapOk && impulseOk && triggerBroken && score >= MIN_SCORE);
 
@@ -189,6 +195,20 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
   const automaticEntry = initiatedBy === 'MENTOR';
   const allowed = automaticEntry ? evaluation?.eligible : evaluation?.manualEligible;
   if (!allowed || !snapshot?.option?.symbol) return null;
+  // Always recheck the market session and core hard gates at the moment of entry.
+  // A button or auto signal rendered seconds earlier cannot authorize a stale trade.
+  const nowMs = Date.now();
+  const at = Date.parse(snapshot?.generatedAt || '');
+  const candleAt = Number(evaluation?.latestCompletedTime);
+  const currentBucket = Math.floor(Math.floor(nowMs / 1000) / 180) * 180;
+  if (!snapshot?.live || snapshot?.market?.phase !== 'LIVE' ||
+      !Number.isFinite(at) || nowMs - at < -3000 || nowMs - at >= 90000 ||
+      !isScalpWindow(nowMs) || !Number.isFinite(candleAt) ||
+      candleAt >= currentBucket || currentBucket - candleAt > 720 ||
+      !['CE', 'PE'].includes(evaluation?.side) ||
+      snapshot?.decision?.side !== evaluation.side ||
+      snapshot?.option?.optionType !== evaluation.side ||
+      snapshot?.parameters?.find(row => row.id === 'liquidity')?.gatePassed !== true) return null;
 
   const quote = readLiveQuote();
   const optionEntry = quote?.optionSymbol === snapshot.option.symbol
@@ -201,7 +221,18 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
   const rawStop = Number(evaluation.stop);
   if (!Number.isFinite(rawStop)) return null;
   const riskPoints = Math.abs(underlyingEntry - rawStop);
-  if (!(riskPoints > 0)) return null;
+  if (!(riskPoints > 0) ||
+      (side === 'CE' ? rawStop >= underlyingEntry : rawStop <= underlyingEntry)) return null;
+  if (automaticEntry) {
+    const atr = positive(snapshot?.market?.atr5);
+    const minRisk = atr != null ? Math.max(2, atr * 0.12) : 2;
+    const maxRisk = atr != null ? Math.max(6, atr * 0.75) : 30;
+    const trigger = positive(evaluation.trigger);
+    const extension = trigger == null ? Infinity : Math.abs(underlyingEntry - trigger);
+    const broken = trigger != null && (side === 'CE' ? underlyingEntry > trigger : underlyingEntry < trigger);
+    if (!broken || riskPoints < minRisk || riskPoints > maxRisk ||
+        (atr != null && extension > atr * 0.35)) return null;
+  }
 
   const underlyingTarget = side === 'CE'
     ? underlyingEntry + riskPoints * SCALP_TARGET_R
@@ -380,7 +411,11 @@ function isScalpWindow(nowMs) {
 }
 
 function readLiveQuote() {
-  try { return typeof window !== 'undefined' ? window.__indexOptionsLiveQuote : null; } catch { return null; }
+  try {
+    const quote = typeof window !== 'undefined' ? window.__indexOptionsLiveQuote : null;
+    const at = Date.parse(quote?.at || '');
+    return Number.isFinite(at) && Date.now() - at >= -2000 && Date.now() - at < 12000 ? quote : null;
+  } catch { return null; }
 }
 
 function positive(value) {

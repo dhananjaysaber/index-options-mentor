@@ -552,7 +552,7 @@ function StrategyModeBar({ strategyMode, setStrategyMode, corePosition, scalpPos
       <div className="strategy-mode-copy">
         <span>STRATEGY MODE</span>
         <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
-        <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'}</small>
+        {(corePosition || scalpPosition) && <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'}</small>}
       </div>
       <button type="button" className={`scalp-mode-switch ${scalp ? 'active' : ''}`} onClick={() => setStrategyMode(scalp ? 'core' : 'scalp')} aria-pressed={scalp}>
         <span>SCALP</span><i aria-hidden="true" />

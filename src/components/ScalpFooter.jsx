@@ -32,8 +32,12 @@ export default function ScalpFooter({ snapshot, brokerStatus, refreshing, evalua
   } else if (evaluation?.eligible) {
     tone = 'good';
     message = `${evaluation.side} scalp research is ready. Trigger ${format(evaluation.trigger)}, stop ${format(evaluation.stop)}, target ${format(evaluation.target)}.`;
-  } else if (evaluation?.reason) {
-    message = evaluation.reason;
+  } else if (evaluation?.manualEligible) {
+    message = 'Manual research can be reviewed using the BUY control.';
+  } else if (snapshot?.market?.phase !== 'LIVE') {
+    message = 'Session paused · new scalp entries unavailable.';
+  } else {
+    message = 'Waiting for a verified 3-minute setup.';
   }
 
   useEffect(() => {

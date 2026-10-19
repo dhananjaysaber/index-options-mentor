@@ -14,10 +14,15 @@ export function classifyResearchSetup(snapshot) {
   const rr = Number(snapshot?.decision?.rr);
   const retestHeld = snapshot?.setup?.retestStatus === 'HELD' && snapshot?.structure?.retestFailed !== true;
   const closeConfirmed = snapshot?.structure?.closeConfirmed === true;
-  const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE';
-  const hasOption = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0);
-  const hasStructure = Number.isFinite(Number(snapshot?.structure?.underlyingStop)) && Number.isFinite(Number(snapshot?.structure?.riskPoints)) && Number(snapshot?.structure?.riskPoints) > 0;
-  const baseSafety = live && hasOption && hasStructure && closeConfirmed && retestHeld && hardSafetyPassed && Number.isFinite(score) && score >= 80 && Number.isFinite(rr) && rr >= 1;
+  const live = isFreshResearchSession(snapshot);
+  const side = snapshot?.decision?.side;
+  const hasDirection = ['CE', 'PE'].includes(side) && snapshot?.option?.optionType === side;
+  const hasOption = Boolean(snapshot?.option?.symbol && positiveNumber(snapshot?.option?.ltp) && Number(snapshot?.option?.lotSize) > 0);
+  const spot = positiveNumber(snapshot?.market?.spot);
+  const stop = positiveNumber(snapshot?.structure?.underlyingStop);
+  const hasStructure = Boolean(spot && stop && positiveNumber(snapshot?.structure?.riskPoints) &&
+    (side === 'CE' ? stop < spot : side === 'PE' ? stop > spot : false));
+  const baseSafety = live && hasDirection && hasOption && hasStructure && closeConfirmed && retestHeld && hardSafetyPassed && Number.isFinite(score) && score >= 80 && Number.isFinite(rr) && rr >= 1;
 
   let tier = null;
   if (baseSafety && mandatoryPassCount === 5 && snapshot?.decision?.canSuggestTrade === true) {
@@ -63,19 +68,25 @@ export function classifyResearchSetup(snapshot) {
 export function classifyManualResearchSetup(snapshot) {
   const parameters = Array.isArray(snapshot?.parameters) ? snapshot.parameters : [];
   const automatic = classifyResearchSetup(snapshot);
-  const live = snapshot?.live === true && snapshot?.market?.phase === 'LIVE';
-  const hasAllChecks = parameters.length >= 13;
-  const hasOption = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && Number(snapshot?.option?.ltp) > 0);
-  const hasDirection = Boolean(snapshot?.decision?.side || snapshot?.option?.optionType);
-  const hasStructure = Number.isFinite(Number(snapshot?.structure?.underlyingStop)) && Number.isFinite(Number(snapshot?.structure?.riskPoints)) && Number(snapshot?.structure?.riskPoints) > 0;
-  const eligible = live && hasAllChecks && hasOption && hasDirection && hasStructure;
+  const live = isFreshResearchSession(snapshot);
+  const hasAllChecks = new Set(parameters.map(row => row.id)).size >= 13;
+  const hasOption = Boolean(snapshot?.option?.symbol && Number(snapshot?.option?.lotSize) > 0 && positiveNumber(snapshot?.option?.ltp));
+  const side = snapshot?.decision?.side;
+  const hasDirection = ['CE', 'PE'].includes(side) && snapshot?.option?.optionType === side;
+  const spot = positiveNumber(snapshot?.market?.spot);
+  const stop = positiveNumber(snapshot?.structure?.underlyingStop);
+  const hasStructure = Boolean(spot && stop && positiveNumber(snapshot?.structure?.riskPoints) &&
+    (side === 'CE' ? stop < spot : side === 'PE' ? stop > spot : false));
+  // Enforce the same non-negotiable gates in the ticket path, not just on the BUY button.
+  const eligible = live && hasAllChecks && hasOption && hasDirection && hasStructure && automatic.hardSafetyPassed;
 
   let reason = 'Manual research is ready. The current 13-point snapshot will be frozen at entry for later comparison.';
-  if (!live) reason = 'Manual research is available only during the live regular session.';
+  if (!live) reason = 'Manual research needs a fresh, verified live session.';
   else if (!hasAllChecks) reason = 'Wait until all 13 strategy checks are available.';
   else if (!hasOption) reason = 'Wait until the Mentor has a live candidate option.';
   else if (!hasDirection) reason = 'Wait until a CE or PE direction exists.';
-  else if (!hasStructure) reason = 'A defined structural invalidation is required so the research trade can be measured consistently.';
+  else if (!hasStructure) reason = 'A correctly placed protective structural stop is required.';
+  else if (!automatic.hardSafetyPassed) reason = 'The risk and option-liquidity safety gates must pass.';
 
   return {
     eligible,
@@ -182,6 +193,10 @@ function buildTicket({
   const execution = resolveLiveExecution(option?.symbol, market?.spot, option?.ltp);
   const underlyingEntry = execution.nifty;
   const optionEntry = execution.option;
+  const stop = positiveNumber(structure?.underlyingStop);
+  if (!positiveNumber(optionEntry) || !positiveNumber(underlyingEntry) || !stop ||
+      (decision?.side === 'CE' ? stop >= underlyingEntry : decision?.side === 'PE' ? stop <= underlyingEntry : true) ||
+      option?.optionType !== decision?.side || !(sizing?.quantity > 0)) return null;
   const now = new Date().toISOString();
   const failedMandatoryIds = classification?.failedMandatoryIds || [];
   const entryMandatoryPassCount = classification?.mandatoryPassCount ?? 0;
@@ -273,15 +288,23 @@ function resolveLiveExecution(optionSymbol, snapshotSpot, snapshotOption) {
   try {
     quote = typeof window !== 'undefined' ? window.__indexOptionsLiveQuote : null;
   } catch {}
-  const liveNifty = positiveNumber(quote?.nifty);
-  const liveOption = quote?.optionSymbol === optionSymbol ? positiveNumber(quote?.optionPrice) : null;
+  const quoteAt = Date.parse(quote?.at || '');
+  const quoteFresh = Number.isFinite(quoteAt) && Date.now() - quoteAt >= -2000 && Date.now() - quoteAt < 12000;
+  const liveNifty = quoteFresh ? positiveNumber(quote?.nifty) : null;
+  const liveOption = quoteFresh && quote?.optionSymbol === optionSymbol ? positiveNumber(quote?.optionPrice) : null;
   const snapshotNifty = positiveNumber(snapshotSpot);
   const snapshotPremium = positiveNumber(snapshotOption);
   return {
     nifty: liveNifty ?? snapshotNifty ?? 0,
     option: liveOption ?? snapshotPremium ?? 0,
-    at: quote?.at || null
+    at: quoteFresh ? quote.at : null
   };
+}
+
+export function isFreshResearchSession(snapshot, nowMs = Date.now()) {
+  const at = Date.parse(snapshot?.generatedAt || '');
+  return Boolean(snapshot?.ok === true && snapshot?.live === true && snapshot?.market?.phase === 'LIVE' &&
+    Number.isFinite(at) && nowMs - at >= -3000 && nowMs - at < 90000);
 }
 
 function positiveNumber(value) {

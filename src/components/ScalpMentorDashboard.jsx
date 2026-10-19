@@ -131,7 +131,7 @@ export default function ScalpMentorDashboard({
         <div className="scalp-decision-top">
           <div>
             <div className="eyebrow">SCALP MENTOR · RESEARCH ONLY</div>
-            <h1>{loading ? 'Reading scalp conditions…' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.manualEligible ? 'Manual scalp research available' : 'Wait for scalp trigger'}</h1>
+            <h1>{loading ? 'Reading scalp conditions…' : !verifiedForEntry ? 'Scalp data unavailable' : snapshot?.market?.phase !== 'LIVE' ? 'Scalp session paused' : evaluation.eligible ? `${evaluation.side} scalp ready` : evaluation.manualEligible ? 'Manual scalp research available' : 'Waiting for scalp setup'}</h1>
             <p>{evaluation.reason}</p>
           </div>
           <div className={`scalp-score ${evaluation.eligible ? 'ready' : ''}`}>
@@ -235,9 +235,7 @@ export default function ScalpMentorDashboard({
           <Metric label="Risk points" value={fmt(evaluation.riskPoints)} />
           <Metric label="Max hold" value="12 min" />
           <Metric label="Profit target" value="+1.00R" tone="positive" />
-          <Metric label="Auto entry" value={settings?.scalpAutoOpen === false ? 'OFF' : 'ON'} />
-          <Metric label="Auto close" value={settings?.scalpAutoClose === false ? 'OFF' : 'ON'} />
-        </div>
+         </div>
         {!position && (
           <div className="scalp-lot-editor">
             <div className="scalp-lot-copy">
@@ -289,21 +287,6 @@ export default function ScalpMentorDashboard({
 
         {candleLoading && <div className="scalp-data-note">Refreshing 3-minute structure…</div>}
         {candleError && <div className="scalp-data-note warning">{candleError}</div>}
-        {!position && (
-          <>
-            <div className={`scalp-manual-note ${evaluation.manualEligible ? 'ready' : ''}`}>
-              <strong>{evaluation.manualEligible ? 'Manual research available' : 'Manual research waiting'}</strong>
-              <span>{evaluation.manualReason}</span>
-            </div>
-            <button type="button" className="scalp-open-button" disabled={!evaluation.manualEligible} onClick={openManualScalp}>
-              {evaluation.manualEligible
-                ? evaluation.eligible
-                  ? 'OPEN SCALP MANUALLY'
-                  : 'OPEN MANUAL SCALP RESEARCH'
-                : 'WAITING FOR SAFE MANUAL ENTRY'}
-            </button>
-          </>
-        )}
       </section>
     </div>
   );

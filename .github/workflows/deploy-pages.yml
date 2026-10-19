@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify entry safety and strategy checks
+        run: npm test
+
+      - name: Version service worker for every release
+        run: sed -i "s/index-options-mentor-pwa-v45/index-options-mentor-pwa-${GITHUB_SHA::12}/" public/sw.js
+
       - name: Build PWA
         env:
           VITE_API_BASE: https://optionsmentor.netlify.app
