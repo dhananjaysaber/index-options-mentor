@@ -177,10 +177,14 @@ export default function AppV3() {
           'NSE:NIFTY50-INDEX'
         ].filter(Boolean))].join(',');
         const response = await fetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbols)}`, { cache: 'no-store' });
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        // Missing quotes are not zero prices. They cannot safely update an
+        // existing paper position or trigger an automated exit.
+        if (!response.ok || data?.s === 'error' || data?.error) return;
         const nodes = Array.isArray(data?.d) ? data.d : [];
         const niftyNode = nodes.find(node => node?.n === 'NSE:NIFTY50-INDEX' || node?.v?.symbol === 'NSE:NIFTY50-INDEX');
         const liveNifty = Number(niftyNode?.v?.lp);
+        if (!Number.isFinite(liveNifty) || liveNifty <= 0) return;
         if (corePosition) {
           const optionNode = findQuoteNode(nodes, corePosition.symbol);
           setCorePosition(current => updateLivePosition(current, Number(optionNode?.v?.lp), liveNifty, snapshot?.market?.spot));
