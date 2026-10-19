@@ -10,6 +10,7 @@ import PositionAlertBanner from './components/PositionAlertBanner.jsx';
 import MentorFooter from './components/MentorFooter.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import ScalpMentorDashboard from './components/ScalpMentorDashboard.jsx';
+import { summarisePositionToday } from './services/positionToday.js';
 import ScalpFooter from './components/ScalpFooter.jsx';
 import CoreResearchPanel from './components/CoreResearchPanel.jsx';
 import CoreQuickActions from './components/CoreQuickActions.jsx';
@@ -509,9 +510,20 @@ export default function AppV3() {
               <span className={positionCount ? 'position-page-status open' : 'position-page-status'}>{positionCount ? `${positionCount} OPEN` : 'NO OPEN POSITION'}</span>
             </div>
             <div className="dual-position-grid">
-              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
-              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
+              <section>
+                <div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div>
+                {corePosition
+                  ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} snapshot={snapshot} sticky={false} />
+                  : <EmptyStrategyPosition strategy="13-point" description="No active 13-point research trade. New qualified positions will appear here." />}
+              </section>
+              <section>
+                <div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div>
+                {scalpPosition
+                  ? <LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} snapshot={snapshot} sticky={false} />
+                  : <EmptyStrategyPosition strategy="scalp" description="No active scalp research trade. Qualified 3-minute setups will appear here." />}
+              </section>
             </div>
+            <PositionTodaySummary history={history} />
           </div>
         )}
 
@@ -525,6 +537,51 @@ export default function AppV3() {
         : <MentorFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} positionMentor={coreMentor} />)}
     </div>
   );
+}
+
+function EmptyStrategyPosition({ strategy, description }) {
+  return (
+    <div className="strategy-position-empty" role="status">
+      <strong>No open {strategy} position</strong>
+      <p>{description}</p>
+    </div>
+  );
+}
+
+function PositionTodaySummary({ history }) {
+  const summary = summarisePositionToday(history);
+  return (
+    <section className="position-today-summary" aria-label="Today’s closed simulated trades">
+      <div className="position-today-heading">
+        <div>
+          <span>TODAY · {summary.dayLabel}</span>
+          <strong>Simulated performance</strong>
+        </div>
+        <small>Closed trades · both strategies</small>
+      </div>
+      {summary.total === 0 ? (
+        <p className="position-today-empty">No completed simulated trades yet today. Open positions are shown above.</p>
+      ) : (
+        <>
+          <div className="position-today-stats">
+            <div><span>Trades closed</span><strong>{summary.total}</strong></div>
+            <div><span>Wins</span><strong>{summary.wins}</strong></div>
+            <div><span>Losses</span><strong>{summary.losses}</strong></div>
+            <div><span>Net sim P&amp;L</span><strong className={summary.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatTodayPnl(summary.pnl)}</strong></div>
+          </div>
+          <div className="position-today-breakdown">
+            <span>13-point: {summary.core.total} closed · <strong className={summary.core.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatTodayPnl(summary.core.pnl)}</strong></span>
+            <span>Scalp: {summary.scalp.total} closed · <strong className={summary.scalp.pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>{formatTodayPnl(summary.scalp.pnl)}</strong></span>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function formatTodayPnl(value) {
+  const number = Number(value) || 0;
+  return `${number < 0 ? '-₹' : '₹'}${Math.abs(number).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function ResearchStatus({ classification, position, settings, manualReady }) {

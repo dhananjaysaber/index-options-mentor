@@ -328,3 +328,116 @@ html[data-theme='dark'] .strategy-quick-actions { background: rgba(13,24,39,.98)
   .scalp-quick-actions { gap: 10px !important; padding-left: 9px !important; padding-right: 9px !important; }
   .dual-position-grid { grid-template-columns: 1fr; }
 }
+
+/* Positions page — compact independent positions, one shared day summary. */
+.strategy-position-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: 96px;
+  padding: 14px;
+  border: 1px dashed #d5e2ee;
+  border-radius: 13px;
+  background: #f7fbfe;
+}
+.strategy-position-empty strong {
+  color: #183651;
+  font-size: 15px;
+  font-weight: 850;
+}
+.strategy-position-empty p {
+  margin: 0;
+  color: #71859a;
+  line-height: 1.45;
+  font-size: 12px;
+}
+.position-today-summary {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #dce6ef;
+  border-radius: 16px;
+  background: #fff;
+}
+.position-today-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 15px;
+  margin-bottom: 12px;
+}
+.position-today-heading > div span,
+.position-today-stats > div span {
+  display: block;
+  color: #7f91a4;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.position-today-heading > div strong {
+  display: block;
+  margin-top: 3px;
+  color: #183651;
+  font-size: 18px;
+}
+.position-today-heading small {
+  color: #73869b;
+  font-size: 11px;
+}
+.position-today-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 9px;
+}
+.position-today-stats > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dbe6f1;
+  border-radius: 12px;
+  background: #f7fafd;
+}
+.position-today-stats strong {
+  display: block;
+  margin-top: 5px;
+  font-size: clamp(16px, 2vw, 22px);
+  color: #183651;
+  overflow-wrap: anywhere;
+}
+.position-today-stats .pnl-pos,
+.position-today-breakdown .pnl-pos { color: #13814d; }
+.position-today-stats .pnl-neg,
+.position-today-breakdown .pnl-neg { color: #c43e4d; }
+.position-today-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 12px;
+  color: #667a8f;
+  font-size: 12px;
+}
+.position-today-empty { margin: 0; color: #71859a; font-size: 13px; }
+html[data-theme='dark'] .strategy-position-empty,
+html[data-theme='dark'] .position-today-stats > div {
+  border-color: #304861;
+  background: #101e30;
+}
+html[data-theme='dark'] .position-today-summary {
+  border-color: #304861;
+  background: #111f31;
+}
+html[data-theme='dark'] .strategy-position-empty strong,
+html[data-theme='dark'] .position-today-heading > div strong,
+html[data-theme='dark'] .position-today-stats > div strong { color: #eaf3fd; }
+html[data-theme='dark'] .position-today-stats .pnl-pos,
+html[data-theme='dark'] .position-today-breakdown .pnl-pos { color: #7de0b0; }
+html[data-theme='dark'] .position-today-stats .pnl-neg,
+html[data-theme='dark'] .position-today-breakdown .pnl-neg { color: #ff9faa; }
+@media (max-width: 820px) {
+  .position-today-summary { padding: 12px; }
+  .position-today-stats { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .position-today-stats > div { padding: 10px; }
+  .position-today-stats strong { font-size: 18px; }
+  .strategy-position-empty { min-height: 80px; padding: 12px; }
+}
