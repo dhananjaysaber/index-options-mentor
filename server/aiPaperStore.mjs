@@ -28,7 +28,7 @@ function open(payload) {
 
 export class AiPaperStore {
   constructor(file) {
-    if (!file || file === ':memory:' ? false : true) mkdirSync(dirname(file), { recursive: true });
+    if (file && file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file || './var/mentor-ai-paper.sqlite');
     this.db.exec(`
       PRAGMA journal_mode=WAL;
