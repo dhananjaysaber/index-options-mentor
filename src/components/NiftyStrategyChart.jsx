@@ -40,16 +40,20 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
           to: sessionDate
         });
         const response = await fetch(`/api/fyers/history?${params.toString()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error('Live chart data is unavailable.');
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data?.s === 'error' || data?.error) {
+          throw new Error(data?.message || data?.error || 'Live chart candles are unavailable from FYERS.');
+        }
         const rows = Array.isArray(data?.candles) ? data.candles : [];
         const parsed = rows
           .map(row => normaliseCandle(row))
           .filter(Boolean)
           .slice(-timeframeConfig.maxCandles);
         if (!cancelled) {
-          setCandles(parsed);
-          setError(parsed.length ? '' : `No ${timeframeConfig.label} candles are available yet.`);
+          // Keep any previously confirmed candles if FYERS temporarily returns no rows.
+          // Never replace genuine OHLC history with a fabricated flat quote candle.
+          if (parsed.length) setCandles(parsed);
+          setError(parsed.length ? '' : `FYERS returned no verified ${timeframeConfig.label} candles. Chart may be unavailable.`);
         }
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Live chart data is unavailable.');
@@ -66,10 +70,13 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     };
   }, [sessionDate, timeframe, timeframeConfig.label, timeframeConfig.maxCandles]);
 
-  const liveSpot = priceOrNull(liveQuote?.nifty)
-    ?? priceOrNull(position?.underlyingCurrent)
-    ?? priceOrNull(snapshot?.market?.spot);
-  const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
+  const quoteAt = Date.parse(liveQuote?.at || '');
+  const snapshotAt = Date.parse(snapshot?.generatedAt || '');
+  const freshQuote = Number.isFinite(quoteAt) && now - quoteAt < 12000 && now - quoteAt >= -2000;
+  const freshSnapshot = Number.isFinite(snapshotAt) && now - snapshotAt < 90000 && now - snapshotAt >= -2000;
+  const liveSpot = freshQuote ? priceOrNull(liveQuote?.nifty)
+    : freshSnapshot ? priceOrNull(snapshot?.market?.spot) : null;
+  const liveTimestamp = freshQuote ? quoteAt : freshSnapshot ? snapshotAt : now;
   const displayCandles = useMemo(
     () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
     [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
@@ -91,7 +98,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         <div className="nifty-live-title">
           <div className="nifty-live-symbol-row">
             <strong>NIFTY 50 · {timeframeConfig.shortLabel}</strong>
-            <span className={`nifty-live-status ${snapshot?.live ? 'online' : ''}`}><i />{snapshot?.live ? 'LIVE' : 'SESSION'}</span>
+            <span className={`nifty-live-status ${snapshot?.live && freshSnapshot && candles.length ? 'online' : ''}`}><i />{snapshot?.live && freshSnapshot && candles.length ? 'LIVE' : 'DATA WAIT'}</span>
           </div>
           <div className="nifty-live-quote-row">
             <span className="nifty-live-price">{liveSpot != null ? formatPrice(liveSpot) : '—'}</span>
@@ -125,6 +132,9 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         </div>
       )}
 
+      {error && displayCandles.length > 0 && (
+        <div className="nifty-chart-empty" role="status">{error} Displaying the last verified candles; do not use them for fresh entries.</div>
+      )}
       {loading && !displayCandles.length ? (
         <div className="nifty-chart-empty">Loading {timeframeConfig.label} candles…</div>
       ) : error && !displayCandles.length ? (
@@ -204,6 +214,8 @@ function normaliseCandle(row) {
 }
 
 function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) {
+  // A single live price cannot reconstruct OHLC history. Wait for FYERS candles.
+  if (!Array.isArray(rows) || rows.length === 0) return [];
   if (!Number.isFinite(Number(spot)) || Number(spot) <= 0) return rows.slice(-maxCandles);
   const price = Number(spot);
   const epochSeconds = Math.floor((Number.isFinite(timestampMs) ? timestampMs : Date.now()) / 1000);
