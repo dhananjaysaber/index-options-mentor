@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
 const COOKIE_NAME = 'iom_fyers_session';
@@ -51,9 +52,9 @@ async function fyersGet(path, params, accessToken) {
   });
 
   const data = await response.json().catch(() => ({ s: 'error', code: response.status, message: 'FYERS returned an unreadable response.' }));
-  if (!response.ok && data?.s !== 'error') {
-    data.s = 'error';
-    data.code = response.status;
+  if (!response.ok || data?.s === 'error') {
+    const failure = classifyFyersFailure(response.status, data, path.replace(/^\//, ''));
+    throw Object.assign(new Error(failure.error), failure);
   }
   return data;
 }
@@ -306,10 +307,49 @@ async function fetchHistoryChunks(resolution, from, to, accessToken) {
   return dedupeCandles(candles);
 }
 
+function fyersFailureResponse(error, fallback = 'FYERS market data is temporarily unavailable.') {
+  if (error?.status && error?.code) {
+    return json({
+      error: error.error || fallback,
+      code: error.code,
+      authRequired: error.authRequired === true,
+      detail: error.detail || ''
+    }, error.status);
+  }
+  const noCandles = /No regular-session 5-minute candles/i.test(error?.message || '');
+  return json({
+    error: noCandles
+      ? 'Valid 5-minute candles are not available from FYERS. New entries are paused until data returns.'
+      : fallback,
+    code: noCandles ? 'FYERS_CANDLES_UNAVAILABLE' : 'FYERS_DATA_UNAVAILABLE',
+    authRequired: false,
+    detail: String(error?.message || 'Unknown data error').slice(0, 240)
+  }, 503);
+}
+
 async function handleStatus(request) {
+  const token = accessTokenFromRequest(request);
+  let authenticated = Boolean(token);
+  let authRequired = false;
+  let verified = false;
+  if (token) {
+    try {
+      // A saved encrypted token is not proof that FYERS still accepts it.
+      await fyersGet('/quotes', { symbols: 'NSE:NIFTY50-INDEX' }, token);
+      verified = true;
+    } catch (error) {
+      if (error?.authRequired) {
+        authenticated = false;
+        authRequired = true;
+      }
+      // A temporary network / rate-limit error does not prove expiry.
+    }
+  }
   return json({
     configured: configured(request),
-    authenticated: Boolean(accessTokenFromRequest(request)),
+    authenticated,
+    authRequired,
+    verified,
     redirectUri: redirectUri(request),
     runtime: 'netlify-functions-rest'
   });
@@ -372,7 +412,7 @@ async function handleQuote(request) {
     return json(await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token));
   } catch (error) {
     console.error('Quote failed:', error);
-    return json({ error: 'Could not load quote.' }, 500);
+    return fyersFailureResponse(error, 'Could not load quote.');
   }
 }
 
@@ -394,7 +434,7 @@ async function handleHistory(request) {
     }, auth.token));
   } catch (error) {
     console.error('History failed:', error);
-    return json({ error: 'Could not load historical candles.' }, 500);
+    return fyersFailureResponse(error, 'Could not load historical candles.');
   }
 }
 
@@ -449,6 +489,7 @@ async function handleResearchHistory(request) {
     return json(data);
   } catch (error) {
     console.error('Research history failed:', error);
+    if (error?.status && error?.code) return fyersFailureResponse(error, 'Could not load research history.');
     return json({
       error: 'Could not load the historical NIFTY research dataset.',
       detail: error?.message || 'Unknown error'
@@ -471,7 +512,7 @@ async function handleOptionChain(request) {
     }, auth.token));
   } catch (error) {
     console.error('Option chain failed:', error);
-    return json({ error: 'Could not load option chain.' }, 500);
+    return fyersFailureResponse(error, 'Could not load option chain.');
   }
 }
 
@@ -502,7 +543,7 @@ async function handleMentorSnapshot(request) {
     return json(normalisePendingDirection(snapshot));
   } catch (error) {
     console.error('Mentor snapshot failed:', error);
-    return json({ error: 'The live mentor snapshot could not be calculated.', detail: error?.message || 'Unknown error' }, 500);
+    return fyersFailureResponse(error, 'The live mentor snapshot could not be calculated. Live entries remain paused until data returns.');
   }
 }
 

@@ -112,6 +112,10 @@ export default function AppV3() {
       const response = await fetch('/api/fyers/status');
       const data = await response.json();
       setBrokerStatus(data);
+      if (data?.authRequired) {
+        setAuthRequired(true);
+        setLiveError('The saved FYERS session has expired or was rejected. Reconnect FYERS.');
+      }
       return data;
     } catch {
       return { configured: false, authenticated: false };
@@ -131,7 +135,7 @@ export default function AppV3() {
         const failure = new Error(data.error || 'Live Mentor data is temporarily unavailable.');
         // A server-side calculation/market-data error is NOT proof of an
         // expired FYERS session. Reconnect only for a recognised auth failure.
-        failure.authRequired = response.status === 401 || response.status === 403
+        failure.authRequired = response.status === 401
           || data.authRequired === true || data.code === 'FYERS_AUTH_REQUIRED'
           || isFyersTokenError(data.detail);
         throw failure;
@@ -144,6 +148,7 @@ export default function AppV3() {
       return data;
     } catch (error) {
       setAuthRequired(error?.authRequired === true);
+      if (error?.authRequired === true) setBrokerStatus(current => ({ ...current, authenticated: false }));
       setLiveError(error?.message || 'Unable to refresh Mentor data. The app will retry automatically.');
       // Preserve the last completed snapshot and any open simulated position.
       return null;
@@ -153,6 +158,16 @@ export default function AppV3() {
       if (manual) setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    const handleAuthExpiry = () => {
+      setAuthRequired(true);
+      setBrokerStatus(current => ({ ...current, authenticated: false }));
+      setLiveError('FYERS has rejected the saved session. Reconnect FYERS to resume live data.');
+    };
+    window.addEventListener('mentor:fyers-auth-required', handleAuthExpiry);
+    return () => window.removeEventListener('mentor:fyers-auth-required', handleAuthExpiry);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -397,7 +412,7 @@ export default function AppV3() {
     window.location.assign(getFyersLoginUrl());
   }
 
-  const reconnectRequired = brokerStatus.authenticated && authRequired;
+  const reconnectRequired = authRequired;
   const marketDataReady = Boolean(snapshot?.generatedAt && !liveError);
 
   return (

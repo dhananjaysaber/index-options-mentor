@@ -11,6 +11,8 @@ let authenticated = false;
 let candidateSymbol = '';
 let timer = null;
 let inFlight = false;
+let nextPollAfter = 0;
+let throttleDelay = 0;
 
 export function installLiveQuoteFeed() {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return;
@@ -69,7 +71,7 @@ function stopTimer() {
 }
 
 async function pollLiveQuote() {
-  if (!authenticated || inFlight || document.visibilityState !== 'visible') return;
+  if (!authenticated || inFlight || document.visibilityState !== 'visible' || Date.now() < nextPollAfter) return;
   inFlight = true;
   try {
     // One poll serves the current candidate and both independently open strategies.
@@ -82,12 +84,21 @@ async function pollLiveQuote() {
       ...openPositions.map(position => position.symbol)
     ].filter(Boolean))].join(',');
     const response = await previousFetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbols)}`, { cache: 'no-store' });
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       authenticated = false;
       stopTimer();
+      window.dispatchEvent(new CustomEvent('mentor:fyers-auth-required'));
+      return;
+    }
+    if (response.status === 429) {
+      // Back off exponentially instead of hammering the FYERS rate limit every 2s.
+      throttleDelay = Math.min(60000, throttleDelay ? throttleDelay * 2 : 15000);
+      nextPollAfter = Date.now() + throttleDelay;
       return;
     }
     if (!response.ok) return;
+    throttleDelay = 0;
+    nextPollAfter = 0;
 
     const data = await response.json();
     const nodes = Array.isArray(data?.d) ? data.d : [];
