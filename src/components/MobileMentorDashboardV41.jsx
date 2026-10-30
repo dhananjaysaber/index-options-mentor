@@ -7,12 +7,15 @@ import LivePositionPanel from './LivePositionPanel.jsx';
 import ParameterGrid from './ParameterGrid.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
 import CoreResearchPanel from './CoreResearchPanel.jsx';
+import SnapshotIssueBanner from './SnapshotIssueBanner.jsx';
 
 export default function MobileMentorDashboardV41({
   mode,
   snapshot,
   loading,
   liveError,
+  authRequired = false,
+  onRetry,
   position,
   positionMentor,
   alertsEnabled,
@@ -26,7 +29,7 @@ export default function MobileMentorDashboardV41({
 
   return (
     <div className={`mobile-mentor-flow mode-${mode}`}>
-      {liveError && <div className="alert-bar mobile-flow-alert reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={onReconnect}>Reconnect FYERS</button></div>}
+      {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onRetry={onRetry} onReconnect={onReconnect} />}
 
       <div className="mobile-flow-block mobile-decision-block">
         <TraderDecisionBanner snapshot={snapshot} loading={loading} />
