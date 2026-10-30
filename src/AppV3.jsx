@@ -233,7 +233,7 @@ export default function AppV3() {
   }, [scalpPosition, snapshot, clockTick]);
 
   useEffect(() => {
-    if (strategyMode !== 'core' || !settings.mentorAutoOpen || corePosition || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
+    if (strategyMode !== 'core' || liveError || !settings.mentorAutoOpen || corePosition || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
     const ledger = readJson(AUTO_SETUP_KEY, {});
     const key = setupClassification.setupId;
     if (!key || ledger[key]) return;
@@ -243,7 +243,7 @@ export default function AppV3() {
     pruneLedger(ledger);
     localStorage.setItem(AUTO_SETUP_KEY, JSON.stringify(ledger));
     takeTrade({ ...ticket, researchQualificationTier: setupClassification.tier, researchQualificationLabel: setupClassification.label, researchTagAtEntry: `${setupClassification.label} · auto entry` });
-  }, [snapshot?.generatedAt, strategyMode, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
+  }, [snapshot?.generatedAt, strategyMode, liveError, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
 
   useEffect(() => {
     if (!corePosition || !coreMentor || settings.mentorAutoClose === false || coreMentor.alertLevel !== 'exit') {
@@ -490,7 +490,7 @@ export default function AppV3() {
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
 
-                <CoreQuickActions snapshot={snapshot} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
+                <CoreQuickActions snapshot={snapshot} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
               </>
             )}
           </>
