@@ -18,6 +18,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
+import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
@@ -56,6 +57,8 @@ export default function AppV3() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [liveError, setLiveError] = useState('');
+  const [authRequired, setAuthRequired] = useState(false);
+  const snapshotRequestRef = useRef(false);
   const [clockTick, setClockTick] = useState(0);
   const [theme, setTheme] = useState(() => readString(THEME_KEY, 'light') === 'dark' ? 'dark' : 'light');
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...readJson(SETTINGS_KEY, {}) }));
@@ -116,22 +119,36 @@ export default function AppV3() {
   }
 
   async function refreshSnapshot(options = {}) {
-    const manual = options.manual === true;
+    // The 15-second timer must not stack expensive FYERS snapshot requests.
+    if (snapshotRequestRef.current) return null;
+    snapshotRequestRef.current = true;
+    const manual = options?.manual === true;
     if (manual) setRefreshing(true);
     try {
       const response = await fetch('/api/fyers/mentor-snapshot', { cache: 'no-store' });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Live mentor data is unavailable.');
+        const failure = new Error(data.error || 'Live Mentor data is temporarily unavailable.');
+        // A server-side calculation/market-data error is NOT proof of an
+        // expired FYERS session. Reconnect only for a recognised auth failure.
+        failure.authRequired = response.status === 401 || response.status === 403
+          || data.authRequired === true || data.code === 'FYERS_AUTH_REQUIRED'
+          || isFyersTokenError(data.detail);
+        throw failure;
       }
       const data = await response.json();
+      if (!data || data.ok === false) throw new Error('FYERS returned an incomplete Mentor snapshot.');
       setSnapshot(data);
       setLiveError('');
+      setAuthRequired(false);
       return data;
     } catch (error) {
-      setLiveError(error.message || 'Live mentor data is unavailable.');
+      setAuthRequired(error?.authRequired === true);
+      setLiveError(error?.message || 'Unable to refresh Mentor data. The app will retry automatically.');
+      // Preserve the last completed snapshot and any open simulated position.
       return null;
     } finally {
+      snapshotRequestRef.current = false;
       setLoading(false);
       if (manual) setRefreshing(false);
     }
@@ -160,33 +177,29 @@ export default function AppV3() {
   }, [scalpPosition?.id]);
 
   useEffect(() => {
-    if ((!corePosition && !scalpPosition) || !brokerStatus.authenticated) return undefined;
-    const updatePositions = async () => {
-      try {
-        const symbols = [...new Set([
-          corePosition?.symbol,
-          scalpPosition?.symbol,
-          'NSE:NIFTY50-INDEX'
-        ].filter(Boolean))].join(',');
-        const response = await fetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbols)}`, { cache: 'no-store' });
-        const data = await response.json();
-        const nodes = Array.isArray(data?.d) ? data.d : [];
-        const niftyNode = nodes.find(node => node?.n === 'NSE:NIFTY50-INDEX' || node?.v?.symbol === 'NSE:NIFTY50-INDEX');
-        const liveNifty = Number(niftyNode?.v?.lp);
-        if (corePosition) {
-          const optionNode = findQuoteNode(nodes, corePosition.symbol);
-          setCorePosition(current => updateLivePosition(current, Number(optionNode?.v?.lp), liveNifty, snapshot?.market?.spot));
-        }
-        if (scalpPosition) {
-          const optionNode = findQuoteNode(nodes, scalpPosition.symbol);
-          setScalpPosition(current => updateLivePosition(current, Number(optionNode?.v?.lp), liveNifty, snapshot?.market?.spot));
-        }
-      } catch {}
+    // Subscribe to the existing 2-second shared quote loop. Both strategy
+    // positions receive their own option LTP from the same FYERS request.
+    // No second high-frequency loop is started when a position opens.
+    const updatePositions = event => {
+      const quote = event?.detail || window.__indexOptionsLiveQuote;
+      if (!quote) return;
+      const nifty = Number(quote.nifty);
+      const prices = quote.optionPrices || {};
+      const optionPrice = symbol => {
+        const value = prices[symbol] ?? (quote.optionSymbol === symbol ? quote.optionPrice : null);
+        return value == null ? NaN : Number(value);
+      };
+      setCorePosition(current => current
+        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null)
+        : current);
+      setScalpPosition(current => current
+        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null)
+        : current);
     };
-    void updatePositions();
-    const timer = window.setInterval(updatePositions, 2000);
-    return () => window.clearInterval(timer);
-  }, [corePosition?.id, scalpPosition?.id, brokerStatus.authenticated, snapshot?.market?.spot]);
+    window.addEventListener('mentor:live-quote', updatePositions);
+    if (window.__indexOptionsLiveQuote) updatePositions();
+    return () => window.removeEventListener('mentor:live-quote', updatePositions);
+  }, []);
 
   const setupClassification = useMemo(() => classifyResearchSetup(snapshot), [snapshot]);
   const manualClassification = useMemo(() => classifyManualResearchSetup(snapshot), [snapshot]);
@@ -339,7 +352,9 @@ export default function AppV3() {
   }
 
   function takeTrade(ticket) {
-    if (!ticket?.quantity) return;
+    // Old 5m/3m structure may remain visible when the calculation endpoint
+    // fails. It must not open NEW positions until a fresh snapshot succeeds.
+    if (!ticket?.quantity || liveError) return;
     const initiatedBy = ticket.initiatedBy || 'USER';
     const enriched = {
       ...ticket,
@@ -377,11 +392,13 @@ export default function AppV3() {
     setBrokerStatus(current => ({ ...current, authenticated: false }));
     setSnapshot(null);
     setLiveError('');
+    setAuthRequired(false);
     setMobileMenuOpen(false);
     window.location.assign(getFyersLoginUrl());
   }
 
-  const reconnectRequired = brokerStatus.authenticated && Boolean(liveError);
+  const reconnectRequired = brokerStatus.authenticated && authRequired;
+  const marketDataReady = Boolean(snapshot?.generatedAt && !liveError);
 
   return (
     <div className="app-shell mentor-v2-shell research-v41-shell">
@@ -397,13 +414,13 @@ export default function AppV3() {
           <button className={`secondary-btn ${alertsEnabled ? 'active' : ''}`} onClick={toggleAlerts}>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</button>
           {brokerStatus.authenticated && <button className={`secondary-btn refresh-btn ${refreshing ? 'refreshing' : ''}`} onClick={() => refreshSnapshot({ manual: true })} disabled={refreshing}>{refreshing ? 'Checking…' : 'Refresh now'}</button>}
         </div>
-        <div className="mentor-v2-mobile-status"><span className={reconnectRequired ? 'reconnect' : brokerStatus.authenticated ? 'online' : ''} /></div>
+        <div className="mentor-v2-mobile-status"><span className={reconnectRequired ? 'reconnect' : liveError ? 'mentor-data-warning' : brokerStatus.authenticated ? 'online' : ''} /></div>
         <button className="mentor-v2-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><MenuIcon /></button>
       </header>
 
       <DesktopNav view={view} navigate={navigate} settings={settings} setup={setupClassification} positionCount={positionCount} corePosition={corePosition} scalpPosition={scalpPosition} />
 
-      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} onReconnect={reconnectFyers} />}
+      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
 
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
@@ -415,6 +432,9 @@ export default function AppV3() {
                 snapshot={snapshot}
                 loading={loading}
                 liveError={liveError}
+                authRequired={authRequired}
+                onRetry={() => refreshSnapshot({ manual: true })}
+                marketDataReady={marketDataReady}
                 position={scalpPosition}
                 positionMentor={scalpMentor}
                 alertsEnabled={alertsEnabled}
@@ -441,6 +461,8 @@ export default function AppV3() {
                   snapshot={snapshot}
                   loading={loading}
                   liveError={liveError}
+                  authRequired={authRequired}
+                  onRetry={() => refreshSnapshot({ manual: true })}
                   position={corePosition}
                   positionMentor={coreMentor}
                   alertsEnabled={alertsEnabled}
@@ -450,7 +472,7 @@ export default function AppV3() {
                   onExit={meta => exitStrategy('core', meta)}
                 />
 
-                {liveError && <div className="alert-bar reconnect-alert"><span>{liveError} The saved FYERS session may have expired.</span><button type="button" onClick={reconnectFyers}>Reconnect FYERS</button></div>}
+                {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={() => refreshSnapshot({ manual: true })} />}
                 {corePosition && <div className="position-lock-bar">13-POINT POSITION ACTIVE · OPENED BY {corePosition.initiatedBy || 'USER'} · {corePosition.strategyTierLabel || corePosition.strategyTier || 'RESEARCH'}</div>}
                 <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta => exitStrategy('core', { ...meta, closedBy: 'USER' })} />
                 <TraderDecisionBanner snapshot={snapshot} loading={loading} />
@@ -556,16 +578,16 @@ function DesktopNav({ view, navigate, settings, setup, positionCount, corePositi
   );
 }
 
-function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot, liveError, onReconnect }) {
+function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot, liveError, authRequired, onReconnect }) {
   return (
     <div className="mentor-drawer-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
-        <div className={`drawer-connection ${liveError ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {liveError ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
+        <div className={`drawer-connection ${authRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {authRequired ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
         <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
-        <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /><span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${liveError ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{liveError ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>
+        <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /><span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${authRequired ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{authRequired ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>
         <button className="drawer-settings-cta" onClick={() => navigate('settings')}>Account & automation settings</button>
       </aside>
     </div>
@@ -771,4 +793,10 @@ function sendBrowserExitNotification(position, meta) {
     const notification = new Notification(`Options Mentor — ${title}`, { body, tag: `mentor-exit-${position.id}-${meta.reasonCode || 'exit'}`, requireInteraction: true });
     notification.onclick = () => { window.focus(); notification.close(); };
   } catch {}
+}
+
+
+function isFyersTokenError(detail) {
+  const text = typeof detail === 'string' ? detail.trim() : '';
+  return /\b(?:invalid access token|access token (?:has )?expired|token is invalid|token has expired|authentication token expired)\b/i.test(text);
 }
