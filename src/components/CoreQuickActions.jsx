@@ -1,10 +1,10 @@
 import { buildManualResearchTicket, classifyManualResearchSetup, classifyResearchSetup } from '../engine/researchStrategy.js';
 
-export default function CoreQuickActions({ snapshot, settings, position, onTakeTrade, onExit }) {
+export default function CoreQuickActions({ snapshot, marketDataReady = true, settings, position, onTakeTrade, onExit }) {
   const automatic = classifyResearchSetup(snapshot);
   const manual = classifyManualResearchSetup(snapshot);
-  const manualReady = Boolean(!position && manual?.eligible && automatic?.hardSafetyPassed);
-  const qualification = position
+  const manualReady = Boolean(marketDataReady && !position && manual?.eligible && automatic?.hardSafetyPassed);
+  const qualification = !marketDataReady && !position ? 'Waiting for fresh Mentor data' : position
     ? position.researchQualificationLabel || position.strategyTierLabel || position.strategyTier || 'POSITION OPEN'
     : automatic?.eligible
       ? automatic.label
