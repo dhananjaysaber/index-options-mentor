@@ -1,4 +1,8 @@
-const POSITION_KEY = 'index-options-mentor-open-position-v07';
+const POSITION_KEYS = [
+  'index-options-mentor-open-position-v07',
+  'index-options-mentor-core-position-v41',
+  'index-options-mentor-scalp-position-v41'
+];
 const POLL_MS = 2000;
 
 let installed = false;
@@ -68,9 +72,15 @@ async function pollLiveQuote() {
   if (!authenticated || inFlight || document.visibilityState !== 'visible') return;
   inFlight = true;
   try {
-    const openPosition = readOpenPosition();
-    const optionSymbol = openPosition?.symbol || candidateSymbol || '';
-    const symbols = [...new Set(['NSE:NIFTY50-INDEX', optionSymbol].filter(Boolean))].join(',');
+    // One poll serves the current candidate and both independently open strategies.
+    // Avoid a second 2-second FYERS loop when a simulated position opens.
+    const openPositions = readOpenPositions();
+    const optionSymbol = openPositions[0]?.symbol || candidateSymbol || '';
+    const symbols = [...new Set([
+      'NSE:NIFTY50-INDEX',
+      candidateSymbol,
+      ...openPositions.map(position => position.symbol)
+    ].filter(Boolean))].join(',');
     const response = await previousFetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbols)}`, { cache: 'no-store' });
     if (response.status === 401 || response.status === 403) {
       authenticated = false;
@@ -82,13 +92,19 @@ async function pollLiveQuote() {
     const data = await response.json();
     const nodes = Array.isArray(data?.d) ? data.d : [];
     const nifty = quotePrice(nodes, 'NSE:NIFTY50-INDEX');
-    const optionPrice = optionSymbol ? quotePrice(nodes, optionSymbol) : null;
-    if (nifty == null && optionPrice == null) return;
+    const optionPrices = {};
+    for (const symbol of [...new Set([candidateSymbol, ...openPositions.map(item => item.symbol)].filter(Boolean))]) {
+      const price = quotePrice(nodes, symbol);
+      if (price != null) optionPrices[symbol] = price;
+    }
+    const optionPrice = optionSymbol ? optionPrices[optionSymbol] ?? null : null;
+    if (nifty == null && !Object.keys(optionPrices).length) return;
 
     const quote = {
       nifty,
       optionPrice,
       optionSymbol,
+      optionPrices,
       at: new Date().toISOString(),
       pollMs: POLL_MS
     };
@@ -107,11 +123,20 @@ function quotePrice(nodes, symbol) {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function readOpenPosition() {
-  try {
-    const value = localStorage.getItem(POSITION_KEY);
-    return value ? JSON.parse(value) : null;
-  } catch {
-    return null;
+function readOpenPositions() {
+  const result = [];
+  const seen = new Set();
+  for (const key of POSITION_KEYS) {
+    try {
+      const value = localStorage.getItem(key);
+      const position = value ? JSON.parse(value) : null;
+      if (position?.symbol && !seen.has(position.symbol)) {
+        result.push(position);
+        seen.add(position.symbol);
+      }
+    } catch {
+      // Invalid local position state must not stop the live feed.
+    }
   }
+  return result;
 }
