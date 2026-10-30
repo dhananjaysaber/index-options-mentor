@@ -3,6 +3,7 @@ import useLiveQuote from '../hooks/useLiveQuote.js';
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
+import SnapshotIssueBanner from './SnapshotIssueBanner.jsx';
 import FyersLiveHandoff from './FyersLiveHandoff.jsx';
 import { buildScalpTicket, evaluateScalpSetup } from '../engine/scalpStrategy.js';
 
@@ -12,6 +13,9 @@ export default function ScalpMentorDashboard({
   snapshot,
   loading,
   liveError,
+  authRequired = false,
+  onRetry,
+  marketDataReady = true,
   position,
   positionMentor,
   alertsEnabled,
@@ -73,10 +77,19 @@ export default function ScalpMentorDashboard({
   }, [sessionDate]);
 
   const liveSpot = Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
-  const evaluation = useMemo(
-    () => evaluateScalpSetup(snapshot, candles, liveSpot),
-    [snapshot, candles, liveSpot]
-  );
+  const evaluation = useMemo(() => {
+    const computed = evaluateScalpSetup(snapshot, candles, liveSpot);
+    // Keep the historical evidence visible, but do not allow a stale snapshot
+    // to qualify an automatic or manual NEW position.
+    if (marketDataReady) return computed;
+    return {
+      ...computed,
+      eligible: false,
+      manualEligible: false,
+      reason: 'Waiting for fresh Mentor data before considering a scalp entry.',
+      manualReason: 'New simulated entries are paused while the Mentor snapshot is unavailable.'
+    };
+  }, [snapshot, candles, liveSpot, marketDataReady]);
 
   useEffect(() => {
     onStatusChange?.(evaluation);
@@ -113,10 +126,12 @@ export default function ScalpMentorDashboard({
   return (
     <div className="scalp-dashboard">
       {liveError && (
-        <div className="alert-bar reconnect-alert scalp-reconnect">
-          <span>{liveError} The saved FYERS session may have expired.</span>
-          <button type="button" onClick={onReconnect}>Reconnect FYERS</button>
-        </div>
+        <SnapshotIssueBanner
+          message={liveError}
+          authRequired={authRequired}
+          onReconnect={onReconnect}
+          onRetry={onRetry}
+        />
       )}
 
       <section className={`scalp-decision-card ${evaluation.eligible ? 'ready' : 'waiting'}`}>
