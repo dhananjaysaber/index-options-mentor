@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
+import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
@@ -69,7 +70,9 @@ export default function ScalpMentorDashboard({
     };
 
     void load();
-    const timer = window.setInterval(load, 45000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && isNseMarketHours()) void load();
+    }, FYERS_REFRESH.scalpCandlesMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
