@@ -274,3 +274,7 @@ export function runStockScan(get, scope, now = Date.now(), options = {}) {
   scans.set(scope, entry);
   return entry.result;
 }
+
+// Reuse the existing validated FYERS symbol and candle helpers across the
+// shorter Stock stages; no changes to the Index/Scalp engines.
+export { symbolMaster, candles, quoteValue, marketOpen };
