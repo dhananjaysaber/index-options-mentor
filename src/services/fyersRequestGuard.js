@@ -1,6 +1,8 @@
 // Shared browser-side FYERS request coordinator. Preserves the same API and
 // research logic while preventing duplicate reads and retry storms on 429.
 // Across tabs, the cooldown is stored on this origin; no token is stored here.
+import { FYERS_REFRESH } from './fyersRefreshPolicy.js';
+
 const COOLDOWN_KEY = 'iom-fyers-data-cooldown-v1';
 const INDIA_OFFSET_MS = 330 * 60000;
 const protectedRoutes = new Set([
@@ -32,6 +34,11 @@ export function nextMarketOpenIST(now = Date.now()) {
 }
 
 export function readFyersCooldown() { return cooldownState(); }
+
+// Call only from an explicit user recheck after FYERS confirms their Prime upgrade.
+export function clearFyersCooldown() {
+  try { localStorage.removeItem(COOLDOWN_KEY); } catch {}
+}
 
 function saveCooldown(kind, message) {
   const now = Date.now();
@@ -91,10 +98,13 @@ export function installFyersRequestGuard() {
           || /5[,.]?000\s*requests\s*\/\s*day|daily (?:api )?(?:request )?limit|requests\/day/i.test(msg);
         saveCooldown(daily ? 'daily' : 'temporary', msg);
       } else if (response.ok) {
-        const cacheMs = url.pathname === '/api/fyers/history' ? 20000
-          : url.pathname === '/api/fyers/mentor-snapshot' ? 5000
+        const fast = FYERS_REFRESH.tier === 'prime';
+        // Prime's 4-second completed-candle refresh must NEVER receive a
+        // 20-second-old cached candle response from our own client guard.
+        const cacheMs = url.pathname === '/api/fyers/history' ? (fast ? 600 : 20000)
+          : url.pathname === '/api/fyers/mentor-snapshot' ? (fast ? 500 : 5000)
           : url.pathname === '/api/fyers/research-history' ? 60000
-          : url.pathname === '/api/fyers/quote' ? 1000 : 10000;
+          : url.pathname === '/api/fyers/quote' ? (fast ? 100 : 1000) : 10000;
         recentlyCompleted.set(key, { until: Date.now() + cacheMs, response: response.clone() });
         if (recentlyCompleted.size > 25) {
           for (const [item, value] of recentlyCompleted) {

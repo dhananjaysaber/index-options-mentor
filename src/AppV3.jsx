@@ -18,6 +18,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
+import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 
@@ -405,6 +406,14 @@ export default function AppV3() {
     setMobileMenuOpen(false);
   }
 
+  function retryFyersAfterUpgrade() {
+    // FYERS upgrades Prime API limits immediately after payment, but a
+    // Standard daily-limit response may still be locally remembered.
+    // Only a deliberate user click clears this safeguard.
+    clearFyersCooldown();
+    void refreshSnapshot({ manual: true });
+  }
+
   function reconnectFyers() {
     clearFyersSession();
     setBrokerStatus(current => ({ ...current, authenticated: false }));
@@ -451,7 +460,7 @@ export default function AppV3() {
                 loading={loading}
                 liveError={liveError}
                 authRequired={authRequired}
-                onRetry={() => refreshSnapshot({ manual: true })}
+                onRetry={retryFyersAfterUpgrade}
                 marketDataReady={marketDataReady}
                 position={scalpPosition}
                 positionMentor={scalpMentor}
@@ -480,7 +489,7 @@ export default function AppV3() {
                   loading={loading}
                   liveError={liveError}
                   authRequired={authRequired}
-                  onRetry={() => refreshSnapshot({ manual: true })}
+                  onRetry={retryFyersAfterUpgrade}
                   position={corePosition}
                   positionMentor={coreMentor}
                   alertsEnabled={alertsEnabled}
@@ -490,7 +499,7 @@ export default function AppV3() {
                   onExit={meta => exitStrategy('core', meta)}
                 />
 
-                {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={() => refreshSnapshot({ manual: true })} />}
+                {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
                 {corePosition && <div className="position-lock-bar">13-POINT POSITION ACTIVE · OPENED BY {corePosition.initiatedBy || 'USER'} · {corePosition.strategyTierLabel || corePosition.strategyTier || 'RESEARCH'}</div>}
                 <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta => exitStrategy('core', { ...meta, closedBy: 'USER' })} />
                 <TraderDecisionBanner snapshot={snapshot} loading={loading} />

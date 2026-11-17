@@ -3,6 +3,9 @@
   publish = "dist"
   ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- netlify/functions server netlify.toml package.json package-lock.json"
 
+[build.environment]
+  VITE_FYERS_TIER = "prime"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
