@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
+import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 
 const TIMEFRAMES = {
   '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48, rightPaddingSlots: 6 },
@@ -59,7 +60,9 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     };
 
     void load();
-    const timer = window.setInterval(load, 30000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && isNseMarketHours()) void load();
+    }, FYERS_REFRESH.chartMs);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
