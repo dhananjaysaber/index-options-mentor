@@ -115,7 +115,14 @@ export function runStockScan(get, scope, now = Date.now()) {
     if (scans.size >= 20) throw Object.assign(new Error('Scanner busy'), {status: 429, code: 'SCANNER_BUSY'});
   }
   const entry = { pending: true, until: now + 30000 };
-  entry.result = scan(get, scope, now).catch(error => {
+  let nextRequestAt = 0;
+  async function pacedGet(path, params) {
+    const wait = nextRequestAt - Date.now();
+    if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
+    nextRequestAt = Date.now() + 400;
+    return get(path, params);
+  }
+  entry.result = scan(pacedGet, scope, now).catch(error => {
     if (error.status === 429) entry.until = Date.now() + 120000;
     throw error;
   }).finally(() => { entry.pending = false; });
