@@ -2,11 +2,9 @@ import { stockSetup } from './stockSignals.mjs';
 
 // Ranked research universe only. An option is shown as actionable ONLY after
 // confirmed candles, a valid FYERS derivative contract and live bid/ask depth.
-const watchlist = [
-  'RELIANCE', 'SBIN', 'ICICIBANK', 'HDFCBANK', 'INFY',
-  'TCS', 'AXISBANK', 'BHARTIARTL', 'LT', 'KOTAKBANK',
-  'BAJFINANCE', 'SUNPHARMA'
-];
+const MAX_DETAILED_STOCKS = 24;
+const FYERS_QUOTE_BATCH = 50;
+// No hard-coded stock candidates: the FYERS derivative master determines the universe.
 const candleCache = new Map();
 const scans = new Map();
 let masterPromise;
@@ -16,7 +14,7 @@ const date = ms => new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Kolkata', ye
 async function symbolMaster() {
   if (!masterPromise || Date.now() >= masterExpires) {
     masterExpires = Date.now() + 3600000;
-    masterPromise = fetch('https://public.fyers.in/sym_details/NSE_FO_sym_master.json', {signal: AbortSignal.timeout(5000)})
+    masterPromise = fetch('https://public.fyers.in/sym_details/NSE_FO_sym_master.json', {signal: AbortSignal.timeout(12000)})
       .then(response => {
         if (!response.ok) throw new Error('Contract master unavailable');
         return response.json();
@@ -43,11 +41,11 @@ async function candles(get, scope, symbol, resolution, now) {
   return response.candles;
 }
 
-function quoteValue(response, symbol) {
+function quoteValue(response, symbol, now = Date.now()) {
   const node = response?.d?.find(row => (row.n || row.v?.symbol) === symbol);
   const value = node?.v;
   const seconds = Number(value?.tt);
-  if (node?.s !== 'ok' || !Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 30) return null;
+  if (node?.s !== 'ok' || !Number.isFinite(seconds) || Math.abs(now / 1000 - seconds) > 30) return null;
   return value;
 }
 
@@ -91,40 +89,128 @@ function watchContext(five, three, now) {
     reason: side ? '5m/3m momentum aligns; breakout and retest not yet confirmed' : 'No aligned completed 5m/3m momentum' };
 }
 
-async function scan(get, scope, now) {
+
+function localDate(ms) { return date(ms); }
+
+// Authoritative NSE stock options universe from FYERS' regularly updated
+// derivative master. Includes only names with current active CE and PE lots.
+export function deriveFnoUniverse(master, now = Date.now()) {
+  const entries = new Map();
+  for (const record of Object.values(master || {})) {
+    if (!record || !['CE', 'PE'].includes(record.optType)) continue;
+    if (record.tradeStatus != null && Number(record.tradeStatus) !== 1) continue;
+    const expiry = Number(record.expiryDate);
+    if (!Number.isFinite(expiry) || expiry <= now / 1000 || localDate(expiry * 1000) === localDate(now)) continue;
+    if (!(Number(record.minLotSize) > 0)) continue;
+    const name = String(record.underSym || '').toUpperCase().trim().replace(/^NSE:/, '').replace(/-EQ$/, '');
+    if (!/^[A-Z0-9&._-]{2,30}$/.test(name) || /^(NIFTY|BANKNIFTY|FINNIFTY|MIDCPNIFTY|SENSEX|BANKEX|NIFTYNXT50)$/.test(name)) continue;
+    const symbol = 'NSE:' + name + '-EQ';
+    const sides = entries.get(symbol) || new Set();
+    sides.add(record.optType);
+    entries.set(symbol, sides);
+  }
+  return [...entries].filter(([, sides]) => sides.size === 2)
+    .map(([symbol]) => ({ symbol, stock: symbol.slice(4, -3) }))
+    .sort((a, b) => a.stock.localeCompare(b.stock));
+}
+
+export function shortlistForSetups(rows, now = Date.now(), limit = MAX_DETAILED_STOCKS) {
+  // Quote movement is only an inexpensive pre-filter. The recommendation
+  // list later requires a completed, valid 5m + 3m stockSetup.
+  const scored = rows.map(row => {
+    const lp = Number(row.quote?.lp), open = Number(row.quote?.open_price);
+    const dayMove = open > 0 ? (lp - open) / open * 100 : Number(row.quote?.chp) || 0;
+    const high = Number(row.quote?.high_price), low = Number(row.quote?.low_price);
+    const rangePct = high > low && open > 0 ? (high - low) / open * 100 : 0;
+    const preScore = Math.abs(dayMove) * .75 + Math.min(4, rangePct) * .5;
+    return { ...row, preScore, dayMove };
+  }).filter(row => Number(row.quote?.lp) > 0)
+    .sort((a, b) => b.preScore - a.preScore || a.stock.localeCompare(b.stock));
+  const selected = new Map();
+  const keep = list => { for (const row of list) if (selected.size < limit) selected.set(row.symbol, row); };
+  keep(scored.filter(row => row.dayMove >= 0).slice(0, Math.floor(limit * .4)));
+  keep(scored.filter(row => row.dayMove < 0).slice(0, Math.floor(limit * .4)));
+  const others = scored.filter(row => !selected.has(row.symbol));
+  const rotated = others.length ? Math.floor(now / 180000) % others.length : 0;
+  keep([...others.slice(rotated), ...others.slice(0, rotated)]);
+  return [...selected.values()].slice(0, limit);
+}
+
+function scoreConfirmedSetup(setup, five, three, now) {
+  if (!setup) return 0;
+  const seconds = Math.floor(now / 1000);
+  const completed = (three || []).filter(row => row[0] + 180 <= seconds);
+  const last = completed.at(-1);
+  const fraction = last ? Math.abs(last[4] - last[1]) / Math.max(.01, last[2] - last[3]) : 0;
+  const volumes = completed.slice(-7, -1).map(row => Number(row[5])).filter(x => x > 0);
+  const avgVolume = volumes.length ? volumes.reduce((a,b) => a+b, 0) / volumes.length : 0;
+  const closes = (five || []).filter(row => row[0] + 300 <= seconds).slice(-3).map(row => row[4]);
+  const aligned = closes.length === 3 && (setup.side === 'CE'
+    ? closes[0] <= closes[1] && closes[1] <= closes[2]
+    : closes[0] >= closes[1] && closes[1] >= closes[2]);
+  const riskPct = setup.distance / Math.max(.01, setup.entry);
+  return Math.min(100, 65 + (fraction >= .55 ? 9 : fraction >= .35 ? 4 : 0)
+    + (avgVolume && Number(last?.[5]) >= 1.2 * avgVolume ? 8 : 0)
+    + (aligned ? 9 : 0)
+    + (riskPct >= .0015 && riskPct <= .008 ? 6 : 0)
+    + (seconds - setup.confirmedAt < 90 ? 3 : 0));
+}
+
+async function universeQuotes(get, universe, now) {
+  const chunks = [];
+  for (let i = 0; i < universe.length; i += FYERS_QUOTE_BATCH) chunks.push(universe.slice(i, i + FYERS_QUOTE_BATCH));
+  const blocks = await mapLimited(chunks, 2, async chunk => {
+    const result = await get('/quotes', { symbols: chunk.map(row => row.symbol).join(',') });
+    return chunk.flatMap(row => {
+      const quote = quoteValue(result, row.symbol, now);
+      return quote && Number(quote.lp) > 0 ? [{ ...row, quote }] : [];
+    });
+  });
+  return blocks.flat();
+}
+
+
+async function scan(get, scope, now, options = {}) {
   if (!marketOpen(now)) return { candidates: [], watchlist: [], failures: [], status: 'Outside NSE market hours', generatedAt: new Date(now).toISOString() };
-  const symbolFor = stock => `NSE:${stock}-EQ`;
-  const quote = await get('/quotes', { symbols: watchlist.map(symbolFor).join(',') });
+  // Scan F&O eligibility from the exchange master. The preliminary live-quote
+  // screen examines this whole universe; history calls are limited to 24
+  // rotating, dynamically selected stocks to preserve the live Index feed.
+  const master = options.master || await symbolMaster();
+  const universe = deriveFnoUniverse(master, now);
+  if (!universe.length) return { candidates: [], watchlist: [], failures: [],
+    universeCount: 0, quotesChecked: 0, detailedChecked: 0,
+    status: 'No active eligible NSE stock option underlyings in FYERS symbol master.',
+    generatedAt: new Date(now).toISOString() };
+  const quoted = await universeQuotes(get, universe, now);
+  const shortlist = shortlistForSetups(quoted, now);
   const failures = [];
 
-  const checked = await mapLimited(watchlist, 2, async stock => {
-    const symbol = symbolFor(stock);
-    const underlying = quoteValue(quote, symbol);
-    if (!underlying || !(Number(underlying.lp) > 0)) return { stock, status: 'UNAVAILABLE', reason: 'No fresh FYERS equity quote' };
+  const checked = await mapLimited(shortlist, 2, async row => {
+    const { stock, symbol, quote } = row;
     try {
       const [five, three] = await Promise.all([
         candles(get, scope, symbol, '5', now),
         candles(get, scope, symbol, '3', now)
       ]);
-      const context = watchContext(five, three, now);
       const strict = stockSetup(five, three, now);
-      return { stock, symbol, spot: Number(underlying.lp), changePct: Number(underlying.chp) || 0,
-        ...context, ...(strict ? {side: strict.side, status: 'CONFIRMED', score: Math.max(context.score, 90), reason: strict.setup } : {}),
-        strict };
+      // No confirmed breakout/retest? The stock is NOT a top-ten candidate.
+      if (!strict) return null;
+      return { stock, symbol, spot: Number(quote.lp), changePct: Number(quote.chp) || 0,
+        side: strict.side, status: 'CONFIRMED',
+        score: scoreConfirmedSetup(strict, five, three, now),
+        reason: strict.setup, strict };
     } catch (error) {
       if (error?.status === 429 || error?.status === 401) throw error;
       failures.push(stock);
-      return { stock, symbol, spot: Number(underlying.lp), status: 'UNAVAILABLE', score: 0, reason: 'Stock candles unavailable' };
+      return null;
     }
   });
-
-  const monitored = checked.sort((a, b) => (b.status === 'CONFIRMED') - (a.status === 'CONFIRMED')
-    || Number(b.score || 0) - Number(a.score || 0) || watchlist.indexOf(a.stock) - watchlist.indexOf(b.stock)).slice(0, 10);
-  const qualified = monitored.filter(row => row.strict);
-  const master = qualified.length ? await symbolMaster().catch(() => null) : null;
+  const monitored = checked.filter(Boolean).sort((a, b) =>
+    b.score - a.score || Math.abs(b.changePct) - Math.abs(a.changePct) ||
+    a.stock.localeCompare(b.stock)).slice(0, 10);
+  const qualified = monitored;
   const candidates = await mapLimited(qualified, 2, async item => {
     try {
-      if (!master) throw new Error('Contract master unavailable');
       const chain = await get('/options-chain-v3', { symbol: item.symbol, strikecount: 2, greeks: '1' });
       const data = chain?.data || chain;
       const expiry = Number(data?.expiryData?.[0]?.expiry);
@@ -132,7 +218,7 @@ async function scan(get, scope, now) {
       const legs = (data?.optionsChain || []).filter(row =>
         row.option_type === item.side && row.symbol && Number.isFinite(Number(row.strike_price)));
       legs.sort((a, b) => Math.abs(a.strike_price - item.spot) - Math.abs(b.strike_price - item.spot));
-      const leg = legs.find(row => master[row.symbol]?.tradeStatus !== 0 && Number(master[row.symbol]?.minLotSize) > 0);
+      const leg = legs.find(row => master[row.symbol]?.tradeStatus !== 0 && master[row.symbol]?.optType === item.side && Number(master[row.symbol]?.minLotSize) > 0);
       if (!leg) return null;
       const lotSize = Number(master[leg.symbol]?.minLotSize);
       const delta = Math.abs(Number(leg.greeks?.delta));
@@ -164,13 +250,14 @@ async function scan(get, scope, now) {
     }
   });
   return { candidates: candidates.filter(Boolean), watchlist: monitored.map(({strict, ...row}) => row),
-    failures: [...new Set(failures)],
-    status: !checked.some(row => row.status !== 'UNAVAILABLE') ? 'FYERS stock data unavailable' : null,
+    failures: [...new Set(failures)], universeCount: universe.length,
+    quotesChecked: quoted.length, detailedChecked: shortlist.length,
+    status: !monitored.length ? 'No confirmed 5m/3m stock-option setups in the current screened shortlist.' : null,
     generatedAt: new Date(now).toISOString(),
-    note: 'Rankings are momentum watch signals, not calibrated probabilities. Only confirmed contracts with fresh depth can be opened in paper mode.' };
+    note: 'Only completed and confirmed setups are ranked. Score represents structural strength, not the probability of profit. The detailed chart scan covers a dynamically selected subset of the F&O universe.' };
 }
 
-export function runStockScan(get, scope, now = Date.now()) {
+export function runStockScan(get, scope, now = Date.now(), options = {}) {
   const current = scans.get(scope);
   if (current && (current.pending || now < current.until)) return current.result;
   if (scans.size >= 20) {
@@ -180,7 +267,7 @@ export function runStockScan(get, scope, now = Date.now()) {
     if (scans.size >= 20) throw Object.assign(new Error('Scanner busy'), {status: 429, code: 'SCANNER_BUSY'});
   }
   const entry = { pending: true, until: now + 25000 };
-  entry.result = scan(get, scope, now).catch(error => {
+  entry.result = scan(get, scope, now, options).catch(error => {
     if (error.status === 429) entry.until = Date.now() + 120000;
     throw error;
   }).finally(() => { entry.pending = false; });

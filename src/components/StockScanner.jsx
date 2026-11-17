@@ -102,7 +102,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <div>
           <span className="stock-scanner-eyebrow">FYERS PRIME · NSE F&O · SEPARATE RESEARCH</span>
           <h1>Stock Options Mentor</h1>
-          <p>Top 10 monitored equity F&O stocks, ranked by completed-candle momentum. Confirmed option setups appear separately for paper testing.</p>
+          <p>Up to 10 of the strongest confirmed 5-minute and 3-minute stock-option setups. No preset company list and no filler trades.</p>
         </div>
         <div className="stock-scanner-actions">
           <span className={error ? 'stock-status warn' : active && scan ? 'stock-status live' : 'stock-status'}>
@@ -119,18 +119,18 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       {scan?.failures?.length > 0 && <div className="stock-alert subtle">FYERS data could not be confirmed for: {scan.failures.join(', ')}. These stocks are not trade-ready.</div>}
 
       <div className="stock-scanner-stats">
-        <div><span>Stocks assessed</span><strong>{watchlist.length}<small> / 10</small></strong></div>
-        <div><span>Confirmed option setups</span><strong>{scan?.candidates?.length || 0}</strong></div>
-        <div><span>Within paper risk budget</span><strong>{cards.length}</strong></div>
-        <div><span>Last scan</span><strong className="stock-small-value">{ist(scan?.generatedAt)}</strong></div>
+        <div><span>Eligible F&amp;O stocks</span><strong>{scan?.universeCount ?? '—'}</strong></div>
+        <div><span>Fresh equity quotes</span><strong>{scan?.quotesChecked ?? '—'}</strong></div>
+        <div><span>Detailed chart checks</span><strong>{scan?.detailedChecked ?? '—'}</strong></div>
+        <div><span>Confirmed setups</span><strong>{watchlist.length}<small> / 10 max</small></strong></div>
       </div>
 
       <section className="stock-watch-panel">
         <div className="stock-panel-heading">
-          <div><span className="stock-scanner-eyebrow">RANKED MONITOR</span><h2>Top 10 Stock Options Watchlist</h2></div>
+          <div><span className="stock-scanner-eyebrow">SETUP-BASED RANKING</span><h2>Top 10 confirmed stock setups</h2></div>
           <span className="stock-panel-meta">5m direction · 3m confirmation</span>
         </div>
-        <p className="stock-explainer">A higher momentum score indicates closer alignment, <strong>not a probability of profit</strong>. WATCH means no qualified entry; CONFIRMED still requires a valid live option contract and risk check.</p>
+        <p className="stock-explainer">Only stocks with a completed breakout/retest or reversal confirmation on both 5-minute and 3-minute candles qualify for this ranking. The score reflects setup strength, <strong>not a probability of profit</strong>. Live option-contract and risk validation is a separate requirement. Last scan: {ist(scan?.generatedAt)}. Chart screening uses a dynamic subset of the eligible F&amp;O universe, not every chart simultaneously.</p>
         {loading && !scan && <div className="stock-scanner-loading" role="status">Checking FYERS prices, completed candles and option contracts…</div>}
         {!loading && scan?.status && !watchlist.length && <div className="stock-scanner-loading" role="status">{scan.status}</div>}
         {!watchlist.length && !loading && !scan && active && <div className="stock-scanner-loading">No stock scan returned yet. Select Scan now to retry.</div>}
@@ -142,7 +142,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
               <div className="stock-watch-prices"><strong>{money(row.spot)}</strong><small>{Number.isFinite(row.changePct) ? `${row.changePct >= 0 ? '+' : ''}${row.changePct.toFixed(2)}%` : '—'}</small></div>
               <div className="stock-watch-signal">
                 <span className={`stock-side ${row.side === 'CE' ? 'call' : row.side === 'PE' ? 'put' : ''}`}>{row.side || '—'}</span>
-                <small>{row.status === 'CONFIRMED' ? 'CONFIRMED' : row.status === 'UNAVAILABLE' ? 'UNAVAILABLE' : 'WATCH'}</small>
+                <small>{row.status === 'CONFIRMED' ? `SETUP ${row.score}/100` : 'UNAVAILABLE'}</small>
               </div>
             </div>
           ))}
@@ -160,7 +160,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <summary>Recorded stock research signals ({log.length})</summary>
         <div>{log.slice(0, 30).map(row => <p key={row.id}><strong>{row.stock} {row.side}</strong> · {row.strike} · {row.setup} · {row.lots} lots · risk {money(row.risk)} · {ist(row.recordedAt)}</p>)}</div>
       </details>
-      <p className="stock-scanner-disclaimer">Research and simulated positions only. Option prices, spreads and momentum can change before an order fills. NIFTY Normal and Scalp positions and journals are unaffected.</p>
+      <p className="stock-scanner-disclaimer">Research and simulated positions only. Rankings are not calibrated win probabilities. The scanner first screens live quotes across eligible F&amp;O stocks, then performs limited detailed candle checks; therefore it is not an exhaustive simultaneous chart scan. NIFTY Normal and Scalp logic and journals are unchanged.</p>
     </div>
   );
 }
