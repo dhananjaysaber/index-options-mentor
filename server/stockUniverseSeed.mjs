@@ -1,5 +1,6 @@
 // Local NSE equity derivatives screening universe.
-// Source: NSE "List of Underlyings and Information", 17 Nov 2026.
+// Reference screening symbols from NSE F&O underlyings; membership may change.
+// This is NOT a live list of all currently option-eligible instruments.
 // It is a *candidate universe*, not a list of top picks; each symbol is checked
 // against fresh FYERS equity quotes. Live option contract eligibility is
 // subsequently verified against FYERS's current master before any paper entry.
