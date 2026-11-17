@@ -19,6 +19,7 @@ import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetu
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
+import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
@@ -181,7 +182,9 @@ export default function AppV3() {
 
   useEffect(() => {
     if (!brokerStatus.authenticated) return undefined;
-    const timer = window.setInterval(refreshSnapshot, 15000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && isNseMarketHours()) void refreshSnapshot();
+    }, FYERS_REFRESH.mentorMs);
     return () => window.clearInterval(timer);
   }, [brokerStatus.authenticated]);
 
