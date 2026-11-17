@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FYERS_REFRESH, isNseMarketHours } from '../src/services/fyersRefreshPolicy.js';
+import { FYERS_REFRESH, fyersRefreshProfile, isNseMarketHours } from '../src/services/fyersRefreshPolicy.js';
 import { nextMarketOpenIST, installFyersRequestGuard } from '../src/services/fyersRequestGuard.js';
 
 test('Standard profile stays well within the 5,000-request budget for one visible trading tab', () => {
@@ -62,4 +62,33 @@ test('Daily FYERS 429 halts subsequent protected broker requests without disabli
     globalThis.window = previousWindow;
     globalThis.localStorage = previousStorage;
   }
+});
+
+test('Prime speed restores one-second quotes and four-second strategy updates', () => {
+  const prime = fyersRefreshProfile('prime');
+  assert.deepEqual(
+    [prime.quoteMs, prime.mentorMs, prime.chartMs, prime.scalpCandlesMs],
+    [1000, 4000, 4000, 4000]
+  );
+  const sessionMs = 375 * 60000; // 09:15–15:30 IST
+  const requests = Math.ceil(sessionMs / prime.quoteMs)
+    + 3 * Math.ceil(sessionMs / prime.mentorMs)
+    + Math.ceil(sessionMs / prime.chartMs)
+    + Math.ceil(sessionMs / prime.scalpCandlesMs);
+  const requestsPerMinute = 60000 / prime.quoteMs
+    + 3 * 60000 / prime.mentorMs
+    + 60000 / prime.chartMs
+    + 60000 / prime.scalpCandlesMs;
+  assert.ok(requests <= 500000, `Exceeded FYERS Prime daily limit: ${requests}`);
+  assert.ok(requestsPerMinute < 500, `Exceeded FYERS Prime minute limit: ${requestsPerMinute}`);
+  assert.ok(requests < 100000, 'Expected headroom for additional API reads');
+});
+
+test('Standard speed remains available as the fallback without changing strategy logic', () => {
+  const standard = fyersRefreshProfile('standard');
+  assert.deepEqual(
+    [standard.quoteMs, standard.mentorMs, standard.chartMs, standard.scalpCandlesMs],
+    [15000, 60000, 90000, 90000]
+  );
+  assert.equal(FYERS_REFRESH.tier, 'standard'); // default node test build, no VITE_FYERS_TIER
 });
