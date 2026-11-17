@@ -313,6 +313,7 @@ function fyersFailureResponse(error, fallback = 'FYERS market data is temporaril
       error: error.error || fallback,
       code: error.code,
       authRequired: error.authRequired === true,
+      limitScope: error.limitScope || null,
       detail: error.detail || ''
     }, error.status);
   }
