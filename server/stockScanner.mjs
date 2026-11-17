@@ -122,7 +122,7 @@ export function shortlistForSetups(rows, now = Date.now(), limit = MAX_DETAILED_
     const dayMove = open > 0 ? (lp - open) / open * 100 : Number(row.quote?.chp) || 0;
     const high = Number(row.quote?.high_price), low = Number(row.quote?.low_price);
     const rangePct = high > low && open > 0 ? (high - low) / open * 100 : 0;
-    const preScore = Math.min(8, Math.abs(dayMove)) + Math.min(4, rangePct) * .5;
+    const preScore = Math.abs(dayMove) * .75 + Math.min(4, rangePct) * .5;
     return { ...row, preScore, dayMove };
   }).filter(row => Number(row.quote?.lp) > 0)
     .sort((a, b) => b.preScore - a.preScore || a.stock.localeCompare(b.stock));
