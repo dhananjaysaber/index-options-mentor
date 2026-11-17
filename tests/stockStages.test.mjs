@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { equityScreeningSymbols, NSE_FNO_SCREENING_SEED } from '../server/stockUniverseSeed.mjs';
 import assert from 'node:assert/strict';
 import {
   runStockUniverse, runStockContext, runStockEntryCheck, analyseWeeklyDaily
@@ -39,7 +40,7 @@ test('progressive universe scan returns quote-based preliminary watches without 
       n: symbol, s: 'ok', v: { lp: 120 + i, open_price: 115, chp: 1.2, tt: now / 1000 }
     })) };
   };
-  const result = await runStockUniverse(get, 'universe-incremental-01', now, { master: baseMaster });
+  const result = await runStockUniverse(get, 'universe-incremental-01', now, { universe: Array.from({length: 4}, (_, i) => ({stock: 'SYM0'+(i+1), symbol:'NSE:SYM0'+(i+1)+'-EQ'})) });
   assert.equal(result.phase, 'universe');
   assert.equal(result.universeCount, 4);
   assert.equal(result.prescreen.length, 4);
@@ -110,4 +111,33 @@ test('stages do not fetch outside trading hours', async () => {
   const forbidden = async () => { throw Error('No broker traffic expected'); };
   const stage = await runStockUniverse(forbidden, 'closed-incremental', afterHours, { master: baseMaster });
   assert.match(stage.status, /outside NSE market hours/i);
+});
+
+test('fast initial scan uses exchange-derived broad reference pool, not a twelve-stock preset', async () => {
+  assert.ok(NSE_FNO_SCREENING_SEED.length > 100);
+  assert.ok(equityScreeningSymbols().some(row => row.stock === 'JIOFIN'));
+  assert.ok(equityScreeningSymbols().some(row => row.stock === 'YESBANK'));
+  assert.ok(equityScreeningSymbols().some(row => row.stock === 'LAURUSLABS'));
+  let quotes = 0, histories = 0, chains = 0;
+  const get = async (path, params) => {
+    if (path === '/history') histories++;
+    if (path === '/options-chain-v3') chains++;
+    assert.equal(path, '/quotes', 'initial watchlist must not download candles/options');
+    const all = params.symbols.split(',');
+    assert.ok(all.length <= 50);
+    quotes++;
+    return { d: all.map((symbol, i) => ({
+      n: symbol, s: 'ok', v: { lp: 110 + i, open_price: 100,
+        chp: i % 2 ? -2.2 : 1.8, high_price: 115, low_price: 95, tt: now / 1000 }
+    })) };
+  };
+  const result = await runStockUniverse(get, 'fast-seeded-universe-01', now);
+  assert.ok(result.universeCount > 100);
+  assert.equal(result.quotesChecked, result.universeCount);
+  assert.ok(result.prescreen.length > 0);
+  assert.ok(result.prescreen.length <= 12);
+  assert.ok(result.prescreen.every(row => ['CE','PE'].includes(row.side) && row.status === 'SCREENING'));
+  assert.ok(quotes > 1);
+  assert.equal(histories, 0);
+  assert.equal(chains, 0);
 });
