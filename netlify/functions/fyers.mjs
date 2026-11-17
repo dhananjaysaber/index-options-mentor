@@ -549,8 +549,11 @@ async function handleMentorSnapshot(request) {
 }
 
 async function handleStockScanner(request) {
-  // Explicit opt-in on the separate preview backend.
-  if (process.env.STOCK_SCANNER_ENABLED !== 'true') return json({ error: 'Stock Scanner preview is disabled.' }, 404);
+  const setting = process.env.STOCK_SCANNER_ENABLED;
+  const productionHost = new URL(request.url).hostname === 'optionsmentor.netlify.app';
+  if (setting !== 'true' && (setting === 'false' || !productionHost)) {
+    return json({ error: 'Stock Scanner is disabled.' }, 404);
+  }
   const auth = requireToken(request);
   if (auth.error) return auth.error;
   try {
