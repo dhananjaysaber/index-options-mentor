@@ -441,10 +441,19 @@ export default function AppV3() {
       {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
 
       <main className="mentor-v2-content">
+        {(view === 'dashboard' || view === 'stocks') && (
+          <StrategyModeBar
+            selectedMode={view === 'stocks' ? 'stocks' : strategyMode}
+            onSelect={next => {
+              if (next !== 'stocks') setStrategyMode(next);
+              navigate(next === 'stocks' ? 'stocks' : 'dashboard');
+            }}
+            corePosition={corePosition}
+            scalpPosition={scalpPosition}
+          />
+        )}
         {view === 'dashboard' && (
           <>
-            <StrategyModeBar strategyMode={strategyMode} setStrategyMode={setStrategyMode} corePosition={corePosition} scalpPosition={scalpPosition} />
-
             {strategyMode === 'scalp' ? (
               <ScalpMentorDashboard
                 snapshot={snapshot}
@@ -562,18 +571,27 @@ function ResearchStatus({ classification, position, settings, manualReady }) {
   );
 }
 
-function StrategyModeBar({ strategyMode, setStrategyMode, corePosition, scalpPosition }) {
-  const scalp = strategyMode === 'scalp';
+function StrategyModeBar({ selectedMode, onSelect, corePosition, scalpPosition }) {
+  const modes = [['core', 'Normal'], ['scalp', 'Scalp']];
+  if (stockScannerEnabled) modes.push(['stocks', 'Stock']);
+  const descriptions = {
+    core: '13-point Mentor · structured 5m strategy',
+    scalp: 'Scalp research · 5m context / 3m execution',
+    stocks: 'Stock Options · paper research'
+  };
   return (
-    <section className="strategy-mode-bar" aria-label="Strategy mode">
+    <section className="strategy-mode-bar mentor-mode-bar" aria-label="Strategy mode">
       <div className="strategy-mode-copy">
         <span>STRATEGY MODE</span>
-        <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
+        <strong>{descriptions[selectedMode]}</strong>
         <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'}</small>
       </div>
-      <button type="button" className={`scalp-mode-switch ${scalp ? 'active' : ''}`} onClick={() => setStrategyMode(scalp ? 'core' : 'scalp')} aria-pressed={scalp}>
-        <span>SCALP</span><i aria-hidden="true" />
-      </button>
+      <div className="segmented mentor-mode-selector" role="group" aria-label="Mentor views">
+        {modes.map(([value, label]) => (
+          <button key={value} type="button" className={selectedMode === value ? 'active' : ''}
+            aria-pressed={selectedMode === value} onClick={() => onSelect(value)}>{label}</button>
+        ))}
+      </div>
     </section>
   );
 }
@@ -582,10 +600,10 @@ function DesktopNav({ view, navigate, settings, setup, positionCount, corePositi
   return (
     <aside className="mentor-sidebar-v2">
       <div className="sidebar-section-label">WORKSPACE</div>
-      <NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" />
+      <NavButton active={view === 'dashboard' || view === 'stocks'} onClick={() => navigate(view === 'stocks' ? 'stocks' : 'dashboard')} icon="⌁" label="Mentor" />
       <button type="button" className={`sidebar-nav-button ${view === 'position' ? 'active' : ''}`} onClick={() => navigate('position')}><span>↗</span><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong></button>
       <NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" />
-      <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />{stockScannerEnabled && <NavButton active={view === 'stocks'} onClick={() => navigate('stocks')} icon="⌕" label="Stock Scanner" />}
+      <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />
       <NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" />
       <div className="sidebar-divider" />
       <div className="sidebar-section-label">AUTOMATION</div>
@@ -603,7 +621,7 @@ function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, 
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
         <div className={`drawer-connection ${authRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {authRequired ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
-        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />{stockScannerEnabled && <NavButton active={view === 'stocks'} onClick={() => navigate('stocks')} icon="⌕" label="Stock Scanner" />}<NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
+        <div className="drawer-nav"><NavButton active={view === 'dashboard' || view === 'stocks'} onClick={() => navigate(view === 'stocks' ? 'stocks' : 'dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
         <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /><span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${authRequired ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{authRequired ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>
