@@ -3,7 +3,8 @@ const POSITION_KEYS = [
   'index-options-mentor-core-position-v41',
   'index-options-mentor-scalp-position-v41'
 ];
-const POLL_MS = 2000;
+const POSITION_POLL_MS = 2000;
+const WATCH_POLL_MS = 6000;
 
 let installed = false;
 let previousFetch = null;
@@ -13,6 +14,7 @@ let timer = null;
 let inFlight = false;
 let nextPollAfter = 0;
 let throttleDelay = 0;
+let lastPollAt = 0;
 
 export function installLiveQuoteFeed() {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return;
@@ -61,7 +63,7 @@ function ensureTimer() {
   if (timer) return;
   timer = window.setInterval(() => {
     if (document.visibilityState === 'visible') void pollLiveQuote();
-  }, POLL_MS);
+  }, POSITION_POLL_MS);
 }
 
 function stopTimer() {
@@ -72,11 +74,15 @@ function stopTimer() {
 
 async function pollLiveQuote() {
   if (!authenticated || inFlight || document.visibilityState !== 'visible' || Date.now() < nextPollAfter) return;
+  const openPositions = readOpenPositions();
+  const pollMs = openPositions.length ? POSITION_POLL_MS : WATCH_POLL_MS;
+  const now = Date.now();
+  if (now - lastPollAt < pollMs) return;
+  lastPollAt = now;
   inFlight = true;
   try {
     // One poll serves the current candidate and both independently open strategies.
     // Avoid a second 2-second FYERS loop when a simulated position opens.
-    const openPositions = readOpenPositions();
     const optionSymbol = openPositions[0]?.symbol || candidateSymbol || '';
     const symbols = [...new Set([
       'NSE:NIFTY50-INDEX',
@@ -117,7 +123,7 @@ async function pollLiveQuote() {
       optionSymbol,
       optionPrices,
       at: new Date().toISOString(),
-      pollMs: POLL_MS
+      pollMs
     };
     window.__indexOptionsLiveQuote = quote;
     window.dispatchEvent(new CustomEvent('mentor:live-quote', { detail: quote }));
