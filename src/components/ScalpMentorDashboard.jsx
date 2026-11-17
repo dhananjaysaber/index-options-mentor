@@ -190,6 +190,8 @@ export default function ScalpMentorDashboard({
           snapshot={snapshot}
           position={position?.strategyFamily === 'SCALP' ? position : null}
           defaultTimeframe="3"
+          executionCandles={candles}
+          marketDataReady={marketDataReady}
           strategyNote="Scalp mode uses 5-minute directional context and 3-minute execution. The 5-minute tab is available for context."
         />
       </section>
