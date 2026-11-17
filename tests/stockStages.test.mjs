@@ -1,0 +1,113 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  runStockUniverse, runStockContext, runStockEntryCheck, analyseWeeklyDaily
+} from '../server/stockStages.mjs';
+
+const now = Date.parse('2026-11-17T09:20:00Z'); // 14:50 IST
+const expiry = Math.floor(Date.parse('2026-11-26T10:00:00Z') / 1000);
+const baseMaster = {};
+for (let i = 1; i <= 4; i++) {
+  const code = 'SYM' + String(i).padStart(2, '0');
+  baseMaster[code + 'CE'] = { optType: 'CE', underSym: code, expiryDate: expiry, minLotSize: 100, tradeStatus: 1 };
+  baseMaster[code + 'PE'] = { optType: 'PE', underSym: code, expiryDate: expiry, minLotSize: 100, tradeStatus: 1 };
+}
+function makeDaily(direction = 1) {
+  const first = Date.parse('2026-10-25T03:45:00Z') / 1000;
+  return Array.from({length: 14}, (_, i) => {
+    const price = 100 + direction * i * 2;
+    return [first + i * 86400, price - 1, price + 2, price - 2, price, 1000 + i * 100];
+  });
+}
+function makeWeekly(direction = 1) {
+  const first = Date.parse('2026-09-21T03:45:00Z') / 1000;
+  return Array.from({length: 8}, (_, i) => {
+    const price = 90 + direction * i * 3;
+    return [first + i * 7 * 86400, price - 1, price + 2, price - 2, price, 1000 + i * 300];
+  });
+}
+
+test('progressive universe scan returns quote-based preliminary watches without requesting any candles', async () => {
+  let quotes = 0, histories = 0;
+  const get = async (path, params) => {
+    if (path === '/history') { histories++; throw Error('Pre-screen must never call history'); }
+    if (path !== '/quotes') throw Error('Unexpected endpoint: ' + path);
+    quotes++;
+    const symbols = params.symbols.split(',');
+    assert.ok(symbols.length <= 50);
+    return { d: symbols.map((symbol, i) => ({
+      n: symbol, s: 'ok', v: { lp: 120 + i, open_price: 115, chp: 1.2, tt: now / 1000 }
+    })) };
+  };
+  const result = await runStockUniverse(get, 'universe-incremental-01', now, { master: baseMaster });
+  assert.equal(result.phase, 'universe');
+  assert.equal(result.universeCount, 4);
+  assert.equal(result.prescreen.length, 4);
+  assert.ok(result.prescreen.every(row => row.status === 'SCREENING'));
+  assert.equal(quotes, 1);
+  assert.equal(histories, 0);
+});
+
+test('weekly/daily bullish alignment is displayed on WATCH rather than hidden until intraday entry', async () => {
+  const context = analyseWeeklyDaily(makeDaily(1), makeWeekly(1), now, 128);
+  assert.equal(context.weekBias, 'BULLISH');
+  assert.equal(context.dayBias, 'BULLISH');
+  assert.equal(context.side, 'CE');
+  assert.equal(context.status, 'WATCH');
+  assert.ok(context.score >= 60);
+});
+
+test('weekly/daily bearish alignment creates PE WATCH', () => {
+  const context = analyseWeeklyDaily(makeDaily(-1), makeWeekly(-1), now, 64);
+  assert.equal(context.weekBias, 'BEARISH');
+  assert.equal(context.dayBias, 'BEARISH');
+  assert.equal(context.side, 'PE');
+});
+
+test('context stage returns watch candidates even without 5m/3m triggers or option chain', async () => {
+  let calls = 0;
+  const get = async (path, params) => {
+    calls++;
+    if (path === '/quotes') return {
+      d: params.symbols.split(',').map(symbol => ({
+        n: symbol, s: 'ok', v: { lp: 128, chp: 1.3, tt: now / 1000 }
+      }))
+    };
+    if (path === '/history') {
+      assert.ok(['1D', '1W'].includes(params.resolution));
+      return { candles: params.resolution === '1D' ? makeDaily(1) : makeWeekly(1) };
+    }
+    throw Error('Unexpected option request before entry stage: ' + path);
+  };
+  const result = await runStockContext(get, 'context-incremental-01', now, {
+    symbols: 'NSE:SYM01-EQ,NSE:SYM02-EQ'
+  });
+  assert.equal(result.phase, 'context');
+  assert.equal(result.contextChecked, 2);
+  assert.equal(result.watchlist.length, 2);
+  assert.ok(result.watchlist.every(item => item.side === 'CE' && item.status === 'WATCH'));
+  assert.equal(calls, 5);
+});
+
+test('entry checks return no paper order if 5m/3m confirmation is absent', async () => {
+  let chainCalls = 0;
+  const get = async (path) => {
+    if (path === '/history') return { candles: [] };
+    if (path === '/options-chain-v3') { chainCalls++; throw Error('No chain should be requested'); }
+    throw Error('Unexpected call: ' + path);
+  };
+  const result = await runStockEntryCheck(get, 'entry-incremental-01', now, {
+    symbols: 'NSE:SYM01-EQ', bias: 'SYM01:CE'
+  }, { master: baseMaster });
+  assert.equal(result.phase, 'entry');
+  assert.equal(result.detailedChecked, 1);
+  assert.equal(result.candidates.length, 0);
+  assert.equal(chainCalls, 0);
+});
+
+test('stages do not fetch outside trading hours', async () => {
+  const afterHours = Date.parse('2026-11-17T11:15:00Z');
+  const forbidden = async () => { throw Error('No broker traffic expected'); };
+  const stage = await runStockUniverse(forbidden, 'closed-incremental', afterHours, { master: baseMaster });
+  assert.match(stage.status, /outside NSE market hours/i);
+});

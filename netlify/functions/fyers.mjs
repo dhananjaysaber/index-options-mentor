@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { runStockScan } from '../../server/stockScanner.mjs';
+import { runStockUniverse, runStockContext, runStockEntryCheck } from '../../server/stockStages.mjs';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
@@ -38,13 +39,14 @@ function configured(request) {
 
 function authHeader(accessToken) { return `${appId()}:${accessToken}`; }
 
-async function fyersGet(path, params, accessToken) {
+async function fyersGet(path, params, accessToken, options = {}) {
   const url = new URL(`${DATA_BASE}${path}`);
   for (const [key, value] of Object.entries(params || {})) {
     if (value !== undefined && value !== null && value !== '') url.searchParams.set(key, String(value));
   }
 
   const response = await fetch(url, {
+    signal: options.signal,
     headers: {
       Authorization: authHeader(accessToken),
       'Content-Type': 'application/json',
@@ -561,7 +563,25 @@ async function handleStockScanner(request) {
   if (auth.error) return auth.error;
   try {
     const scope = crypto.createHash('sha256').update(auth.token).digest('hex');
-    return json(await runStockScan((path, params) => fyersGet(path, params, auth.token), scope));
+    const params = new URL(request.url).searchParams;
+    const phase = params.get('phase') || 'universe';
+    // Limit each external Stock-only FYERS call; a slow quote must never
+    // block the whole function until the Netlify 30-second gateway timeout.
+    const get = (path, args) => fyersGet(path, args, auth.token, { signal: AbortSignal.timeout(6500) });
+    const query = {
+      symbols: params.get('symbols') || '',
+      bias: params.get('bias') || ''
+    };
+    const now = Date.now();
+    const results = phase === 'universe'
+      ? await runStockUniverse(get, scope, now)
+      : phase === 'context'
+        ? await runStockContext(get, scope, now, query)
+        : phase === 'entry'
+          ? await runStockEntryCheck(get, scope, now, query)
+          : null;
+    if (!results) return json({ error: 'Unknown stock scanner phase.' }, 400);
+    return json(results);
   } catch (error) {
     console.error('Stock scan unavailable:', error?.code || error?.message);
     return fyersFailureResponse(error, 'Stock scanner data is temporarily unavailable.');

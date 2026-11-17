@@ -18,49 +18,97 @@ function readLog() {
 
 export default function StockScanner({ active, settings, onCloseTrade }) {
   const [scan, setScan] = useState(null);
+  const [stage, setStage] = useState('');
   const [now, setNow] = useState(Date.now);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
   const [log, setLog] = useState(readLog);
   const [storageError, setStorageError] = useState(false);
-  const cards = useMemo(() => rankStockCandidates(scan?.candidates || [], settings, now), [scan, settings, now]);
+  const cards = useMemo(() => rankStockCandidates((scan?.candidates || []).filter(item =>
+    (scan?.contextWatchlist || []).some(watch => watch.stock === item.stock && watch.side === item.side)
+  ), settings, now), [scan, settings, now]);
   const watchlist = scan?.watchlist || [];
 
+  // Progressive Stock-only scan: never block the watchlist while waiting for
+  // completed 5m/3m candles, option chain or market depth.
   useEffect(() => {
     if (!active) return undefined;
     let stopped = false;
     let timer = null;
     let controller = null;
+    async function request(phase, args = '') {
+      controller = new AbortController();
+      const url = '/api/fyers/stock-scanner?phase=' + phase + args;
+      const response = await fetch(url, {
+        cache: 'no-store',
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18000)])
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(response.status === 401
+        ? 'Reconnect FYERS to start Stock research.'
+        : data.error || ('FYERS ' + phase + ' scan returned HTTP ' + response.status));
+      return data;
+    }
     async function refresh() {
-      let delay = 30000;
+      let delay = 60000;
       if (document.visibilityState === 'hidden') {
         if (!stopped) timer = window.setTimeout(refresh, delay);
         return;
       }
       setLoading(true);
-      controller = new AbortController();
+      setError('');
       try {
-        const response = await fetch('/api/fyers/stock-scanner', {
-          cache: 'no-store',
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(26000)])
-        });
-        const data = await response.json().catch(() => ({}));
-        if (response.status === 429) delay = data.limitScope === 'daily' ? 60000 : 90000;
-        if (!response.ok) throw new Error(response.status === 401 ? 'Reconnect FYERS to scan stock options.' : data.error || 'The stock option scanner is unavailable.');
-        if (!stopped) {
-          setScan(data);
-          setError('');
-          setNow(Date.now());
-        }
+        setStage('Scanning active NSE F&O stocks');
+        const universe = await request('universe');
+        if (stopped) return;
+        setNow(Date.now());
+        setScan(current => ({ ...current, ...universe, candidates: [],
+          contextWatchlist: [], watchlist: universe.prescreen || [], detailedChecked: 0 }));
+        const shortlist = (universe.prescreen || []).slice(0, 12);
+        if (!shortlist.length) { setStage(''); return; }
+
+        setStage('Checking completed weekly and daily trends');
+        const context = await request('context', '&symbols=' + encodeURIComponent(shortlist.map(item => item.symbol).join(',')));
+        if (stopped) return;
+        setScan(current => ({
+          ...current, ...context, candidates: [], universeCount: universe.universeCount,
+          quotesChecked: universe.quotesChecked,
+          prescreen: universe.prescreen,
+          contextWatchlist: context.watchlist || [],
+          watchlist: context.watchlist?.length ? context.watchlist : universe.prescreen,
+          status: context.status
+        }));
+        setNow(Date.now());
+
+        const qualified = (context.watchlist || []).slice(0, 5);
+        if (!qualified.length) { setStage(''); return; }
+        setStage('Checking 5-minute/3-minute entry triggers');
+        const symbols = qualified.map(row => row.symbol).join(',');
+        const bias = qualified.map(row => row.stock + ':' + row.side).join(',');
+        const entries = await request('entry',
+          '&symbols=' + encodeURIComponent(symbols) + '&bias=' + encodeURIComponent(bias));
+        if (stopped) return;
+        setScan(current => ({
+          ...current, candidates: entries.candidates || [],
+          detailedChecked: entries.detailedChecked || 0,
+          entryStatus: entries.status, entryFailures: entries.failures || []
+        }));
+        setStage('');
+        setNow(Date.now());
       } catch (failure) {
-        if (!stopped && failure.name !== 'AbortError') {
-          setError(failure.message || 'Could not load fresh stock data.');
-          // Keep the latest successful list visible, but do not allow stale
-          // paper entries — ranked cards expire automatically.
+        if (!stopped && failure?.name !== 'AbortError') {
+          setError(failure?.name === 'TimeoutError'
+            ? 'A Stock data stage timed out. The last watchlist is kept; try Scan now.'
+            : failure.message || 'Stock data temporarily unavailable.');
+          delay = 90000;
         }
       } finally {
-        if (!stopped) { setLoading(false); timer = window.setTimeout(refresh, delay); }
+        if (!stopped) {
+          setLoading(false);
+          setStage('');
+          timer = window.setTimeout(refresh, delay);
+        }
       }
     }
     void refresh();
@@ -102,11 +150,11 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <div>
           <span className="stock-scanner-eyebrow">FYERS PRIME · NSE F&O · SEPARATE RESEARCH</span>
           <h1>Stock Options Mentor</h1>
-          <p>Up to 10 of the strongest confirmed 5-minute and 3-minute stock-option setups. No preset company list and no filler trades.</p>
+          <p>First identify bullish and bearish weekly/daily setups across NSE F&amp;O. Then look for completed 5-minute and 3-minute entry triggers. The watchlist stays visible while entries are checked.</p>
         </div>
         <div className="stock-scanner-actions">
           <span className={error ? 'stock-status warn' : active && scan ? 'stock-status live' : 'stock-status'}>
-            <i aria-hidden="true" /> {error ? 'Data warning' : active && scan ? 'Data received' : 'Waiting for FYERS'}
+            <i aria-hidden="true" /> {error ? 'Stock data warning' : stage ? 'Scanning FYERS' : active && scan ? 'Watchlist updated' : active ? 'Checking FYERS' : 'Reconnect FYERS'}
           </span>
           <button type="button" className="stock-refresh-button" onClick={() => setReload(value => value + 1)}
             disabled={!active || loading}>{loading ? 'Scanning…' : 'Scan now'}</button>
@@ -121,28 +169,28 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       <div className="stock-scanner-stats">
         <div><span>Eligible F&amp;O stocks</span><strong>{scan?.universeCount ?? '—'}</strong></div>
         <div><span>Fresh equity quotes</span><strong>{scan?.quotesChecked ?? '—'}</strong></div>
-        <div><span>Detailed chart checks</span><strong>{scan?.detailedChecked ?? '—'}</strong></div>
-        <div><span>Confirmed setups</span><strong>{watchlist.length}<small> / 10 max</small></strong></div>
+        <div><span>Weekly/daily assessed</span><strong>{scan?.contextChecked ?? '—'}</strong></div>
+        <div><span>Watch candidates</span><strong>{scan?.contextWatchlist?.length ?? '—'}<small> / 10 max</small></strong></div>
       </div>
 
       <section className="stock-watch-panel">
         <div className="stock-panel-heading">
-          <div><span className="stock-scanner-eyebrow">SETUP-BASED RANKING</span><h2>Top 10 confirmed stock setups</h2></div>
-          <span className="stock-panel-meta">5m direction · 3m confirmation</span>
+          <div><span className="stock-scanner-eyebrow">WEEKLY + DAILY CONTEXT</span><h2>Bullish and bearish Stock watchlist</h2></div>
+          <span className="stock-panel-meta">Weekly / Daily → 5m / 3m</span>
         </div>
-        <p className="stock-explainer">Only stocks with a completed breakout/retest or reversal confirmation on both 5-minute and 3-minute candles qualify for this ranking. The score reflects setup strength, <strong>not a probability of profit</strong>. Live option-contract and risk validation is a separate requirement. Last scan: {ist(scan?.generatedAt)}. Chart screening uses a dynamic subset of the eligible F&amp;O universe, not every chart simultaneously.</p>
-        {loading && !scan && <div className="stock-scanner-loading" role="status">Checking FYERS prices, completed candles and option contracts…</div>}
-        {!loading && scan?.status && !watchlist.length && <div className="stock-scanner-loading" role="status">{scan.status}</div>}
+        <p className="stock-explainer">Market movers are pre-screened from the NSE F&amp;O universe. A <strong>WATCH</strong> requires aligned completed weekly and daily bullish/bearish structure; the 5-minute/3-minute trigger is checked separately. A <strong>SCREENING</strong> row has not passed the weekly/daily checks yet. Scores reflect rule-based context, not win probability. Last response: {ist(scan?.generatedAt)}.</p>
+        {loading && <div className="stock-scanner-loading" role="status">{stage || 'Checking FYERS market data…'}{scan?.watchlist?.length ? ' · Watchlist remains visible below' : ''}</div>}
+        {!loading && scan?.status && <div className="stock-scanner-loading" role="status">{scan.status}</div>}
         {!watchlist.length && !loading && !scan && active && <div className="stock-scanner-loading">No stock scan returned yet. Select Scan now to retry.</div>}
         {!!watchlist.length && <div className="stock-watch-grid">
           {watchlist.map((row, i) => (
-            <div className={`stock-watch-item ${row.status === 'CONFIRMED' ? 'confirmed' : ''}`} key={row.stock}>
+            <div className={`stock-watch-item ${row.status === 'WATCH' ? 'confirmed' : ''}`} key={row.stock}>
               <div className="stock-watch-rank">{String(i + 1).padStart(2, '0')}</div>
-              <div className="stock-watch-identity"><strong>{row.stock}</strong><small>{row.reason || 'Monitoring market'}</small></div>
+              <div className="stock-watch-identity"><strong>{row.stock}</strong><small>{row.reason || 'Monitoring market'}</small>{row.weekBias && <small>Week: {row.weekBias} · Day: {row.dayBias}</small>}</div>
               <div className="stock-watch-prices"><strong>{money(row.spot)}</strong><small>{Number.isFinite(row.changePct) ? `${row.changePct >= 0 ? '+' : ''}${row.changePct.toFixed(2)}%` : '—'}</small></div>
               <div className="stock-watch-signal">
                 <span className={`stock-side ${row.side === 'CE' ? 'call' : row.side === 'PE' ? 'put' : ''}`}>{row.side || '—'}</span>
-                <small>{row.status === 'CONFIRMED' ? `SETUP ${row.score}/100` : 'UNAVAILABLE'}</small>
+                <small>{row.status === 'WATCH' ? `WATCH ${row.score}/100` : row.status === 'SCREENING' ? 'SCREENING' : 'NO DATA'}</small>
               </div>
             </div>
           ))}
@@ -152,7 +200,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       <section className="stock-trade-panel">
         <div className="stock-panel-heading"><div><span className="stock-scanner-eyebrow">SEPARATE PAPER STRATEGY</span><h2>Confirmed stock option setups</h2></div><span className="stock-panel-meta">{cards.length} eligible</span></div>
         <p className="stock-explainer">Paper trades only. Validated FYERS expiry and lot size, current bid/ask depth and capital/risk limits are required. No live broker orders are placed here.</p>
-        {active && scan && !cards.length && <p className="stock-scanner-empty">No stock option currently meets the completed-candle, liquidity and risk checks. The ranked watchlist remains visible above.</p>}
+        {active && scan && !cards.length && <p className="stock-scanner-empty">{scan.entryStatus || 'No paper-ready 5-minute/3-minute option entry yet. Weekly/daily watch candidates remain visible above.'}</p>}
         <StockPaperPosition cards={cards} settings={settings} onCloseTrade={onCloseTrade} />
       </section>
 
@@ -160,7 +208,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <summary>Recorded stock research signals ({log.length})</summary>
         <div>{log.slice(0, 30).map(row => <p key={row.id}><strong>{row.stock} {row.side}</strong> · {row.strike} · {row.setup} · {row.lots} lots · risk {money(row.risk)} · {ist(row.recordedAt)}</p>)}</div>
       </details>
-      <p className="stock-scanner-disclaimer">Research and simulated positions only. Rankings are not calibrated win probabilities. The scanner first screens live quotes across eligible F&amp;O stocks, then performs limited detailed candle checks; therefore it is not an exhaustive simultaneous chart scan. NIFTY Normal and Scalp logic and journals are unchanged.</p>
+      <p className="stock-scanner-disclaimer">Research and paper trades only. Weekly/daily context is based on completed historical candles; current quote movement is screened separately. The live Stock option trade stage checks at most five watch candidates per scan. This is not an exhaustive scan of all F&amp;O charts and does not recreate FYERS' proprietary OI Watch rankings. Normal and Scalp remain unchanged.</p>
     </div>
   );
 }
