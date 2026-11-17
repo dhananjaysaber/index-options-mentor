@@ -61,6 +61,7 @@ export default function AppV3() {
   const [liveError, setLiveError] = useState('');
   const [authRequired, setAuthRequired] = useState(false);
   const snapshotRequestRef = useRef(false);
+  const snapshotBackoffRef = useRef({ until: 0, delay: 0 });
   const [clockTick, setClockTick] = useState(0);
   const [theme, setTheme] = useState(() => readString(THEME_KEY, 'light') === 'dark' ? 'dark' : 'light');
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...readJson(SETTINGS_KEY, {}) }));
@@ -127,7 +128,7 @@ export default function AppV3() {
 
   async function refreshSnapshot(options = {}) {
     // The 15-second timer must not stack expensive FYERS snapshot requests.
-    if (snapshotRequestRef.current) return null;
+    if (snapshotRequestRef.current || Date.now() < snapshotBackoffRef.current.until) return null;
     snapshotRequestRef.current = true;
     const manual = options?.manual === true;
     if (manual) setRefreshing(true);
@@ -135,7 +136,14 @@ export default function AppV3() {
       const response = await fetch('/api/fyers/mentor-snapshot', { cache: 'no-store' });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        const failure = new Error(data.error || 'Live Mentor data is temporarily unavailable.');
+        const throttled = response.status === 429;
+        if (throttled) {
+          const delay = Math.min(120000, (snapshotBackoffRef.current.delay || 15000) * 2);
+          snapshotBackoffRef.current = { until: Date.now() + delay, delay };
+        }
+        const failure = new Error(throttled
+          ? `FYERS limited market data. Mentor will retry in about ${snapshotBackoffRef.current.delay / 1000} seconds.`
+          : data.error || 'Live Mentor data is temporarily unavailable.');
         // A server-side calculation/market-data error is NOT proof of an
         // expired FYERS session. Reconnect only for a recognised auth failure.
         failure.authRequired = response.status === 401
@@ -145,6 +153,7 @@ export default function AppV3() {
       }
       const data = await response.json();
       if (!data || data.ok === false) throw new Error('FYERS returned an incomplete Mentor snapshot.');
+      snapshotBackoffRef.current = { until: 0, delay: 0 };
       setSnapshot(data);
       setLiveError('');
       setAuthRequired(false);
