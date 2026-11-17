@@ -97,7 +97,7 @@ async function scan(get, scope, now) {
   const quote = await get('/quotes', { symbols: watchlist.map(symbolFor).join(',') });
   const failures = [];
 
-  const checked = await mapLimited(watchlist, 3, async stock => {
+  const checked = await mapLimited(watchlist, 2, async stock => {
     const symbol = symbolFor(stock);
     const underlying = quoteValue(quote, symbol);
     if (!underlying || !(Number(underlying.lp) > 0)) return { stock, status: 'UNAVAILABLE', reason: 'No fresh FYERS equity quote' };
