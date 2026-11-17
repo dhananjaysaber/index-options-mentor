@@ -15,5 +15,5 @@ export function rankStockCandidates(candidates, settings, now = Date.now()) {
         candidate.ask * quantity + 100 > capital || risk > budget || reward < 1.2 * risk) return [];
     return [{ ...candidate, quantity, lots, risk, reward, ratio: reward / risk }];
   }).sort((a, b) => b.ratio - a.ratio || (a.ask - a.bid) - (b.ask - b.bid) ||
-    Math.min(b.askSize, b.bidSize) - Math.min(a.askSize, a.bidSize)).slice(0, 3);
+    Math.min(b.askSize, b.bidSize) - Math.min(a.askSize, a.bidSize)).slice(0, 10);
 }
