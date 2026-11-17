@@ -1,15 +1,15 @@
-// FYERS Standard has a 5,000 market-data requests/day allowance. Keep ample
-// headroom for chart switches, research, reconnection and manual refreshes.
-// To use faster polling AFTER upgrading FYERS, set VITE_FYERS_TIER=prime
-// for the frontend build; there is no need to change strategy rules.
+// FYERS API rate limits changed on 16 October 2026.
+// Standard: 5,000/day, 50/min; Prime: 500,000/day, 500/min.
+// Keep the strategy engine unchanged: only the market-data refresh rates differ.
+// Prime REST is faster than Standard REST but is NOT a tick-by-tick WebSocket.
 const prime = import.meta.env?.VITE_FYERS_TIER === 'prime';
 
 export const FYERS_REFRESH = Object.freeze(prime ? {
   tier: 'prime',
-  quoteMs: 2000,
-  mentorMs: 15000,
-  chartMs: 30000,
-  scalpCandlesMs: 45000
+  quoteMs: 1000,
+  mentorMs: 4000,
+  chartMs: 4000,
+  scalpCandlesMs: 4000
 } : {
   tier: 'standard',
   quoteMs: 15000,
