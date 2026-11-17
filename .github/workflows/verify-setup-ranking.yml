@@ -1,0 +1,23 @@
+name: Verify setup-ranked Stock Options
+on:
+  push:
+    branches: [fix/stock-setup-ranking-2026-11-17]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_API_BASE: https://optionsmentor.netlify.app
+          VITE_PUBLIC_BASE: /index-options-mentor-pwa/
+          VITE_FYERS_TIER: prime
