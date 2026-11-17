@@ -46,12 +46,19 @@ export async function runStockUniverse(get, scope, now = Date.now(), options = {
 
   const batches = [];
   for (let i = 0; i < universe.length; i += quoteBatchSize) batches.push(universe.slice(i, i + quoteBatchSize));
+  const failures = [];
   const batchResults = await mapLimited(batches, 3, async batch => {
-    const quotes = await get('/quotes', { symbols: batch.map(row => row.symbol).join(',') });
-    return batch.flatMap(row => {
-      const price = quoteValue(quotes, row.symbol, now);
-      return price && Number(price.lp) > 0 ? [{ ...row, quote: price }] : [];
-    });
+    try {
+      const quotes = await get('/quotes', { symbols: batch.map(row => row.symbol).join(',') });
+      return batch.flatMap(row => {
+        const price = quoteValue(quotes, row.symbol, now);
+        return price && Number(price.lp) > 0 ? [{ ...row, quote: price }] : [];
+      });
+    } catch (error) {
+      if (error?.status === 429 || error?.status === 401) throw error;
+      failures.push(error?.message || 'One FYERS quote batch timed out');
+      return [];
+    }
   });
   const quoted = batchResults.flat();
   const selected = shortlistForSetups(quoted, now, 12);
@@ -63,9 +70,10 @@ export async function runStockUniverse(get, scope, now = Date.now(), options = {
     reason: (Number(row.dayMove) >= 0 ? 'Bullish' : 'Bearish') + ' intraday mover; weekly/daily trend not yet verified'
   }));
   return { ...base, universeCount: universe.length, quotesChecked: quoted.length,
-    source: 'NSE F&O screening pool (trade eligibility confirmed at entry)',
+    source: 'Reference NSE F&O screening pool; confirm current exchange eligibility at entry',
     prescreen, watchlist: prescreen, contextChecked: 0, detailedChecked: 0,
-    status: prescreen.length ? null : 'No fresh FYERS equity quotes were received.' };
+    quoteBatchErrors: failures.length,
+    status: prescreen.length ? null : 'No fresh FYERS equity quotes received. Market data may be unavailable.' };
 }
 
 // Weekly/daily history remains cached until the next closed day or week;
