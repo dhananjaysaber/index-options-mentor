@@ -47,31 +47,72 @@ test('stock endpoint defaults to production and both routes require a session', 
 });
 
 
-test('scanner returns a top-ten watchlist without inventing option entries when no completed setup exists', async () => {
+test('universe is derived from active FYERS NSE stock-option contracts, not preset stock names', async () => {
+  const { deriveFnoUniverse } = await import('../server/stockScanner.mjs');
+  const now = Date.parse('2026-11-17T08:50:00Z');
+  const expiry = Math.floor(Date.parse('2026-11-26T10:00:00Z') / 1000);
+  const master = {
+    'NSE:ABC26NOVCE': { optType: 'CE', underSym: 'ABC', expiryDate: expiry, tradeStatus: 1, minLotSize: 200 },
+    'NSE:ABC26NOVPE': { optType: 'PE', underSym: 'ABC', expiryDate: expiry, tradeStatus: 1, minLotSize: 200 },
+    'NSE:OTHERCE': { optType: 'CE', underSym: 'OTHER', expiryDate: expiry, tradeStatus: 1, minLotSize: 200 },
+    'NSE:NIFTYCE': { optType: 'CE', underSym: 'NIFTY', expiryDate: expiry, tradeStatus: 1, minLotSize: 75 },
+    'NSE:NIFTYPE': { optType: 'PE', underSym: 'NIFTY', expiryDate: expiry, tradeStatus: 1, minLotSize: 75 },
+    'NSE:EXPIREDCE': { optType: 'CE', underSym: 'EXP', expiryDate: now / 1000 - 100, tradeStatus: 1, minLotSize: 100 },
+    'NSE:EXPIREDPE': { optType: 'PE', underSym: 'EXP', expiryDate: now / 1000 - 100, tradeStatus: 1, minLotSize: 100 }
+  };
+  assert.deepEqual(deriveFnoUniverse(master, now), [{ stock: 'ABC', symbol: 'NSE:ABC-EQ' }]);
+});
+
+test('only actual confirmed 5m/3m setups are ranked: no padding to ten', async () => {
   const { runStockScan } = await import('../server/stockScanner.mjs');
   const now = Date.parse('2026-11-17T08:50:00Z'); // 14:20 IST
   const originalNow = Date.now;
   Date.now = () => now;
+  const expiry = Math.floor(Date.parse('2026-11-26T10:00:00Z') / 1000);
+  const master = {};
+  for (let i = 1; i <= 12; i += 1) {
+    const name = 'STK' + String(i).padStart(3, '0');
+    master[name + 'CE'] = { optType: 'CE', underSym: name, expiryDate: expiry, minLotSize: 100, tradeStatus: 1 };
+    master[name + 'PE'] = { optType: 'PE', underSym: name, expiryDate: expiry, minLotSize: 100, tradeStatus: 1 };
+  }
   let quoteCalls = 0, historyCalls = 0, optionCalls = 0;
   try {
     const get = async (path, params) => {
       if (path === '/quotes') {
         quoteCalls += 1;
-        return { d: params.symbols.split(',').map(symbol => ({
-          n: symbol, s: 'ok', v: { lp: 100, chp: 0.2, tt: now / 1000 }
+        const symbols = params.symbols.split(',');
+        assert.ok(symbols.length <= 50, 'Must respect FYERS GET quotes 50-symbol limit');
+        return { d: symbols.map(symbol => ({
+          n: symbol, s: 'ok', v: { lp: 100, open_price: 99, high_price: 104,
+            low_price: 96, chp: 0.2, tt: now / 1000 }
         })) };
       }
       if (path === '/history') { historyCalls += 1; return { candles: [] }; }
-      if (path === '/options-chain-v3') { optionCalls += 1; throw Error('Should not fetch options without a completed setup'); }
-      throw Error(`Unexpected endpoint: ${path}`);
+      if (path === '/options-chain-v3') { optionCalls += 1; throw Error('No option chains without structural setup'); }
+      throw Error('Unexpected endpoint: ' + path);
     };
-    const result = await runStockScan(get, 'stock-top-ten-test', now);
-    assert.equal(result.watchlist.length, 10);
+    const result = await runStockScan(get, 'stock-dynamic-test', now, { master });
+    assert.equal(result.universeCount, 12);
+    assert.equal(result.quotesChecked, 12);
+    assert.equal(result.detailedChecked, 12);
+    assert.equal(result.watchlist.length, 0, 'No setups means zero recommendations, not ten preset names');
     assert.equal(result.candidates.length, 0);
-    assert.equal(quoteCalls, 1, 'Quotes for the watchlist are batched');
+    assert.equal(quoteCalls, 1, 'Quotes are batched');
     assert.equal(historyCalls, 24);
-    assert.equal(optionCalls, 0, 'No speculative option symbols are invented');
+    assert.equal(optionCalls, 0);
   } finally { Date.now = originalNow; }
+});
+
+test('large F&O universe is shortlisted dynamically and never polls over 50 symbols in one quote request', async () => {
+  const { shortlistForSetups } = await import('../server/stockScanner.mjs');
+  const rows = Array.from({ length: 200 }, (_, i) => ({
+    stock: 'STK' + i, symbol: 'NSE:STK' + i + '-EQ',
+    quote: { lp: 100 + i, open_price: 100, chp: i / 2, high_price: 200, low_price: 95 }
+  }));
+  const selected = shortlistForSetups(rows, Date.parse('2026-11-17T08:50:00Z'));
+  assert.equal(selected.length, 24);
+  assert.equal(new Set(selected.map(row => row.stock)).size, 24);
+  assert.ok(selected.some(row => row.stock === 'STK199'), 'Strongest daily mover should be considered');
 });
 
 test('scanner outside market hours makes zero FYERS requests', async () => {
