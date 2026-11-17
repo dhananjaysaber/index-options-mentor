@@ -1,4 +1,5 @@
 import { stockSetup } from './stockSignals.mjs';
+import { equityScreeningSymbols } from './stockUniverseSeed.mjs';
 import {
   symbolMaster, deriveFnoUniverse, shortlistForSetups, quoteValue, marketOpen, candles
 } from './stockScanner.mjs';
@@ -36,31 +37,43 @@ function responseBase(now, stage) {
 export async function runStockUniverse(get, scope, now = Date.now(), options = {}) {
   const base = responseBase(now, 'universe');
   if (!marketOpen(now)) return { ...base, status: 'Outside NSE market hours' };
-  const master = options.master || await symbolMaster();
-  const universe = deriveFnoUniverse(master, now);
+  // The first screen must NOT download FYERS's large option-contract master.
+  // Use a broad reference universe, then validate every stock by fresh live
+  // FYERS quotes and, before paper entry, verify exact active CE/PE contracts.
+  const universe = options.universe || equityScreeningSymbols();
   if (!universe.length) return { ...base, universeCount: 0,
-    status: 'No eligible NSE equity F&O contracts were found in the current FYERS master.' };
+    status: 'No equity F&O screening universe was configured.' };
 
   const batches = [];
   for (let i = 0; i < universe.length; i += quoteBatchSize) batches.push(universe.slice(i, i + quoteBatchSize));
+  const failures = [];
   const batchResults = await mapLimited(batches, 3, async batch => {
-    const quotes = await get('/quotes', { symbols: batch.map(row => row.symbol).join(',') });
-    return batch.flatMap(row => {
-      const price = quoteValue(quotes, row.symbol, now);
-      return price && Number(price.lp) > 0 ? [{ ...row, quote: price }] : [];
-    });
+    try {
+      const quotes = await get('/quotes', { symbols: batch.map(row => row.symbol).join(',') });
+      return batch.flatMap(row => {
+        const price = quoteValue(quotes, row.symbol, now);
+        return price && Number(price.lp) > 0 ? [{ ...row, quote: price }] : [];
+      });
+    } catch (error) {
+      if (error?.status === 429 || error?.status === 401) throw error;
+      failures.push(error?.message || 'One FYERS quote batch timed out');
+      return [];
+    }
   });
   const quoted = batchResults.flat();
-  const selected = shortlistForSetups(quoted, now, 16);
+  const selected = shortlistForSetups(quoted, now, 12);
   const prescreen = selected.map(row => ({
     stock: row.stock, symbol: row.symbol, spot: Number(row.quote.lp),
     changePct: Number(row.quote.chp) || 0,
-    status: 'SCREENING', side: '', score: 0,
-    reason: 'Market activity detected; checking weekly and daily candles'
+    status: 'SCREENING',
+    side: Number(row.dayMove) >= 0 ? 'CE' : 'PE', score: 0,
+    reason: (Number(row.dayMove) >= 0 ? 'Bullish' : 'Bearish') + ' intraday mover; weekly/daily trend not yet verified'
   }));
   return { ...base, universeCount: universe.length, quotesChecked: quoted.length,
+    source: 'Reference NSE F&O screening pool; confirm current exchange eligibility at entry',
     prescreen, watchlist: prescreen, contextChecked: 0, detailedChecked: 0,
-    status: prescreen.length ? null : 'No fresh FYERS equity quotes were received.' };
+    quoteBatchErrors: failures.length,
+    status: prescreen.length ? null : 'No fresh FYERS equity quotes received. Market data may be unavailable.' };
 }
 
 // Weekly/daily history remains cached until the next closed day or week;
