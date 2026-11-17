@@ -9,6 +9,7 @@ import { startTradeJournalBridge } from './services/tradeJournal.js';
 import { installSetupDecisionObserver } from './services/setupDecisionJournal.js';
 import { installShadowResearchEngine } from './services/shadowResearch.js';
 import { installApiBridge } from './services/apiBridge.js';
+import { installFyersRequestGuard } from './services/fyersRequestGuard.js';
 import { installLiveQuoteFeed } from './services/liveQuoteFeed.js';
 import './styles.css';
 import './pwa.css';
@@ -42,6 +43,7 @@ import './footer-clearance-v42.css';
 // transparently routed to the existing secure backend. No FYERS secret is
 // bundled into the public GitHub Pages build.
 installApiBridge();
+installFyersRequestGuard();
 
 // A single shared quote loop keeps NIFTY and the current candidate/open option
 // near-live across the visible Mentor UI without each component polling FYERS.
