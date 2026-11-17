@@ -37,9 +37,11 @@ test('rejects stale contracts, insufficient depth, and trades above the rupee ri
   assert.deepEqual(rankStockCandidates([candidate], { ...settings, riskPct: 0.2 }, 1000), []);
 });
 
-test('stock endpoint is disabled by default and existing index endpoint still requires a session', async () => {
+test('stock endpoint defaults to production and both routes require a session', async () => {
   const stock = await fyers(new Request('https://example.com/api/fyers/stock-scanner'));
+  const productionStock = await fyers(new Request('https://optionsmentor.netlify.app/api/fyers/stock-scanner'));
   const index = await fyers(new Request('https://example.com/api/fyers/mentor-snapshot'));
   assert.equal(stock.status, 404);
+  assert.equal(productionStock.status, 401);
   assert.equal(index.status, 401);
 });
