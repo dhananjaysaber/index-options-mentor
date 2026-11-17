@@ -417,3 +417,19 @@ html[data-theme='dark'] .scalp-lot-stepper input {
   .scalp-lot-stepper input { height: 32px; }
   .scalp-lot-stepper input { width: 44px; }
 }
+
+.strategy-mode-bar.mentor-mode-bar {
+  flex-wrap: wrap;
+}
+.mentor-mode-selector.segmented button {
+  min-height: 44px;
+  padding-inline: 14px;
+}
+@media (max-width: 640px) {
+  .mentor-mode-selector.segmented {
+    width: 100%;
+  }
+  .mentor-mode-selector.segmented button {
+    flex: 1;
+  }
+}
