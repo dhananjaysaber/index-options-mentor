@@ -14,7 +14,7 @@ function journal(trade, type, eventId) {
     console.warn('Could not queue stock paper journal event', error));
 }
 
-export default function StockPaperPosition({ cards, onCloseTrade }) {
+export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
   const [position, setPosition] = useState(loadPosition);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -52,8 +52,17 @@ export default function StockPaperPosition({ cards, onCloseTrade }) {
       const option = get(card.symbol);
       const spot = Number(underlying?.lp);
       const ask = Number(option?.ask);
-      if (!(spot > 0 && ask > 0)) throw new Error('A fresh stock price and option ask are required for a paper entry.');
+      const bid = Number(option?.bid);
+      if (!(spot > 0 && ask > 0 && bid > 0 && ask >= bid)) throw new Error('A fresh stock price and option ask are required for a paper entry.');
       if (!(spot >= card.min && spot <= card.max)) throw new Error('The stock moved outside the confirmed entry range. Please wait for a new setup.');
+      const quantity = Number(card.quantity);
+      const capital = Number(settings?.capital);
+      const riskBudget = capital * Number(settings?.riskPct) / 100;
+      const estimatedRisk = Math.abs(spot - card.stop) * card.delta * quantity + (ask - bid) * quantity + 100;
+      const estimatedReward = Math.abs(card.target - spot) * card.delta * quantity - (ask - bid) * quantity - 100;
+      if (!(quantity > 0 && capital > 0 && riskBudget > 0 && ask * quantity + 100 <= capital && estimatedRisk <= riskBudget && estimatedReward >= 1.2 * estimatedRisk)) {
+        throw new Error('This paper setup no longer meets your capital, spread or risk limits. Re-scan.');
+      }
       if (loadPosition()) throw new Error('Another stock paper position was opened in this browser.');
       const trade = {
         id: crypto.randomUUID(), mode: 'SIMULATION', strategyFamily: 'STOCK_SCALP',
