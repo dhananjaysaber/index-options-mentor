@@ -42,7 +42,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       const url = '/api/fyers/stock-scanner?phase=' + phase + args;
       const response = await fetch(url, {
         cache: 'no-store',
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18000)])
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(phase === 'universe' ? 10000 : 14500)])
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(response.status === 401
@@ -68,20 +68,43 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         const shortlist = (universe.prescreen || []).slice(0, 12);
         if (!shortlist.length) { setStage(''); return; }
 
-        setStage('Checking completed weekly and daily trends');
-        const context = await request('context', '&symbols=' + encodeURIComponent(shortlist.map(item => item.symbol).join(',')));
-        if (stopped) return;
-        setScan(current => ({
-          ...current, ...context, candidates: [], universeCount: universe.universeCount,
-          quotesChecked: universe.quotesChecked,
-          prescreen: universe.prescreen,
-          contextWatchlist: context.watchlist || [],
-          watchlist: context.watchlist?.length ? context.watchlist : universe.prescreen,
-          status: context.status
-        }));
-        setNow(Date.now());
-
-        const qualified = (context.watchlist || []).slice(0, 5);
+        setStage('Checking weekly and daily trends in small batches');
+        // Three bounded requests mean a slow stock cannot hide every result.
+        // Context is shown after each successful batch, before paper-entry checks.
+        const watchByStock = new Map();
+        let assessed = 0;
+        const batchErrors = [];
+        for (let offset = 0; offset < shortlist.length; offset += 4) {
+          if (stopped) return;
+          const group = shortlist.slice(offset, offset + 4);
+          try {
+            const context = await request('context',
+              '&symbols=' + encodeURIComponent(group.map(item => item.symbol).join(',')));
+            if (stopped) return;
+            assessed += Number(context.contextChecked) || 0;
+            for (const row of context.watchlist || []) watchByStock.set(row.stock, row);
+            const combined = [...watchByStock.values()]
+              .sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10);
+            setScan(current => ({
+              ...current, universeCount: universe.universeCount,
+              quotesChecked: universe.quotesChecked, prescreen: universe.prescreen,
+              contextChecked: assessed,
+              contextWatchlist: combined,
+              watchlist: combined.length ? combined : universe.prescreen,
+              status: combined.length ? null : 'No verified weekly/daily alignment yet. Preliminary movers remain under screening.'
+            }));
+            setNow(Date.now());
+          } catch (reason) {
+            if (reason?.name === 'AbortError' && stopped) return;
+            batchErrors.push(reason?.message || 'History checks unavailable');
+          }
+        }
+        const qualified = [...watchByStock.values()]
+          .sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
+        if (batchErrors.length && !stopped) {
+          setError('Some weekly/daily chart checks could not be completed. ' +
+            'The preliminary watchlist is preserved; only verified setups may proceed.');
+        }
         if (!qualified.length) { setStage(''); return; }
         setStage('Checking 5-minute/3-minute entry triggers');
         const symbols = qualified.map(row => row.symbol).join(',');
