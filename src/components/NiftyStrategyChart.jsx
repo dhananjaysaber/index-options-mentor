@@ -6,7 +6,7 @@ const TIMEFRAMES = {
   '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 }
 };
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '' }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', executionCandles, marketDataReady = true }) {
   const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [candles, setCandles] = useState([]);
@@ -15,6 +15,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
   const [now, setNow] = useState(() => Date.now());
   const sessionDate = snapshot?.market?.sessionDate || '';
   const timeframeConfig = TIMEFRAMES[timeframe] || TIMEFRAMES['5'];
+  const sharedCandles = timeframe === '3' ? executionCandles : undefined;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -22,7 +23,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
   }, []);
 
   useEffect(() => {
-    if (!sessionDate) {
+    if (!sessionDate || sharedCandles !== undefined) {
       setCandles([]);
       setError('');
       return undefined;
@@ -64,15 +65,18 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [sessionDate, timeframe, timeframeConfig.label, timeframeConfig.maxCandles]);
+  }, [sessionDate, timeframe, timeframeConfig.label, timeframeConfig.maxCandles, sharedCandles !== undefined]);
 
+  const chartCandles = useMemo(() => sharedCandles === undefined ? candles
+    : sharedCandles.map(normaliseCandle).filter(Boolean).slice(-timeframeConfig.maxCandles),
+  [sharedCandles, candles, timeframeConfig.maxCandles]);
   const liveSpot = priceOrNull(liveQuote?.nifty)
     ?? priceOrNull(position?.underlyingCurrent)
     ?? priceOrNull(snapshot?.market?.spot);
   const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
   const displayCandles = useMemo(
-    () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
-    [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
+    () => mergeLiveCandle(chartCandles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
+    [chartCandles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
   const chart = useMemo(
     () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots),
@@ -91,7 +95,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         <div className="nifty-live-title">
           <div className="nifty-live-symbol-row">
             <strong>NIFTY 50 · {timeframeConfig.shortLabel}</strong>
-            <span className={`nifty-live-status ${snapshot?.live ? 'online' : ''}`}><i />{snapshot?.live ? 'LIVE' : 'SESSION'}</span>
+            <span className={`nifty-live-status ${snapshot?.live && marketDataReady ? 'online' : ''}`}><i />{!marketDataReady && snapshot?.live ? 'MENTOR PAUSED' : snapshot?.live ? 'LIVE' : 'SESSION'}</span>
           </div>
           <div className="nifty-live-quote-row">
             <span className="nifty-live-price">{liveSpot != null ? formatPrice(liveSpot) : '—'}</span>
