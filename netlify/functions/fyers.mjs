@@ -10,6 +10,55 @@ const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity',
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
 const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
 const researchHistoryCache = new Map();
+const candleRequests = new Map();
+const indexQuotes = new Map();
+const NIFTY_SYMBOL = 'NSE:NIFTY50-INDEX';
+
+function setMarketCache(cache, key, value) {
+  if (!cache.has(key) && cache.size >= 100) cache.delete(cache.keys().next().value);
+  cache.set(key, value);
+}
+
+function marketScope(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getCompletedCandleHistory(params, token) {
+  const now = Date.now();
+  const interval = Number(params.resolution) * 60000;
+  const key = JSON.stringify([marketScope(token), params]);
+  const saved = candleRequests.get(key);
+  if (saved && now < saved.until) return saved.result;
+  // Use the next candle boundary so an incomplete bar is fetched again
+  // before it can be treated as a closed confirmation candle.
+  const until = now - now % interval + interval;
+  const result = fyersGet('/history', params, token).then(data => {
+    if (!Array.isArray(data?.candles) || !data.candles.length) {
+      if (candleRequests.get(key)?.result === result) candleRequests.delete(key);
+    }
+    return data;
+  }).catch(error => {
+    if (candleRequests.get(key)?.result === result) candleRequests.delete(key);
+    throw error;
+  });
+  setMarketCache(candleRequests, key, { until, result });
+  return result;
+}
+
+async function getMarketQuotes(symbols, token) {
+  const data = await fyersGet('/quotes', { symbols: symbols.join(',') }, token);
+  const index = (Array.isArray(data?.d) ? data.d : []).find(row =>
+    row?.s === 'ok' && (row.n === NIFTY_SYMBOL || row.v?.symbol === NIFTY_SYMBOL) && Number(row.v?.lp) > 0);
+  if (index) setMarketCache(indexQuotes, marketScope(token), { index, at: Date.now() });
+  return data;
+}
+
+function getMentorIndexQuote(token) {
+  const saved = indexQuotes.get(marketScope(token));
+  return saved && Date.now() - saved.at < 4000
+    ? { d: [saved.index] }
+    : getMarketQuotes([NIFTY_SYMBOL], token);
+}
 
 function json(data, status = 200, headers = {}) {
   return new Response(JSON.stringify(data), {
@@ -410,7 +459,7 @@ async function handleQuote(request) {
   const raw = new URL(request.url).searchParams.get('symbol') || 'NSE:NIFTY50-INDEX';
   const symbols = raw.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);
   try {
-    return json(await fyersGet('/quotes', { symbols: symbols.join(',') }, auth.token));
+    return json(await getMarketQuotes(symbols, auth.token));
   } catch (error) {
     console.error('Quote failed:', error);
     return fyersFailureResponse(error, 'Could not load quote.');
@@ -425,14 +474,18 @@ async function handleHistory(request) {
   const resolution = url.searchParams.get('resolution') || '5';
   const today = dateKeyIST();
   try {
-    return json(await fyersGet('/history', {
+    const params = {
       symbol,
       resolution,
       date_format: '1',
       range_from: url.searchParams.get('from') || today,
       range_to: url.searchParams.get('to') || today,
       cont_flag: '1'
-    }, auth.token));
+    };
+    const result = symbol === NIFTY_SYMBOL && ['3', '5'].includes(resolution)
+      ? await getCompletedCandleHistory(params, auth.token)
+      : await fyersGet('/history', params, auth.token);
+    return json(result);
   } catch (error) {
     console.error('History failed:', error);
     return fyersFailureResponse(error, 'Could not load historical candles.');
@@ -521,11 +574,12 @@ async function handleMentorSnapshot(request) {
   const auth = requireToken(request);
   if (auth.error) return auth.error;
   try {
-    const today = dateKeyIST();
+    const now = new Date();
+    const today = dateKeyIST(now);
     const from = dateDaysAgoIST(8);
     const [quoteResponse, historyResponse, chainResponse] = await Promise.all([
-      fyersGet('/quotes', { symbols: 'NSE:NIFTY50-INDEX' }, auth.token),
-      fyersGet('/history', {
+      getMentorIndexQuote(auth.token),
+      getCompletedCandleHistory({
         symbol: 'NSE:NIFTY50-INDEX',
         resolution: '5',
         date_format: '1',
@@ -540,7 +594,7 @@ async function handleMentorSnapshot(request) {
       }, auth.token)
     ]);
 
-    const snapshot = await buildMentorSnapshot({ quoteResponse, historyResponse, chainResponse, now: new Date() });
+    const snapshot = await buildMentorSnapshot({ quoteResponse, historyResponse, chainResponse, now });
     return json(normalisePendingDirection(snapshot));
   } catch (error) {
     console.error('Mentor snapshot failed:', error);
