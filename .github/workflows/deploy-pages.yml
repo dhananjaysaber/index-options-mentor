@@ -33,6 +33,7 @@ jobs:
 
       - name: Build PWA
         env:
+          VITE_STOCK_SCANNER_ENABLED: 'true'
           VITE_API_BASE: https://optionsmentor.netlify.app
           VITE_PUBLIC_BASE: /index-options-mentor-pwa/
         run: npm run build
