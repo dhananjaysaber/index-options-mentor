@@ -153,7 +153,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <div className="stock-panel-heading"><div><span className="stock-scanner-eyebrow">SEPARATE PAPER STRATEGY</span><h2>Confirmed stock option setups</h2></div><span className="stock-panel-meta">{cards.length} eligible</span></div>
         <p className="stock-explainer">Paper trades only. Validated FYERS expiry and lot size, current bid/ask depth and capital/risk limits are required. No live broker orders are placed here.</p>
         {active && scan && !cards.length && <p className="stock-scanner-empty">No stock option currently meets the completed-candle, liquidity and risk checks. The ranked watchlist remains visible above.</p>}
-        <StockPaperPosition cards={cards} onCloseTrade={onCloseTrade} />
+        <StockPaperPosition cards={cards} settings={settings} onCloseTrade={onCloseTrade} />
       </section>
 
       <details className="stock-signal-log">
