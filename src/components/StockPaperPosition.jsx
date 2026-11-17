@@ -25,25 +25,56 @@ export default function StockPaperPosition({ cards, onCloseTrade }) {
     if (position) journal(position, 'TRADE_OPENED', `open:${position.id}`);
   }, [position?.id]);
 
-  function open(card) {
-    if (locked.current || loadPosition() || card.validUntil <= Date.now()) return;
-    const trade = {
-      id: crypto.randomUUID(), mode: 'SIMULATION', strategyFamily: 'STOCK_SCALP',
-      strategyTier: 'STOCK_SCALP', strategyTierLabel: 'Stock scalp · Paper',
-      approvalState: 'STOCK_CONFIRMED', initiatedBy: 'USER', entryMethod: 'MANUAL',
-      openedByMentor: false, autoManaged: false, manualResearch: true,
-      openedAt: new Date().toISOString(), symbol: card.symbol, side: card.side,
-      underlyingSymbol: `NSE:${card.stock}-EQ`, strike: card.strike, expiry: card.expiry,
-      lots: card.lots, lotSize: card.lotSize, quantity: card.quantity, entry: card.ask,
-      underlyingEntry: card.spot, underlyingStop: card.stop, underlyingTarget: card.target,
-      rr: card.ratio, mentorSuggestionAtEntry: card.setup, entryOption: card
-    };
+  async function open(card) {
+    if (locked.current || loadPosition() || card.validUntil <= Date.now()) {
+      setError('The setup has expired or another stock paper position is already open. Scan again.');
+      return;
+    }
+    locked.current = true;
+    setBusy(true);
+    setError('');
+    const controller = new AbortController();
+    request.current = controller;
     try {
+      // A displayed 20-second-old ask is not a valid scalp paper fill.
+      // Revalidate the exact FYERS option + stock quote immediately on click.
+      const symbols = encodeURIComponent([`NSE:${card.stock}-EQ`, card.symbol].join(','));
+      const response = await fetch(`/api/fyers/quote?symbol=${symbols}`, {
+        cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Cannot confirm current stock option prices.');
+      const get = symbol => {
+        const row = data.d?.find(item => item.n === symbol && item.s === 'ok')?.v;
+        return row && Math.abs(Date.now() / 1000 - Number(row.tt)) <= 10 ? row : null;
+      };
+      const underlying = get(`NSE:${card.stock}-EQ`);
+      const option = get(card.symbol);
+      const spot = Number(underlying?.lp);
+      const ask = Number(option?.ask);
+      if (!(spot > 0 && ask > 0)) throw new Error('A fresh stock price and option ask are required for a paper entry.');
+      if (!(spot >= card.min && spot <= card.max)) throw new Error('The stock moved outside the confirmed entry range. Please wait for a new setup.');
+      if (loadPosition()) throw new Error('Another stock paper position was opened in this browser.');
+      const trade = {
+        id: crypto.randomUUID(), mode: 'SIMULATION', strategyFamily: 'STOCK_SCALP',
+        strategyTier: 'STOCK_SCALP', strategyTierLabel: 'Stock scalp · Paper',
+        approvalState: 'STOCK_CONFIRMED', initiatedBy: 'USER', entryMethod: 'MANUAL',
+        openedByMentor: false, autoManaged: false, manualResearch: true,
+        openedAt: new Date().toISOString(), symbol: card.symbol, side: card.side,
+        underlyingSymbol: `NSE:${card.stock}-EQ`, strike: card.strike, expiry: card.expiry,
+        lots: card.lots, lotSize: card.lotSize, quantity: card.quantity, entry: ask,
+        underlyingEntry: spot, underlyingStop: card.stop, underlyingTarget: card.target,
+        rr: card.ratio, mentorSuggestionAtEntry: card.setup, entryOption: card
+      };
       localStorage.setItem(key, JSON.stringify(trade));
       setPosition(trade);
       setError('');
-    } catch {
-      setError('The browser could not save the paper position.');
+    } catch (failure) {
+      if (!controller.signal.aborted) setError(failure.message || 'Could not verify the paper entry.');
+    } finally {
+      locked.current = false;
+      setBusy(false);
+      request.current = null;
     }
   }
 
@@ -63,7 +94,7 @@ export default function StockPaperPosition({ cards, onCloseTrade }) {
       if (!response.ok) throw new Error(data.error || 'Cannot refresh the paper exit quote.');
       const get = symbol => {
         const value = data.d?.find(row => row.n === symbol && row.s === 'ok')?.v;
-        if (Math.abs(Date.now() / 1000 - Number(value?.tt)) <= 30) return value;
+        if (Math.abs(Date.now() / 1000 - Number(value?.tt)) <= 10) return value;
         return null;
       };
       const option = get(position.symbol);
@@ -107,7 +138,7 @@ export default function StockPaperPosition({ cards, onCloseTrade }) {
           <p>Stock entry range {money(card.min)}–{money(card.max)} · Stop {money(card.stop)} · Target {money(card.target)}</p>
           <p>Option bid {money(card.bid)} / ask {money(card.ask)} · {card.lots} lots ({card.quantity} units)</p>
           <p>Estimated risk {money(card.risk)} · Estimated reward {money(card.reward)} · {card.ratio.toFixed(2)}R</p>
-          <button type="button" className="secondary-btn" disabled={Boolean(position)} onClick={() => open(card)}>Paper open at ask</button>
+          <button type="button" className="secondary-btn" disabled={Boolean(position) || busy || card.validUntil <= Date.now()} onClick={() => open(card)}>Paper open at ask</button>
         </section>
       ))}
     </div>
