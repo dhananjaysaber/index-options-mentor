@@ -23,6 +23,7 @@ import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
+const StockScanner = lazy(() => import('./components/StockScanner.jsx'));
 
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const LEGACY_POSITION_KEY = 'index-options-mentor-open-position-v07';
@@ -51,7 +52,7 @@ const DEFAULT_SETTINGS = {
 export default function AppV3() {
   const [view, setView] = useState('dashboard');
   const [mode, setMode] = useState('simple');
-  const [strategyMode, setStrategyMode] = useState(() => readString(STRATEGY_MODE_KEY, 'core') === 'scalp' ? 'scalp' : 'core');
+  const [strategyMode, setStrategyMode] = useState(() => ['core', 'scalp', 'stock'].includes(readString(STRATEGY_MODE_KEY, 'core')) ? readString(STRATEGY_MODE_KEY, 'core') : 'core');
   const [scalpStatus, setScalpStatus] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [brokerStatus, setBrokerStatus] = useState({ configured: false, authenticated: false });
@@ -67,6 +68,7 @@ export default function AppV3() {
   const [corePosition, setCorePosition] = useState(() => initialPosition('core'));
   const [scalpPosition, setScalpPosition] = useState(() => initialPosition('scalp'));
   const [history, setHistory] = useState(() => readJson(HISTORY_KEY, []));
+  const indexHistory = useMemo(() => history.filter(trade => trade.strategyFamily !== 'STOCK_SCALP'), [history]);
   const [alertsEnabled, setAlertsEnabled] = useState(() => readString(ALERTS_KEY, '0') === '1');
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const audioRef = useRef(null);
@@ -454,7 +456,15 @@ export default function AppV3() {
           <>
             <StrategyModeBar strategyMode={strategyMode} setStrategyMode={setStrategyMode} corePosition={corePosition} scalpPosition={scalpPosition} />
 
-            {strategyMode === 'scalp' ? (
+            {strategyMode === 'stock' ? (
+              <Suspense fallback={<div className="stock-scanner-loading" role="status">Opening Stock Options research…</div>}>
+                <StockScanner
+                  active={brokerStatus.authenticated}
+                  settings={settings}
+                  onCloseTrade={trade => setHistory(previous => [trade, ...previous.filter(row => row.id !== trade.id)].slice(0, 1000))}
+                />
+              </Suspense>
+            ) : strategyMode === 'scalp' ? (
               <ScalpMentorDashboard
                 snapshot={snapshot}
                 loading={loading}
@@ -465,7 +475,7 @@ export default function AppV3() {
                 position={scalpPosition}
                 positionMentor={scalpMentor}
                 alertsEnabled={alertsEnabled}
-                history={history}
+                history={indexHistory}
                 settings={{ ...settings, liveHandoffEnabled: false }}
                 onReconnect={reconnectFyers}
                 onTakeTrade={takeTrade}
@@ -493,7 +503,7 @@ export default function AppV3() {
                   position={corePosition}
                   positionMentor={coreMentor}
                   alertsEnabled={alertsEnabled}
-                  history={history}
+                  history={indexHistory}
                   settings={settings}
                   onReconnect={reconnectFyers}
                   onExit={meta => exitStrategy('core', meta)}
@@ -513,7 +523,7 @@ export default function AppV3() {
                     <TraderMarketPanel snapshot={snapshot} />
                   </div>
                   {corePosition
-                    ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky />
+                    ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={indexHistory} snapshot={snapshot} sticky />
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
 
@@ -534,18 +544,18 @@ export default function AppV3() {
               <span className={positionCount ? 'position-page-status open' : 'position-page-status'}>{positionCount ? `${positionCount} OPEN` : 'NO OPEN POSITION'}</span>
             </div>
             <div className="dual-position-grid">
-              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
-              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
+              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={indexHistory} snapshot={snapshot} sticky={false} /></section>
+              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={indexHistory} snapshot={snapshot} sticky={false} /></section>
             </div>
           </div>
         )}
 
         {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>13-point and Scalp trades remain independently tagged so Auto, Manual, qualification, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><History history={history} /></div>}
-        {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus} /></Suspense>}
+        {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={indexHistory} brokerStatus={brokerStatus} /></Suspense>}
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
 
-      {view === 'dashboard' && (strategyMode === 'scalp'
+      {view === 'dashboard' && strategyMode !== 'stock' && (strategyMode === 'scalp'
         ? <ScalpFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} evaluation={scalpStatus} positionMentor={scalpMentor} />
         : <MentorFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} positionMentor={coreMentor} />)}
     </div>
@@ -571,17 +581,25 @@ function ResearchStatus({ classification, position, settings, manualReady }) {
 }
 
 function StrategyModeBar({ strategyMode, setStrategyMode, corePosition, scalpPosition }) {
-  const scalp = strategyMode === 'scalp';
+  const titles = {
+    core: '13-point Mentor · structured 5m strategy',
+    scalp: 'Scalp research · 5m context / 3m execution',
+    stock: 'Stock Options · top 10 NSE F&O watchlist'
+  };
   return (
-    <section className="strategy-mode-bar" aria-label="Strategy mode">
+    <section className="strategy-mode-bar triple-strategy-bar" aria-label="Strategy mode">
       <div className="strategy-mode-copy">
         <span>STRATEGY MODE</span>
-        <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
-        <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'}</small>
+        <strong>{titles[strategyMode] || titles.core}</strong>
+        <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'} · Stock paper research isolated</small>
       </div>
-      <button type="button" className={`scalp-mode-switch ${scalp ? 'active' : ''}`} onClick={() => setStrategyMode(scalp ? 'core' : 'scalp')} aria-pressed={scalp}>
-        <span>SCALP</span><i aria-hidden="true" />
-      </button>
+      <div className="mentor-strategy-tabs" role="tablist" aria-label="Mentor strategy">
+        {[['core','Normal'],['scalp','Scalp'],['stock','Stock']].map(([value,label]) => (
+          <button key={value} type="button" role="tab" aria-selected={strategyMode === value}
+            className={strategyMode === value ? 'active' : ''}
+            onClick={() => setStrategyMode(value)}>{label}</button>
+        ))}
+      </div>
     </section>
   );
 }

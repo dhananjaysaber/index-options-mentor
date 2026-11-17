@@ -41,6 +41,13 @@ export async function syncJournalHistory(limit = 1000) {
   return merged;
 }
 
+// Paper-only Stock events share the outbox schema but never alter the Index
+// position tracker or its localStorage keys.
+export function recordStockPaperEvent(trade, type, eventId) {
+  if (!trade?.id || trade.strategyFamily !== 'STOCK_SCALP') return Promise.resolve();
+  return queueJournalEvent({ eventId, type, trade, source: 'stock_scalp_paper' });
+}
+
 export function startTradeJournalBridge() {
   if (watchTimer || syncTimer) return stopTradeJournalBridge;
 

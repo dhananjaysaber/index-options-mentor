@@ -4,7 +4,12 @@ import { explainTrade } from '../services/researchAnalysis.js';
 export default function History({ history }) {
   const [filter, setFilter] = useState('all');
   const allHistory = dedupeHistory(history);
-  const displayHistory = allHistory.filter(trade => filter === 'all' ? true : filter === 'scalp' ? isScalpTrade(trade) : !isScalpTrade(trade));
+  const displayHistory = allHistory.filter(trade => {
+    if (filter === 'all') return true;
+    if (filter === 'stock') return trade.strategyFamily === 'STOCK_SCALP';
+    if (trade.strategyFamily === 'STOCK_SCALP') return false;
+    return filter === 'scalp' ? isScalpTrade(trade) : !isScalpTrade(trade);
+  });
   const summary = summariseHistory(displayHistory);
 
   return (
@@ -18,6 +23,7 @@ export default function History({ history }) {
         <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
         <button type="button" className={filter === 'core' ? 'active' : ''} onClick={() => setFilter('core')}>13-point</button>
         <button type="button" className={filter === 'scalp' ? 'active' : ''} onClick={() => setFilter('scalp')}>Scalp</button>
+        <button type="button" className={filter === 'stock' ? 'active' : ''} onClick={() => setFilter('stock')}>Stock</button>
       </div>
 
       <div className="history-summary-grid" aria-label="Trade journal summary">
@@ -46,7 +52,18 @@ export default function History({ history }) {
 
                 <div className="history-card-details">
                   <div className="history-metrics-v2">
-                    {isScalpTrade(trade) ? (
+                    {trade.strategyFamily === 'STOCK_SCALP' ? (
+                      <>
+                        <Metric label="Underlying" value={trade.underlyingSymbol || '—'} />
+                        <Metric label="Entry method" value={trade.entryMethod || 'MANUAL'} />
+                        <Metric label="Lots" value={trade.lots} />
+                        <Metric label="Quantity" value={trade.quantity} />
+                        <Metric label="Stock stop" value={formatNumber(trade.underlyingStop)} />
+                        <Metric label="Stock target" value={formatNumber(trade.underlyingTarget)} />
+                        <Metric label="Entry option" value={formatNumber(trade.entry)} />
+                        <Metric label="Exit option" value={formatNumber(trade.exit)} />
+                      </>
+                    ) : isScalpTrade(trade) ? (
                       <>
                         <Metric label="Entry method" value={trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : 'MANUAL')} />
                         <Metric label="Scalp score" value={trade.scalpScoreAtEntry ?? trade.score ?? '—'} />
@@ -90,7 +107,7 @@ export default function History({ history }) {
                       {trade.mentorSuggestionAtExit && <p><span>Mentor at exit</span>{trade.mentorSuggestionAtExit}</p>}
                     </div>
                   )}
-                  <TradeAnalysisPanel trade={trade} />
+                  {trade.strategyFamily === 'STOCK_SCALP' ? <p className="muted">Stock paper execution only; no Index 13-point or Scalp performance score is applied.</p> : <TradeAnalysisPanel trade={trade} />}
                 </div>
               </details>
             ))}

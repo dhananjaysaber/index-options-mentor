@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { runStockScan } from '../../server/stockScanner.mjs';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
@@ -548,6 +549,25 @@ async function handleMentorSnapshot(request) {
   }
 }
 
+async function handleStockScanner(request) {
+  // Keep the public scanner unavailable on unrelated hosts and provide a
+  // one-switch rollback without touching Index or Scalp.
+  const setting = process.env.STOCK_SCANNER_ENABLED;
+  const productionHost = new URL(request.url).hostname === 'optionsmentor.netlify.app';
+  if (setting === 'false' || (setting !== 'true' && !productionHost)) {
+    return json({ error: 'Stock scanner is disabled.' }, 404);
+  }
+  const auth = requireToken(request);
+  if (auth.error) return auth.error;
+  try {
+    const scope = crypto.createHash('sha256').update(auth.token).digest('hex');
+    return json(await runStockScan((path, params) => fyersGet(path, params, auth.token), scope));
+  } catch (error) {
+    console.error('Stock scan unavailable:', error?.code || error?.message);
+    return fyersFailureResponse(error, 'Stock scanner data is temporarily unavailable.');
+  }
+}
+
 function corsOrigin(request) {
   const origin = request.headers.get('origin') || '';
   if (origin === GITHUB_PAGES_ORIGIN) return origin;
@@ -583,6 +603,7 @@ export default async (request) => {
     case 'research-history': response = await handleResearchHistory(request); break;
     case 'option-chain': response = await handleOptionChain(request); break;
     case 'mentor-snapshot': response = await handleMentorSnapshot(request); break;
+    case 'stock-scanner': response = await handleStockScanner(request); break;
     default: response = json({ error: 'Unknown FYERS route.' }, 404);
   }
   return withCors(response, request);
