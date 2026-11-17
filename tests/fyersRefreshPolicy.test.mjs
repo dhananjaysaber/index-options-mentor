@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { FYERS_REFRESH, isNseMarketHours } from '../src/services/fyersRefreshPolicy.js';
-import { nextMarketOpenIST } from '../src/services/fyersRequestGuard.js';
+import { nextMarketOpenIST, installFyersRequestGuard } from '../src/services/fyersRequestGuard.js';
 
 test('Standard profile stays well within the 5,000-request budget for one visible trading tab', () => {
   assert.equal(FYERS_REFRESH.tier, 'standard');
@@ -25,4 +25,41 @@ test('NSE schedule is 09:15–15:30 IST on weekdays', () => {
 test('Daily limit recovery gate rolls to the next weekday market open', () => {
   assert.equal(new Date(nextMarketOpenIST(Date.parse('2026-11-20T08:00:00Z'))).toISOString(), '2026-11-23T03:45:00.000Z');
   assert.equal(new Date(nextMarketOpenIST(Date.parse('2026-11-17T03:00:00Z'))).toISOString(), '2026-11-17T03:45:00.000Z');
+});
+
+test('Daily FYERS 429 halts subsequent protected broker requests without disabling status', async () => {
+  const previousWindow = globalThis.window;
+  const previousStorage = globalThis.localStorage;
+  const stored = new Map();
+  let upstream = 0;
+  globalThis.localStorage = {
+    getItem: key => stored.get(key) || null,
+    setItem: (key, value) => stored.set(key, value),
+    removeItem: key => stored.delete(key)
+  };
+  globalThis.window = {
+    location: { origin: 'https://dhananjaysaber.github.io' },
+    dispatchEvent: () => {},
+    fetch: async () => {
+      upstream += 1;
+      return new Response(JSON.stringify({
+        code: 'FYERS_RATE_LIMIT',
+        detail: "You've reached the Standard plan limit of 5,000 requests/day."
+      }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+    }
+  };
+  try {
+    installFyersRequestGuard();
+    const first = await window.fetch('/api/fyers/mentor-snapshot');
+    assert.equal(first.status, 429);
+    const second = await window.fetch('/api/fyers/mentor-snapshot');
+    assert.equal(second.status, 429);
+    assert.equal((await second.json()).limitScope, 'daily');
+    assert.equal(upstream, 1, 'second request must not reach the upstream FYERS API');
+    await window.fetch('/api/fyers/status');
+    assert.equal(upstream, 2, 'session-status remains accessible');
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.localStorage = previousStorage;
+  }
 });
