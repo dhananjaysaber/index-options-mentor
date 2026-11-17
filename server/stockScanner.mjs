@@ -172,38 +172,45 @@ async function universeQuotes(get, universe, now) {
 
 async function scan(get, scope, now, options = {}) {
   if (!marketOpen(now)) return { candidates: [], watchlist: [], failures: [], status: 'Outside NSE market hours', generatedAt: new Date(now).toISOString() };
-  const symbolFor = stock => `NSE:${stock}-EQ`;
-  const quote = await get('/quotes', { symbols: watchlist.map(symbolFor).join(',') });
+  // Scan F&O eligibility from the exchange master. The preliminary live-quote
+  // screen examines this whole universe; history calls are limited to 24
+  // rotating, dynamically selected stocks to preserve the live Index feed.
+  const master = options.master || await symbolMaster();
+  const universe = deriveFnoUniverse(master, now);
+  if (!universe.length) return { candidates: [], watchlist: [], failures: [],
+    universeCount: 0, quotesChecked: 0, detailedChecked: 0,
+    status: 'No active eligible NSE stock option underlyings in FYERS symbol master.',
+    generatedAt: new Date(now).toISOString() };
+  const quoted = await universeQuotes(get, universe, now);
+  const shortlist = shortlistForSetups(quoted, now);
   const failures = [];
 
-  const checked = await mapLimited(watchlist, 2, async stock => {
-    const symbol = symbolFor(stock);
-    const underlying = quoteValue(quote, symbol);
-    if (!underlying || !(Number(underlying.lp) > 0)) return { stock, status: 'UNAVAILABLE', reason: 'No fresh FYERS equity quote' };
+  const checked = await mapLimited(shortlist, 2, async row => {
+    const { stock, symbol, quote } = row;
     try {
       const [five, three] = await Promise.all([
         candles(get, scope, symbol, '5', now),
         candles(get, scope, symbol, '3', now)
       ]);
-      const context = watchContext(five, three, now);
       const strict = stockSetup(five, three, now);
-      return { stock, symbol, spot: Number(underlying.lp), changePct: Number(underlying.chp) || 0,
-        ...context, ...(strict ? {side: strict.side, status: 'CONFIRMED', score: Math.max(context.score, 90), reason: strict.setup } : {}),
-        strict };
+      // No confirmed breakout/retest? The stock is NOT a top-ten candidate.
+      if (!strict) return null;
+      return { stock, symbol, spot: Number(quote.lp), changePct: Number(quote.chp) || 0,
+        side: strict.side, status: 'CONFIRMED',
+        score: scoreConfirmedSetup(strict, five, three, now),
+        reason: strict.setup, strict };
     } catch (error) {
       if (error?.status === 429 || error?.status === 401) throw error;
       failures.push(stock);
-      return { stock, symbol, spot: Number(underlying.lp), status: 'UNAVAILABLE', score: 0, reason: 'Stock candles unavailable' };
+      return null;
     }
   });
-
-  const monitored = checked.sort((a, b) => (b.status === 'CONFIRMED') - (a.status === 'CONFIRMED')
-    || Number(b.score || 0) - Number(a.score || 0) || watchlist.indexOf(a.stock) - watchlist.indexOf(b.stock)).slice(0, 10);
-  const qualified = monitored.filter(row => row.strict);
-  const master = qualified.length ? await symbolMaster().catch(() => null) : null;
+  const monitored = checked.filter(Boolean).sort((a, b) =>
+    b.score - a.score || Math.abs(b.changePct) - Math.abs(a.changePct) ||
+    a.stock.localeCompare(b.stock)).slice(0, 10);
+  const qualified = monitored;
   const candidates = await mapLimited(qualified, 2, async item => {
     try {
-      if (!master) throw new Error('Contract master unavailable');
       const chain = await get('/options-chain-v3', { symbol: item.symbol, strikecount: 2, greeks: '1' });
       const data = chain?.data || chain;
       const expiry = Number(data?.expiryData?.[0]?.expiry);
@@ -211,7 +218,7 @@ async function scan(get, scope, now, options = {}) {
       const legs = (data?.optionsChain || []).filter(row =>
         row.option_type === item.side && row.symbol && Number.isFinite(Number(row.strike_price)));
       legs.sort((a, b) => Math.abs(a.strike_price - item.spot) - Math.abs(b.strike_price - item.spot));
-      const leg = legs.find(row => master[row.symbol]?.tradeStatus !== 0 && Number(master[row.symbol]?.minLotSize) > 0);
+      const leg = legs.find(row => master[row.symbol]?.tradeStatus !== 0 && master[row.symbol]?.optType === item.side && Number(master[row.symbol]?.minLotSize) > 0);
       if (!leg) return null;
       const lotSize = Number(master[leg.symbol]?.minLotSize);
       const delta = Math.abs(Number(leg.greeks?.delta));
@@ -243,13 +250,14 @@ async function scan(get, scope, now, options = {}) {
     }
   });
   return { candidates: candidates.filter(Boolean), watchlist: monitored.map(({strict, ...row}) => row),
-    failures: [...new Set(failures)],
-    status: !checked.some(row => row.status !== 'UNAVAILABLE') ? 'FYERS stock data unavailable' : null,
+    failures: [...new Set(failures)], universeCount: universe.length,
+    quotesChecked: quoted.length, detailedChecked: shortlist.length,
+    status: !monitored.length ? 'No confirmed 5m/3m stock-option setups in the current screened shortlist.' : null,
     generatedAt: new Date(now).toISOString(),
-    note: 'Rankings are momentum watch signals, not calibrated probabilities. Only confirmed contracts with fresh depth can be opened in paper mode.' };
+    note: 'Only completed and confirmed setups are ranked. Score represents structural strength, not the probability of profit. The detailed chart scan covers a dynamically selected subset of the F&O universe.' };
 }
 
-export function runStockScan(get, scope, now = Date.now()) {
+export function runStockScan(get, scope, now = Date.now(), options = {}) {
   const current = scans.get(scope);
   if (current && (current.pending || now < current.until)) return current.result;
   if (scans.size >= 20) {
@@ -259,7 +267,7 @@ export function runStockScan(get, scope, now = Date.now()) {
     if (scans.size >= 20) throw Object.assign(new Error('Scanner busy'), {status: 429, code: 'SCANNER_BUSY'});
   }
   const entry = { pending: true, until: now + 25000 };
-  entry.result = scan(get, scope, now).catch(error => {
+  entry.result = scan(get, scope, now, options).catch(error => {
     if (error.status === 429) entry.until = Date.now() + 120000;
     throw error;
   }).finally(() => { entry.pending = false; });
