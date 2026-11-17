@@ -45,3 +45,39 @@ test('stock endpoint defaults to production and both routes require a session', 
   assert.equal(productionStock.status, 401);
   assert.equal(index.status, 401);
 });
+
+
+test('scanner returns a top-ten watchlist without inventing option entries when no completed setup exists', async () => {
+  const { runStockScan } = await import('../server/stockScanner.mjs');
+  const now = Date.parse('2026-11-17T08:50:00Z'); // 14:20 IST
+  const originalNow = Date.now;
+  Date.now = () => now;
+  let quoteCalls = 0, historyCalls = 0, optionCalls = 0;
+  try {
+    const get = async (path, params) => {
+      if (path === '/quotes') {
+        quoteCalls += 1;
+        return { d: params.symbols.split(',').map(symbol => ({
+          n: symbol, s: 'ok', v: { lp: 100, chp: 0.2, tt: now / 1000 }
+        })) };
+      }
+      if (path === '/history') { historyCalls += 1; return { candles: [] }; }
+      if (path === '/options-chain-v3') { optionCalls += 1; throw Error('Should not fetch options without a completed setup'); }
+      throw Error(`Unexpected endpoint: ${path}`);
+    };
+    const result = await runStockScan(get, 'stock-top-ten-test', now);
+    assert.equal(result.watchlist.length, 10);
+    assert.equal(result.candidates.length, 0);
+    assert.equal(quoteCalls, 1, 'Quotes for the watchlist are batched');
+    assert.equal(historyCalls, 24);
+    assert.equal(optionCalls, 0, 'No speculative option symbols are invented');
+  } finally { Date.now = originalNow; }
+});
+
+test('scanner outside market hours makes zero FYERS requests', async () => {
+  const { runStockScan } = await import('../server/stockScanner.mjs');
+  const result = await runStockScan(async () => { throw Error('No API calls expected after close'); },
+    'stock-market-closed-test', Date.parse('2026-11-17T12:00:00Z'));
+  assert.equal(result.candidates.length, 0);
+  assert.equal(result.watchlist.length, 0);
+});
