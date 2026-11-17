@@ -231,6 +231,11 @@ function withStoredMetrics(trade) {
   };
 }
 
+export function recordStockPaperEvent(trade, type, eventId) {
+  if (trade?.strategyFamily !== 'STOCK_SCALP' || !trade.id) return;
+  return queueJournalEvent({ eventId, type, trade, source: 'stock_scalp_paper' });
+}
+
 async function queueJournalEvent({ eventId, type, trade, source }) {
   if (!trade?.id || !type) return;
   const event = {

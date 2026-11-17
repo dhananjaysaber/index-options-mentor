@@ -1,3 +1,4 @@
+import { runStockScan } from '../../server/stockScanner.mjs';
 import crypto from 'node:crypto';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
@@ -547,6 +548,19 @@ async function handleMentorSnapshot(request) {
   }
 }
 
+async function handleStockScanner(request) {
+  // Explicit opt-in on the separate preview backend.
+  if (process.env.STOCK_SCANNER_ENABLED !== 'true') return json({ error: 'Stock Scanner preview is disabled.' }, 404);
+  const auth = requireToken(request);
+  if (auth.error) return auth.error;
+  try {
+    const scope = crypto.createHash('sha256').update(auth.token).digest('hex');
+    return json(await runStockScan((path, params) => fyersGet(path, params, auth.token), scope));
+  } catch (error) {
+    return fyersFailureResponse(error, 'Stock Scanner data is temporarily unavailable.');
+  }
+}
+
 function corsOrigin(request) {
   const origin = request.headers.get('origin') || '';
   if (origin === GITHUB_PAGES_ORIGIN) return origin;
@@ -581,6 +595,7 @@ export default async (request) => {
     case 'history': response = await handleHistory(request); break;
     case 'research-history': response = await handleResearchHistory(request); break;
     case 'option-chain': response = await handleOptionChain(request); break;
+    case 'stock-scanner': response = await handleStockScanner(request); break;
     case 'mentor-snapshot': response = await handleMentorSnapshot(request); break;
     default: response = json({ error: 'Unknown FYERS route.' }, 404);
   }

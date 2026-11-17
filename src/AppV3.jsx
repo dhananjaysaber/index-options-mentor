@@ -20,6 +20,8 @@ import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 
+const stockScannerEnabled = import.meta.env.VITE_STOCK_SCANNER_ENABLED === 'true';
+const StockScanner = lazy(() => import('./components/StockScanner.jsx'));
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
 const HISTORY_KEY = 'index-options-mentor-history-v05';
@@ -65,6 +67,7 @@ export default function AppV3() {
   const [corePosition, setCorePosition] = useState(() => initialPosition('core'));
   const [scalpPosition, setScalpPosition] = useState(() => initialPosition('scalp'));
   const [history, setHistory] = useState(() => readJson(HISTORY_KEY, []));
+  const indexHistory = useMemo(() => history.filter(trade => trade.strategyFamily !== 'STOCK_SCALP'), [history]);
   const [alertsEnabled, setAlertsEnabled] = useState(() => readString(ALERTS_KEY, '0') === '1');
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const audioRef = useRef(null);
@@ -453,7 +456,7 @@ export default function AppV3() {
                 position={scalpPosition}
                 positionMentor={scalpMentor}
                 alertsEnabled={alertsEnabled}
-                history={history}
+                history={indexHistory}
                 settings={{ ...settings, liveHandoffEnabled: false }}
                 onReconnect={reconnectFyers}
                 onTakeTrade={takeTrade}
@@ -481,7 +484,7 @@ export default function AppV3() {
                   position={corePosition}
                   positionMentor={coreMentor}
                   alertsEnabled={alertsEnabled}
-                  history={history}
+                  history={indexHistory}
                   settings={settings}
                   onReconnect={reconnectFyers}
                   onExit={meta => exitStrategy('core', meta)}
@@ -501,7 +504,7 @@ export default function AppV3() {
                     <TraderMarketPanel snapshot={snapshot} />
                   </div>
                   {corePosition
-                    ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky />
+                    ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={indexHistory} snapshot={snapshot} sticky />
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
 
@@ -522,14 +525,15 @@ export default function AppV3() {
               <span className={positionCount ? 'position-page-status open' : 'position-page-status'}>{positionCount ? `${positionCount} OPEN` : 'NO OPEN POSITION'}</span>
             </div>
             <div className="dual-position-grid">
-              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
-              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
+              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={indexHistory} snapshot={snapshot} sticky={false} /></section>
+              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={indexHistory} snapshot={snapshot} sticky={false} /></section>
             </div>
           </div>
         )}
 
         {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>13-point and Scalp trades remain independently tagged so Auto, Manual, qualification, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><History history={history} /></div>}
-        {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus} /></Suspense>}
+        {stockScannerEnabled && view === 'stocks' && <Suspense fallback={<p>Loading Stock Scanner…</p>}><StockScanner active settings={settings} onCloseTrade={trade => setHistory(previous => [trade, ...previous.filter(row => row.id !== trade.id)].slice(0, 1000))} /></Suspense>}
+        {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={indexHistory} brokerStatus={brokerStatus} /></Suspense>}
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
 
@@ -581,7 +585,7 @@ function DesktopNav({ view, navigate, settings, setup, positionCount, corePositi
       <NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" />
       <button type="button" className={`sidebar-nav-button ${view === 'position' ? 'active' : ''}`} onClick={() => navigate('position')}><span>↗</span><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong></button>
       <NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" />
-      <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />
+      <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />{stockScannerEnabled && <NavButton active={view === 'stocks'} onClick={() => navigate('stocks')} icon="⌕" label="Stock Scanner" />}
       <NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" />
       <div className="sidebar-divider" />
       <div className="sidebar-section-label">AUTOMATION</div>
@@ -599,7 +603,7 @@ function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, 
       <aside className="mentor-mobile-drawer">
         <div className="drawer-head"><div><span>OPTIONS MENTOR</span><strong>Control centre</strong></div><button onClick={onClose} aria-label="Close menu"><CloseIcon /></button></div>
         <div className={`drawer-connection ${authRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {authRequired ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
-        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
+        <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />{stockScannerEnabled && <NavButton active={view === 'stocks'} onClick={() => navigate('stocks')} icon="⌕" label="Stock Scanner" />}<NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">VIEW</span><div className="segmented drawer-segmented"><button className={mode === 'simple' ? 'active' : ''} onClick={() => setMode('simple')}>Simple</button><button className={mode === 'advanced' ? 'active' : ''} onClick={() => setMode('advanced')}>Advanced</button></div></div>
         <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
         <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /><span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${authRequired ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{authRequired ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>

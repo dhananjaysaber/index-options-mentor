@@ -9,11 +9,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: pwa-publish
+  group: pwa-publish-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-and-publish:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout private source

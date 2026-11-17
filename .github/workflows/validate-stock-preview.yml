@@ -1,0 +1,26 @@
+name: Validate Stock Scanner preview
+on:
+  push:
+    branches: ['feature/stock-scanner']
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+        env:
+          VITE_STOCK_SCANNER_ENABLED: 'true'
+          VITE_PUBLIC_BASE: /
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stock-scanner-preview-build
+          path: dist
