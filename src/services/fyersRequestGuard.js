@@ -10,7 +10,8 @@ const protectedRoutes = new Set([
   '/api/fyers/history',
   '/api/fyers/option-chain',
   '/api/fyers/research-history',
-  '/api/fyers/mentor-snapshot'
+  '/api/fyers/mentor-snapshot',
+  '/api/fyers/stock-scanner'
 ]);
 const pending = new Map();
 const recentlyCompleted = new Map();
@@ -103,6 +104,7 @@ export function installFyersRequestGuard() {
         // 20-second-old cached candle response from our own client guard.
         const cacheMs = url.pathname === '/api/fyers/history' ? (fast ? 600 : 20000)
           : url.pathname === '/api/fyers/mentor-snapshot' ? (fast ? 500 : 5000)
+          : url.pathname === '/api/fyers/stock-scanner' ? 1000
           : url.pathname === '/api/fyers/research-history' ? 60000
           : url.pathname === '/api/fyers/quote' ? (fast ? 100 : 1000) : 10000;
         recentlyCompleted.set(key, { until: Date.now() + cacheMs, response: response.clone() });
