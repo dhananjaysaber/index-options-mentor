@@ -1,9 +1,11 @@
+import { FYERS_REFRESH, isNseMarketHours } from './fyersRefreshPolicy.js';
+
 const POSITION_KEYS = [
   'index-options-mentor-open-position-v07',
   'index-options-mentor-core-position-v41',
   'index-options-mentor-scalp-position-v41'
 ];
-const POLL_MS = 2000;
+const POLL_MS = FYERS_REFRESH.quoteMs;
 
 let installed = false;
 let previousFetch = null;
@@ -71,7 +73,7 @@ function stopTimer() {
 }
 
 async function pollLiveQuote() {
-  if (!authenticated || inFlight || document.visibilityState !== 'visible' || Date.now() < nextPollAfter) return;
+  if (!authenticated || inFlight || document.visibilityState !== 'visible' || !isNseMarketHours() || Date.now() < nextPollAfter) return;
   inFlight = true;
   try {
     // One poll serves the current candidate and both independently open strategies.
