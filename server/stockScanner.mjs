@@ -42,10 +42,16 @@ async function candles(get, scope, symbol, resolution, now) {
 }
 
 function quoteValue(response, symbol, now = Date.now()) {
-  const node = response?.d?.find(row => (row.n || row.v?.symbol) === symbol);
+  // FYERS v3 documents v.tt as "today's time", NOT the last price tick.
+  // Therefore rejecting when |now - tt| > 30 seconds incorrectly discards
+  // valid quote rows across the entire equity watchlist.
+  // Stock-only backend responses are marked with our actual receive time.
+  const receivedAt = Number(response?.receivedAt);
+  if (Number.isFinite(receivedAt) && receivedAt > 0 &&
+      (Date.now() - receivedAt > 10000 || receivedAt - Date.now() > 1000)) return null;
+  const node = response?.d?.find(row => (row?.n || row?.v?.symbol) === symbol);
   const value = node?.v;
-  const seconds = Number(value?.tt);
-  if (node?.s !== 'ok' || !Number.isFinite(seconds) || Math.abs(now / 1000 - seconds) > 30) return null;
+  if (node?.s !== 'ok' || !(Number(value?.lp) > 0)) return null;
   return value;
 }
 
@@ -242,7 +248,7 @@ async function scan(get, scope, now, options = {}) {
       return { ...item.strict, stock: item.stock, symbol: leg.symbol, underlyingSymbol: item.symbol,
         strike: Number(leg.strike_price), expiry: date(expiry * 1000),
         lotSize, delta, bid, ask, bidSize, askSize, min, max, target, spot,
-        score: item.score, status: 'CONFIRMED', validUntil: Math.min(Number(option.tt) * 1000 + 20000, Date.now() + 20000) };
+        score: item.score, status: 'CONFIRMED', validUntil: Date.now() + 20000 };
     } catch (error) {
       if (error?.status === 429 || error?.status === 401) throw error;
       failures.push(item.stock);
