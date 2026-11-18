@@ -1,154 +1,189 @@
-import { useEffect, useRef, useState } from 'react';
-import { recordStockPaperEvent } from '../services/tradeJournal.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { rankStockCandidates } from '../engine/stockRanking.js';
+import {
+  readStockPaperPosition, createStockPaperTrade, finishStockPaperTrade, STOCK_POSITION_EVENT
+} from '../services/stockPaperAutomation.js';
 
-const key = 'index-options-mentor-stock-paper-position-v1';
-const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
+const AUTO_SIGNATURE_KEY = 'index-options-mentor-stock-last-auto-setup-v1';
+const formatMoney = value => Number.isFinite(Number(value))
+  ? new Intl.NumberFormat('en-IN', {style:'currency', currency:'INR', maximumFractionDigits: 2}).format(value) : '—';
+const clamp = (lots, cap) => Math.max(1, Math.min(Math.max(1, Number(cap) || 5), Math.floor(Number(lots) || 1)));
 
-function loadPosition() {
-  try { return JSON.parse(localStorage.getItem(key)) || null; }
-  catch { return null; }
-}
-
-function journal(trade, type, eventId) {
-  void Promise.resolve(recordStockPaperEvent(trade, type, eventId)).catch(error =>
-    console.warn('Could not queue stock paper journal event', error));
-}
-
-export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
-  const [position, setPosition] = useState(loadPosition);
+export default function StockPaperPosition({ cards, manualTicket, settings, active = false, onCloseTrade }) {
+  const [position, setPosition] = useState(readStockPaperPosition);
+  const [manualLots, setManualLots] = useState(() => clamp(settings?.defaultLots, settings?.lotCap));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const request = useRef(null);
+  const [message, setMessage] = useState('');
+  const [live, setLive] = useState(null);
   const locked = useRef(false);
-  useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => {
-    if (position) journal(position, 'TRADE_OPENED', `open:${position.id}`);
-  }, [position?.id]);
+  const controller = useRef(null);
+  const lastAttempt = useRef({signature: '', at: 0});
 
-  async function open(card) {
-    if (locked.current || loadPosition() || card.validUntil <= Date.now()) {
-      setError('The setup has expired or another stock paper position is already open. Scan again.');
-      return;
+  useEffect(() => {
+    const update = () => setPosition(readStockPaperPosition());
+    const quote = event => {
+      const q = event?.detail;
+      if (q?.symbol === readStockPaperPosition()?.symbol) setLive(q);
+    };
+    window.addEventListener(STOCK_POSITION_EVENT, update);
+    window.addEventListener('storage', update);
+    window.addEventListener('mentor:stock-paper-quote', quote);
+    return () => {
+      controller.current?.abort();
+      window.removeEventListener(STOCK_POSITION_EVENT, update);
+      window.removeEventListener('storage', update);
+      window.removeEventListener('mentor:stock-paper-quote', quote);
+    };
+  }, []);
+
+  const manualCard = useMemo(() => manualTicket ? rankStockCandidates(
+    [manualTicket], { ...settings, defaultLots: manualLots }, Date.now()
+  )[0] || null : null, [manualTicket, manualLots, settings]);
+
+  const getQuote = useCallback(async (stock, symbol, signal) => {
+    const underlying = 'NSE:' + stock + '-EQ';
+    const started = Date.now();
+    const response = await fetch('/api/fyers/quote?symbol=' +
+      encodeURIComponent([underlying, symbol].join(',')), {
+      cache: 'no-store',
+      signal: AbortSignal.any([signal, AbortSignal.timeout(10000)])
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(data.error || 'FYERS quotes unavailable for Stock paper trade');
+    if (Date.now() - started > 8000) throw Error('The quote took too long; please retry.');
+    const get = id => data?.d?.find(row => row?.n === id && row?.s === 'ok')?.v;
+    const equity = get(underlying), option = get(symbol);
+    const spot = Number(equity?.lp), ask = Number(option?.ask), bid = Number(option?.bid);
+    if (!(spot > 0 && ask > 0 && bid > 0 && ask >= bid)) {
+      throw Error('FYERS has no current underlying price and positive option bid/ask.');
     }
+    return {spot, ask, bid, at: new Date().toISOString()};
+  }, []);
+
+  const open = useCallback(async (card, initiatedBy = 'USER') => {
+    if (!card || locked.current || readStockPaperPosition() ||
+        card.validUntil <= Date.now()) return false;
     locked.current = true;
     setBusy(true);
-    setError('');
-    const controller = new AbortController();
-    request.current = controller;
+    if (initiatedBy === 'USER') setMessage('');
+    const request = new AbortController();
+    controller.current = request;
     try {
-      // A displayed 20-second-old ask is not a valid scalp paper fill.
-      // Revalidate the exact FYERS option + stock quote immediately on click.
-      const symbols = encodeURIComponent([`NSE:${card.stock}-EQ`, card.symbol].join(','));
-      const requestedAt = Date.now();
-      const response = await fetch(`/api/fyers/quote?symbol=${symbols}`, {
-        cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Cannot confirm current stock option prices.');
-      // FYERS v.tt is not a last-trade timestamp; protect fills using the
-      // actual age of this authenticated, no-cache broker response instead.
-      if (Date.now() - requestedAt > 8000) throw new Error('Stock option quote request was too slow. Please retry.');
-      const get = symbol => data.d?.find(item => item.n === symbol && item.s === 'ok')?.v || null;
-      const underlying = get(`NSE:${card.stock}-EQ`);
-      const option = get(card.symbol);
-      const spot = Number(underlying?.lp);
-      const ask = Number(option?.ask);
-      const bid = Number(option?.bid);
-      if (!(spot > 0 && ask > 0 && bid > 0 && ask >= bid)) throw new Error('A fresh stock price and option ask are required for a paper entry.');
-      if (!(spot >= card.min && spot <= card.max)) throw new Error('The stock moved outside the confirmed entry range. Please wait for a new setup.');
-      const quantity = Number(card.quantity);
-      const capital = Number(settings?.capital);
-      const riskBudget = capital * Number(settings?.riskPct) / 100;
-      const estimatedRisk = Math.abs(spot - card.stop) * card.delta * quantity + (ask - bid) * quantity + 100;
-      const estimatedReward = Math.abs(card.target - spot) * card.delta * quantity - (ask - bid) * quantity - 100;
-      if (!(quantity > 0 && capital > 0 && riskBudget > 0 && ask * quantity + 100 <= capital && estimatedRisk <= riskBudget && estimatedReward >= 1.2 * estimatedRisk)) {
-        throw new Error('This paper setup no longer meets your capital, spread or risk limits. Re-scan.');
+      const quote = await getQuote(card.stock, card.symbol, request.signal);
+      // The paper entry always rechecks the risk budget at the current ask.
+      const trade = createStockPaperTrade(card, quote, settings, initiatedBy);
+      if (initiatedBy === 'MENTOR') {
+        try { localStorage.setItem(AUTO_SIGNATURE_KEY, trade.setupId); } catch {}
       }
-      if (loadPosition()) throw new Error('Another stock paper position was opened in this browser.');
-      const trade = {
-        id: crypto.randomUUID(), mode: 'SIMULATION', strategyFamily: 'STOCK_SCALP',
-        strategyTier: 'STOCK_SCALP', strategyTierLabel: 'Stock scalp · Paper',
-        approvalState: 'STOCK_CONFIRMED', initiatedBy: 'USER', entryMethod: 'MANUAL',
-        openedByMentor: false, autoManaged: false, manualResearch: true,
-        openedAt: new Date().toISOString(), symbol: card.symbol, side: card.side,
-        underlyingSymbol: `NSE:${card.stock}-EQ`, strike: card.strike, expiry: card.expiry,
-        lots: card.lots, lotSize: card.lotSize, quantity: card.quantity, entry: ask,
-        underlyingEntry: spot, underlyingStop: card.stop, underlyingTarget: card.target,
-        rr: card.ratio, mentorSuggestionAtEntry: card.setup, entryOption: card
-      };
-      localStorage.setItem(key, JSON.stringify(trade));
       setPosition(trade);
-      setError('');
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure.message || 'Could not verify the paper entry.');
+      setMessage((initiatedBy === 'MENTOR' ? 'Mentor auto-opened' : 'Manually opened') +
+        ' a simulated Stock option position. No FYERS order was submitted.');
+      return true;
+    } catch (error) {
+      if (!request.signal.aborted) setMessage(error?.message || 'Cannot open the Stock paper position');
+      return false;
     } finally {
       locked.current = false;
+      controller.current = null;
       setBusy(false);
-      request.current = null;
     }
-  }
+  }, [getQuote, settings]);
+
+  // Automatic entries are reserved for strictly confirmed 5m/3m setups.
+  // WATCH/MANUAL_RESEARCH cards are NEVER automatically entered.
+  const primary = cards.find(card => card.strictEligible !== false && card.status === 'CONFIRMED') || null;
+  const signature = primary ? [primary.stock, primary.side, primary.confirmedAt, primary.symbol].join(':') : '';
+  useEffect(() => {
+    if (!active || settings?.stockAutoOpen === false || position || !primary ||
+      !signature || primary.validUntil <= Date.now()) return;
+    try {
+      if (localStorage.getItem(AUTO_SIGNATURE_KEY) === signature) return;
+    } catch {}
+    if (lastAttempt.current.signature === signature && Date.now() - lastAttempt.current.at < 12000) return;
+    lastAttempt.current = {signature, at: Date.now()};
+    void open(primary, 'MENTOR');
+  }, [active, settings?.stockAutoOpen, position?.id, signature, open]);
 
   async function close() {
-    if (locked.current || !position) return;
+    const current = readStockPaperPosition();
+    if (locked.current || !current) return;
     locked.current = true;
     setBusy(true);
-    setError('');
-    const controller = new AbortController();
-    request.current = controller;
+    setMessage('');
+    const request = new AbortController();
+    controller.current = request;
     try {
-      const symbols = encodeURIComponent([position.underlyingSymbol, position.symbol].join(','));
-      const requestedAt = Date.now();
-      const response = await fetch(`/api/fyers/quote?symbol=${symbols}`, {
-        cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)])
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Cannot refresh the paper exit quote.');
-      if (Date.now() - requestedAt > 8000) throw new Error('Stock option exit quote took too long. Please retry.');
-      const get = symbol => data.d?.find(row => row.n === symbol && row.s === 'ok')?.v || null;
-      const option = get(position.symbol);
-      const exit = Number(option?.bid);
-      const spot = Number(get(position.underlyingSymbol)?.lp);
-      if (!(exit > 0 && spot > 0)) throw new Error('A fresh bid and stock quote are required to close.');
-      const closed = {
-        ...position, closedAt: new Date().toISOString(), closedBy: 'USER', exitMethod: 'MANUAL',
-        exitReasonCode: 'MANUAL_EXIT', exitReason: 'Closed from Stock Scanner using the displayed bid.',
-        exit, currentPrice: exit, underlyingExit: spot, underlyingCurrent: spot,
-        pnl: (exit - position.entry) * position.quantity,
-        heldMinutes: Math.round((Date.now() - Date.parse(position.openedAt)) / 60000),
-        rAchieved: (spot - position.underlyingEntry) * (position.side === 'CE' ? 1 : -1) /
-          Math.abs(position.underlyingEntry - position.underlyingStop)
-      };
-      if (loadPosition()?.id !== position.id) throw new Error('This position was changed in another tab.');
-      onCloseTrade(closed);
-      localStorage.removeItem(key);
+      const quote = await getQuote(current.stock, current.symbol, request.signal);
+      const closed = finishStockPaperTrade(current, quote, 'MANUAL_EXIT', 'USER');
+      if (!closed) throw Error('This Stock position was already closed in another tab.');
       setPosition(null);
-    } catch (failure) {
-      if (!controller.signal.aborted) setError(failure.message);
+      setLive(null);
+      setMessage('Stock paper position closed at current FYERS bid. Recorded in Stock journal.');
+    } catch (error) {
+      if (!request.signal.aborted) setMessage(error?.message || 'Paper close failed');
     } finally {
-      setBusy(false);
       locked.current = false;
+      controller.current = null;
+      setBusy(false);
     }
   }
 
-  return <>
-    {error && <p role="alert">{error}</p>}
-    {position && <section className="panel">
-      <h2>Open paper position</h2>
-      <p>{position.symbol} · {position.lots} lots · entry {money(position.entry)}</p>
-      <button type="button" className="secondary-btn" disabled={busy} onClick={close}>{busy ? 'Checking exit quote…' : 'Paper close at bid'}</button>
-      <p>Paper fills use the displayed ask and bid. Journal P&amp;L is before fees and extra slippage.</p>
-    </section>}
-    <div className="history-list">
-      {cards.map(card => (
-        <section className="panel" key={card.symbol}>
-          <h2>{card.stock} · Strong Buy {card.side}</h2>
-          <p>{card.setup} · {card.strike} strike · {card.expiry}</p>
-          <p>Stock entry range {money(card.min)}–{money(card.max)} · Stop {money(card.stop)} · Target {money(card.target)}</p>
-          <p>Option bid {money(card.bid)} / ask {money(card.ask)} · {card.lots} lots ({card.quantity} units)</p>
-          <p>Estimated risk {money(card.risk)} · Estimated reward {money(card.reward)} · {card.ratio.toFixed(2)}R</p>
-          <button type="button" className="secondary-btn" disabled={Boolean(position) || busy || card.validUntil <= Date.now()} onClick={() => open(card)}>Paper open at ask</button>
-        </section>
-      ))}
+  const mark = live?.symbol === position?.symbol && Date.now() - Date.parse(live.at) < 4000
+    ? Number(live.bid) : null;
+  const indicativePnl = position && mark > 0 ? (mark - Number(position.entry)) * Number(position.quantity) : null;
+
+  return <div className="stock-paper-controls" id="stock-paper-control">
+    <div className="stock-paper-automation">
+      <span><strong>Auto research & entry</strong><small>{settings?.stockAutoOpen === false ? 'OFF' : 'ON · Strict 5m/3m only'}</small></span>
+      <span><strong>Auto manage & close</strong><small>{settings?.stockAutoClose === false ? 'OFF' : 'ON · Stop, target, trailing, time'}</small></span>
+      <span><strong>Manual research</strong><small>Available from verified weekly/daily WATCH</small></span>
     </div>
-  </>;
+    {message && <div className="stock-alert" role="status">{message}</div>}
+    {position && <section className="stock-position-active panel">
+      <div className="stock-position-topline"><span>SIMULATED STOCK POSITION</span><strong>{position.entryMethod} ENTRY</strong></div>
+      <h3>{position.stock} · {position.side} · {position.strike} strike</h3>
+      <p>{position.symbol} · {position.lots} lot(s) · {position.quantity} units</p>
+      <div className="stock-position-stats">
+        <span>Entry ask<strong>{formatMoney(position.entry)}</strong></span>
+        <span>{indicativePnl == null ? 'Exit bid · waiting' : 'Indicative P&L'}<strong>{indicativePnl == null ? '—' : formatMoney(indicativePnl)}</strong></span>
+        <span>Underlying stop<strong>{formatMoney(position.underlyingStop)}</strong></span>
+        <span>Underlying target<strong>{formatMoney(position.underlyingTarget)}</strong></span>
+      </div>
+      <button type="button" disabled={busy} className="stock-paper-close" onClick={close}>
+        {busy ? 'Checking fresh FYERS bid…' : 'Close paper position at FYERS bid'}
+      </button>
+      <p className="stock-paper-note">Auto exits use shared live quotes while the app is visible and connected. They are simulated — not exchange-side stop orders, and are not guaranteed if the app is closed or quotes stop arriving.</p>
+    </section>}
+    {!position && manualTicket && <section className="stock-manual-ticket panel">
+      <div className="stock-position-topline"><span>MANUAL RESEARCH OVERRIDE</span><strong>{manualTicket.side}</strong></div>
+      <h3>{manualTicket.stock} · {manualTicket.strike} · {manualTicket.expiry}</h3>
+      <p>{manualTicket.warning}</p>
+      <div className="stock-position-stats">
+        <span>Option bid<strong>{formatMoney(manualTicket.bid)}</strong></span>
+        <span>Option ask<strong>{formatMoney(manualTicket.ask)}</strong></span>
+        <span>Stop (stock)<strong>{formatMoney(manualTicket.stop)}</strong></span>
+        <span>Target (stock)<strong>{formatMoney(manualTicket.target)}</strong></span>
+      </div>
+      <label className="stock-lot-label">Paper lots
+        <input type="number" min="1" max={Math.max(1, Number(settings?.lotCap) || 5)}
+          value={manualLots} onChange={event=>setManualLots(clamp(event.target.value,settings?.lotCap))}/>
+      </label>
+      {manualCard
+        ? <p>Estimated paper risk {formatMoney(manualCard.risk)} · reward {formatMoney(manualCard.reward)} · {manualCard.quantity} units.</p>
+        : <p className="stock-alert">This contract currently fails the capital, risk, liquidity or reward check. Try fewer lots or a new scan.</p>}
+      <button type="button" className="stock-paper-open" disabled={!active || busy || !manualCard}
+        onClick={()=>open(manualCard,'USER')}>{busy ? 'Checking option price…' : 'Open MANUAL paper trade'}</button>
+    </section>}
+    {!position && cards.length > 0 && <div className="history-list">
+      {cards.map(card=><section className="panel" key={card.symbol}>
+        <div className="stock-position-topline"><span>CONFIRMED 5m/3m · PAPER ONLY</span><strong>{card.side}</strong></div>
+        <h3>{card.stock} · {card.strike} · {card.expiry}</h3>
+        <p>{card.setup} · {card.lots} lot(s) · {card.quantity} units</p>
+        <p>Bid {formatMoney(card.bid)} / Ask {formatMoney(card.ask)} · Stop {formatMoney(card.stop)} · Target {formatMoney(card.target)}</p>
+        <p>Risk {formatMoney(card.risk)} · reward {formatMoney(card.reward)} · {card.ratio.toFixed(2)}R</p>
+        <button type="button" className="stock-paper-open" disabled={!active || busy || card.validUntil <= Date.now()}
+          onClick={()=>open(card,'USER')}>Open paper position manually</button>
+      </section>)}
+    </div>}
+  </div>;
 }
