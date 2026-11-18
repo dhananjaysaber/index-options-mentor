@@ -62,7 +62,7 @@ export async function prepareStockPaperTicket(get, query, now = Date.now(), opti
     status: 'MANUAL_RESEARCH', strictEligible: false, stock, side,
     symbol: leg.symbol, underlyingSymbol,
     setup: 'Manual weekly/daily research override (no approved 3m trigger)',
-    confirmedAt: now, validUntil: Date.now() + 20000,
+    confirmedAt: now, validUntil: Date.now() + 60000,
     strike: Number(leg.strike_price), expiry: dateKey(expiry * 1000),
     lotSize, delta, bid, ask, bidSize, askSize, spot: currentSpot,
     stop, target, min: currentSpot * .997, max: currentSpot * 1.003,
