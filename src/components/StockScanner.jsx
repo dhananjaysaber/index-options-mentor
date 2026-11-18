@@ -25,6 +25,9 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
   const [reload, setReload] = useState(0);
   const [log, setLog] = useState(readLog);
   const [storageError, setStorageError] = useState(false);
+  const [manualTicket, setManualTicket] = useState(null);
+  const [manualBusy, setManualBusy] = useState('');
+  const [manualError, setManualError] = useState('');
   const cards = useMemo(() => rankStockCandidates((scan?.candidates || []).filter(item =>
     (scan?.contextWatchlist || []).some(watch => watch.stock === item.stock && watch.side === item.side)
   ), settings, now), [scan, settings, now]);
@@ -148,6 +151,33 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
     return () => window.clearInterval(interval);
   }, [active]);
 
+  async function prepareManualTicket(row) {
+    if (!active || manualBusy || row?.status !== 'WATCH' || Number(row.score) < 85 ||
+      !['CE', 'PE'].includes(row.side) || row.weekBias !== row.dayBias) return;
+    setManualBusy(row.stock);
+    setManualError('');
+    setManualTicket(null);
+    try {
+      const url = '/api/fyers/stock-scanner?phase=manual-ticket&stock=' +
+        encodeURIComponent(row.stock) + '&side=' + encodeURIComponent(row.side);
+      const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(25000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.error) throw Error(data.error || 'The FYERS option ticket is unavailable.');
+      if (data.stock !== row.stock || data.side !== row.side || data.score < 85 ||
+        data.manualOverride !== true || !data.symbol || !(data.validUntil > Date.now())) {
+        throw Error('A valid current 85+ manual paper ticket was not returned. Please rescan.');
+      }
+      setManualTicket(data);
+      window.setTimeout(() => document.getElementById('stock-manual-ticket')?.scrollIntoView({
+        behavior: 'smooth', block: 'start'
+      }), 60);
+    } catch (error) {
+      setManualError(error.name === 'TimeoutError'
+        ? 'FYERS did not verify the option contract in time. Try again.'
+        : error.message || 'Could not prepare the manual Stock option ticket.');
+    } finally { setManualBusy(''); }
+  }
+
   const signalIds = cards.map(card => [card.stock, card.side, card.confirmedAt].join(':')).join('|');
   useEffect(() => {
     if (!active || !cards.length) return;
@@ -187,6 +217,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       {!active && <div className="stock-alert" role="status">Connect FYERS to start the Stock Options scanner. The Normal and Scalp modes remain available separately.</div>}
       {error && <div className="stock-alert" role="alert">{error}</div>}
       {storageError && <div className="stock-alert" role="alert">Your device could not save the Stock signal log.</div>}
+      {manualError && <div className="stock-alert" role="alert">{manualError}</div>}
       {scan?.quoteBatchErrors > 0 && <div className="stock-alert subtle">{scan.quoteBatchErrors} quote batch(es) failed; available stocks are still shown below.</div>}
       {scan?.failures?.length > 0 && <div className="stock-alert subtle">FYERS data could not be confirmed for: {scan.failures.join(', ')}. These stocks are not trade-ready.</div>}
 
@@ -215,6 +246,13 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
               <div className="stock-watch-signal">
                 <span className={`stock-side ${row.side === 'CE' ? 'call' : row.side === 'PE' ? 'put' : ''}`}>{row.side || '—'}</span>
                 <small>{row.status === 'WATCH' ? `WATCH ${row.score}/100` : row.status === 'SCREENING' ? 'SCREENING' : 'NO DATA'}</small>
+                {row.status === 'WATCH' && Number(row.score) >= 85 &&
+                  row.weekBias === row.dayBias && ['CE','PE'].includes(row.side) &&
+                  <button type="button" className="stock-watch-paper-btn"
+                    disabled={!active || Boolean(manualBusy)}
+                    onClick={() => prepareManualTicket(row)}>
+                    {manualBusy === row.stock ? 'Verifying…' : 'Manual paper'}
+                  </button>}
               </div>
             </div>
           ))}
@@ -225,14 +263,14 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         <div className="stock-panel-heading"><div><span className="stock-scanner-eyebrow">SEPARATE PAPER STRATEGY</span><h2>Confirmed stock option setups</h2></div><span className="stock-panel-meta">{cards.length} eligible</span></div>
         <p className="stock-explainer">Paper trades only. Validated FYERS expiry and lot size, current bid/ask depth and capital/risk limits are required. No live broker orders are placed here.</p>
         {active && scan && !cards.length && <p className="stock-scanner-empty">{scan.entryStatus || 'No paper-ready 5-minute/3-minute option entry yet. Weekly/daily watch candidates remain visible above.'}</p>}
-        <StockPaperPosition cards={cards} settings={settings} onCloseTrade={onCloseTrade} />
+        <div id="stock-manual-ticket"><StockPaperPosition cards={cards} manualTicket={manualTicket} settings={settings} onCloseTrade={onCloseTrade} /></div>
       </section>
 
       <details className="stock-signal-log">
         <summary>Recorded stock research signals ({log.length})</summary>
         <div>{log.slice(0, 30).map(row => <p key={row.id}><strong>{row.stock} {row.side}</strong> · {row.strike} · {row.setup} · {row.lots} lots · risk {money(row.risk)} · {ist(row.recordedAt)}</p>)}</div>
       </details>
-      <p className="stock-scanner-disclaimer">Research and paper trades only. Weekly/daily context is based on completed historical candles; current quote movement is screened separately. The live Stock option trade stage checks at most five watch candidates per scan. This is not an exhaustive scan of all F&amp;O charts and does not recreate FYERS' proprietary OI Watch rankings. Normal and Scalp remain unchanged.</p>
+      <p className="stock-scanner-disclaimer">Manual Stock entry for verified 85+ weekly/daily WATCH is a research exception, not an approved 5m/3m setup. No automatic Stock entry/exit is enabled. Research and paper trades only. Weekly/daily context is based on completed historical candles; current quote movement is screened separately. The live Stock option trade stage checks at most five watch candidates per scan. This is not an exhaustive scan of all F&amp;O charts and does not recreate FYERS' proprietary OI Watch rankings. Normal and Scalp remain unchanged.</p>
     </div>
   );
 }

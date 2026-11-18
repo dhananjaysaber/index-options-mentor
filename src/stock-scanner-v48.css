@@ -71,3 +71,17 @@
  .stock-panel-heading{flex-wrap:wrap}
  .stock-panel-meta{white-space:normal}
 }
+
+
+/* Isolated 85+ Stock manual-paper exception; never affects Index or Scalp. */
+.stock-watch-paper-btn{display:inline-flex;justify-content:center;align-items:center;white-space:nowrap;border-radius:8px;border:1px solid #a2cde2;background:#edf9ff;color:#07527b;padding:6px 8px;font-size:10px;font-weight:850;min-height:30px;cursor:pointer}
+.stock-watch-paper-btn:disabled{opacity:.5;cursor:not-allowed}
+#stock-manual-ticket{scroll-margin-top:100px}
+.stock-manual-preview{padding:18px!important;border:1px solid #91c4df!important;background:#f3faff!important;border-radius:16px}
+.stock-manual-preview h2{margin:0 0 10px;font-size:18px;color:#13375a}
+.stock-manual-preview p{font-size:12px;color:#4c6378;line-height:1.55;margin:8px 0}
+.stock-manual-preview .stock-paper-warning{background:#fff8e8;color:#73531c;padding:10px;border-radius:10px}
+.stock-manual-preview .stock-lot-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:800;gap:10px;margin:12px 0}
+.stock-manual-preview input{max-width:90px;min-height:38px;border:1px solid #bbd0df;border-radius:8px;padding:6px;font-size:15px;color:#173e58;background:white}
+.stock-manual-preview button{width:100%;border-radius:11px;background:#0c5b8d!important;color:#fff!important;border:0;min-height:44px;font-weight:850}
+.stock-manual-preview button:disabled{background:#adc5d2!important;cursor:not-allowed}

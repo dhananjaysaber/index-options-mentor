@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { runStockScan } from '../../server/stockScanner.mjs';
 import { runStockUniverse, runStockContext, runStockEntryCheck } from '../../server/stockStages.mjs';
+import { prepareManualStockPaperTicket } from '../../server/stockManual85.mjs';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
@@ -575,7 +576,9 @@ async function handleStockScanner(request) {
     };
     const query = {
       symbols: params.get('symbols') || '',
-      bias: params.get('bias') || ''
+      bias: params.get('bias') || '',
+      stock: params.get('stock') || '',
+      side: params.get('side') || ''
     };
     const now = Date.now();
     const results = phase === 'universe'
@@ -584,9 +587,11 @@ async function handleStockScanner(request) {
         ? await runStockContext(get, scope, now, query)
         : phase === 'entry'
           ? await runStockEntryCheck(get, scope, now, query)
-          : null;
+          : phase === 'manual-ticket'
+            ? await prepareManualStockPaperTicket(get, scope, query, now)
+            : null;
     if (!results) return json({ error: 'Unknown stock scanner phase.' }, 400);
-    return json(results);
+    return json(results, results.error ? results.status || 422 : 200);
   } catch (error) {
     console.error('Stock scan unavailable:', error?.code || error?.message);
     return fyersFailureResponse(error, 'Stock scanner data is temporarily unavailable.');
