@@ -46,7 +46,7 @@ export async function prepareManualStockPaperTicket(get, scope, query, now = Dat
   const leg = optionsList.find(row => {
     const instrument = master[row.symbol];
     return number(instrument?.minLotSize) > 0 && instrument?.optType === side &&
-      instrument?.tradeStatus !== 0 && number(instrument.expiryDate) >= expiry;
+      instrument?.tradeStatus !== 0; // Expiry is verified against the live FYERS option chain above.
   });
   if (!leg) return fail('No current exchange-listed FYERS option with a verified lot size was found.');
   const lotSize = number(master[leg.symbol].minLotSize);
