@@ -79,11 +79,16 @@ async function pollLiveQuote() {
     // One poll serves the current candidate and both independently open strategies.
     // Avoid a second 2-second FYERS loop when a simulated position opens.
     const openPositions = readOpenPositions();
+    // Additional Stock paper symbols share this existing REST poll.
+    // They do not participate in NIFTY option selection or Index position state.
+    const stockPaper = readStockPaperForQuotes();
     const optionSymbol = openPositions[0]?.symbol || candidateSymbol || '';
     const symbols = [...new Set([
       'NSE:NIFTY50-INDEX',
       candidateSymbol,
-      ...openPositions.map(position => position.symbol)
+      ...openPositions.map(position => position.symbol),
+      stockPaper?.symbol,
+      stockPaper?.underlyingSymbol
     ].filter(Boolean))].join(',');
     const response = await previousFetch(`/api/fyers/quote?symbol=${encodeURIComponent(symbols)}`, { cache: 'no-store' });
     if (response.status === 401) {
@@ -123,6 +128,18 @@ async function pollLiveQuote() {
     };
     window.__indexOptionsLiveQuote = quote;
     window.dispatchEvent(new CustomEvent('mentor:live-quote', { detail: quote }));
+    if (stockPaper?.id) {
+      const optionNode = nodes.find(row => row?.n === stockPaper.symbol || row?.v?.symbol === stockPaper.symbol)?.v;
+      const underlying = quotePrice(nodes, stockPaper.underlyingSymbol);
+      const bid = Number(optionNode?.bid ?? optionNode?.bids?.[0]?.price);
+      const ask = Number(optionNode?.ask ?? optionNode?.asks?.[0]?.price);
+      if (underlying != null && Number.isFinite(bid) && bid > 0) {
+        window.dispatchEvent(new CustomEvent('mentor:stock-paper-quote', {
+          detail: { id: stockPaper.id, symbol: stockPaper.symbol,
+            spot: underlying, bid, ask: Number.isFinite(ask) ? ask : null, at: quote.at }
+        }));
+      }
+    }
   } catch {
     // Keep the last good quote. A temporary network error must not blank the UI.
   } finally {
@@ -134,6 +151,15 @@ function quotePrice(nodes, symbol) {
   const node = nodes.find(row => row?.n === symbol || row?.v?.symbol === symbol);
   const value = Number(node?.v?.lp);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readStockPaperForQuotes() {
+  try {
+    const value = localStorage.getItem('index-options-mentor-stock-paper-position-v1');
+    const position = value ? JSON.parse(value) : null;
+    return position?.strategyFamily === 'STOCK_SCALP' && position?.symbol && position?.underlyingSymbol
+      && !position.closedAt ? position : null;
+  } catch { return null; }
 }
 
 function readOpenPositions() {
