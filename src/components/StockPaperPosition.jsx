@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { recordStockPaperEvent } from '../services/tradeJournal.js';
+import { rankStockCandidates } from '../engine/stockRanking.js';
 
 const key = 'index-options-mentor-stock-paper-position-v1';
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
@@ -14,10 +15,14 @@ function journal(trade, type, eventId) {
     console.warn('Could not queue stock paper journal event', error));
 }
 
-export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
+export default function StockPaperPosition({ cards, manualTicket, onCloseTrade, settings }) {
   const [position, setPosition] = useState(loadPosition);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [manualLots, setManualLots] = useState(1);
+  const manualCard = manualTicket?.score >= 85 && manualTicket.manualOverride && manualTicket.strictEligible === false
+    ? rankStockCandidates([manualTicket], { ...settings, defaultLots: manualLots }, Date.now())[0] || null
+    : null;
   const request = useRef(null);
   const locked = useRef(false);
   useEffect(() => () => request.current?.abort(), []);
@@ -26,6 +31,11 @@ export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
   }, [position?.id]);
 
   async function open(card) {
+    if (card?.manualOverride && !(card?.score >= 85 && card?.strictEligible === false &&
+      card?.weekBias === card?.dayBias && ['BULLISH', 'BEARISH'].includes(card?.weekBias))) {
+      setError('Manual Stock research must have a verified aligned weekly/daily score of at least 85.');
+      return;
+    }
     if (locked.current || loadPosition() || card.validUntil <= Date.now()) {
       setError('The setup has expired or another stock paper position is already open. Scan again.');
       return;
@@ -68,13 +78,14 @@ export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
       const trade = {
         id: crypto.randomUUID(), mode: 'SIMULATION', strategyFamily: 'STOCK_SCALP',
         strategyTier: 'STOCK_SCALP', strategyTierLabel: 'Stock scalp · Paper',
-        approvalState: 'STOCK_CONFIRMED', initiatedBy: 'USER', entryMethod: 'MANUAL',
+        approvalState: card.manualOverride ? 'STOCK_WATCH_85_MANUAL' : 'STOCK_CONFIRMED', initiatedBy: 'USER', entryMethod: 'MANUAL',
         openedByMentor: false, autoManaged: false, manualResearch: true,
         openedAt: new Date().toISOString(), symbol: card.symbol, side: card.side,
         underlyingSymbol: `NSE:${card.stock}-EQ`, strike: card.strike, expiry: card.expiry,
         lots: card.lots, lotSize: card.lotSize, quantity: card.quantity, entry: ask,
         underlyingEntry: spot, underlyingStop: card.stop, underlyingTarget: card.target,
-        rr: card.ratio, mentorSuggestionAtEntry: card.setup, entryOption: card
+        rr: card.ratio, mentorSuggestionAtEntry: card.setup, entryOption: card,
+        manualOverride: Boolean(card.manualOverride), researchScore: card.score ?? card.setupScore ?? null
       };
       localStorage.setItem(key, JSON.stringify(trade));
       setPosition(trade);
@@ -137,6 +148,24 @@ export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
       <p>{position.symbol} · {position.lots} lots · entry {money(position.entry)}</p>
       <button type="button" className="secondary-btn" disabled={busy} onClick={close}>{busy ? 'Checking exit quote…' : 'Paper close at bid'}</button>
       <p>Paper fills use the displayed ask and bid. Journal P&amp;L is before fees and extra slippage.</p>
+    </section>}
+    {!position && manualTicket && <section className="stock-manual-preview panel">
+      <h2>Manual paper research · {manualTicket.stock} {manualTicket.side}</h2>
+      <p><strong>WATCH {manualTicket.score}/100</strong> · Weekly {manualTicket.weekBias} · Daily {manualTicket.dayBias}</p>
+      <p>{manualTicket.reason}</p>
+      <p><strong>Verified option:</strong> {manualTicket.symbol} · {manualTicket.expiry} expiry · {manualTicket.lotSize} units/lot</p>
+      <p><strong>Bid / Ask:</strong> {money(manualTicket.bid)} / {money(manualTicket.ask)} · Delta {Number(manualTicket.delta).toFixed(2)}</p>
+      <p><strong>Underlying:</strong> {money(manualTicket.spot)} · Illustrative stop {money(manualTicket.stop)} · target {money(manualTicket.target)}</p>
+      <p className="stock-paper-warning">{manualTicket.warning}</p>
+      <label className="stock-lot-label">Paper lots
+        <input type="number" min="1" max={Math.max(1, Number(settings?.lotCap) || 1)}
+          value={manualLots} onChange={event => setManualLots(Math.max(1, Math.min(Number(settings?.lotCap) || 1, Math.floor(Number(event.target.value) || 1))))} />
+      </label>
+      {manualCard ? <p><strong>Estimated risk:</strong> {money(manualCard.risk)} · <strong>Estimated reward:</strong> {money(manualCard.reward)} · {manualCard.ratio.toFixed(2)}R · {manualCard.quantity} units</p>
+        : <p role="status">This contract/lot selection does not pass the capital, spread, 1.2R reward-to-risk or risk-budget checks.</p>}
+      <button type="button" className="secondary-btn" disabled={busy || !manualCard || manualTicket.validUntil <= Date.now()}
+        onClick={() => open(manualCard)}>{busy ? 'Checking FYERS premium…' : 'Open manual paper position'}</button>
+      <p>Simulated only. No broker order. This 85+ WATCH exception is not a confirmed 5-minute/3-minute entry.</p>
     </section>}
     <div className="history-list">
       {cards.map(card => (
