@@ -593,7 +593,7 @@ async function handleStockScanner(request) {
     if (!results) return json({ error: 'Unknown stock scanner phase.' }, 400);
     return json(results, results.error ? results.status || 422 : 200);
   } catch (error) {
-    console.error('Stock scan unavailable:' error?.code || error?.message);
+    console.error('Stock scan unavailable:', error?.code || error?.message);
     return fyersFailureResponse(error, 'Stock scanner data is temporarily unavailable.');
   }
 }
