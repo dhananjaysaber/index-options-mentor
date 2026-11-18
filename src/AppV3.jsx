@@ -44,6 +44,9 @@ const DEFAULT_SETTINGS = {
   mentorAutoClose: true,
   scalpAutoOpen: true,
   scalpAutoClose: true,
+  stockAutoOpen: true,
+  stockAutoClose: true,
+  stockMaxHoldMinutes: 12,
   liveHandoffEnabled: false,
   controlledResearch: true,
   experimentalResearch: true
@@ -86,6 +89,16 @@ export default function AppV3() {
 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
+  useEffect(() => {
+    const closed = event => {
+      const trade = event?.detail?.trade;
+      if (trade?.strategyFamily === 'STOCK_SCALP' && trade.closedAt) {
+        setHistory(previous => [trade, ...previous.filter(row => row.id !== trade.id)].slice(0, 1000));
+      }
+    };
+    window.addEventListener('mentor:stock-paper-closed', closed);
+    return () => window.removeEventListener('mentor:stock-paper-closed', closed);
+  }, []);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
   useEffect(() => { persistPosition(SCALP_POSITION_KEY, scalpPosition); }, [scalpPosition]);
   useEffect(() => {
