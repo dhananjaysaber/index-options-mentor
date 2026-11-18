@@ -105,6 +105,7 @@ export function createStockPaperTrade(card, quote, settings, initiatedBy = 'USER
   if (!valid || !(spot >= card.min && spot <= card.max) || !(ask >= bid && bid > 0) ||
       !Number.isInteger(lots) || lots < 1 || lots > maxLots || !(Number.isSafeInteger(lotSize) && lotSize > 0) ||
       !(delta > 0 && delta <= 1) || !(capital > 0 && budget > 0) || !(quantity > 0) ||
+      Math.min(Number(card.askSize), Number(card.bidSize)) < quantity ||
       ask * quantity + 100 > capital || estimatedRisk > budget || estimatedReward < 1.2 * estimatedRisk) {
     throw Error('The current option premium, spread, stop, reward or capital fails Stock paper risk checks.');
   }
