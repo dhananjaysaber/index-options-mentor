@@ -1,5 +1,6 @@
 import test from 'node:test';
 import { equityScreeningSymbols, NSE_FNO_SCREENING_SEED } from '../server/stockUniverseSeed.mjs';
+import { quoteValue } from '../server/stockScanner.mjs';
 import assert from 'node:assert/strict';
 import {
   runStockUniverse, runStockContext, runStockEntryCheck, analyseWeeklyDaily
@@ -140,4 +141,38 @@ test('fast initial scan uses exchange-derived broad reference pool, not a twelve
   assert.ok(quotes > 1);
   assert.equal(histories, 0);
   assert.equal(chains, 0);
+});
+
+test('FYERS quote.tt is day time, not a last-price-tick timestamp', () => {
+  // Regress the actual production bug: a valid FYERS equity quote had
+  // non-current tt and was discarded, leaving 0 / 163 validated quotes.
+  const symbol = 'NSE:RELIANCE-EQ';
+  const brokerQuote = {
+    d: [{ n: symbol, s: 'ok',
+      v: { symbol, lp: 1402.25, open_price: 1400, chp: .15, tt: '1691020800' } }],
+    receivedAt: Date.now()
+  };
+  assert.equal(quoteValue(brokerQuote, symbol)?.lp, 1402.25);
+  assert.equal(quoteValue({ ...brokerQuote, receivedAt: Date.now() - 11000 }, symbol), null,
+    'A stale application snapshot must still be rejected');
+  assert.equal(quoteValue({ ...brokerQuote, d: [{ ...brokerQuote.d[0], s: 'error' }] }, symbol), null);
+});
+
+test('actual FYERS quote timestamps no longer eliminate the preliminary watchlist', async () => {
+  const oldSessionTime = '1691020800'; // FYERS documented quote tt sample
+  const get = async (path, params) => {
+    assert.equal(path, '/quotes');
+    return { receivedAt: Date.now(), d: params.symbols.split(',').map(symbol => ({
+      n: symbol, s: 'ok', v: { lp: 132.5, chp: 1.1, open_price: 130.0,
+        high_price: 134, low_price: 129, tt: oldSessionTime }
+    })) };
+  };
+  const result = await runStockUniverse(get, 'tt-session-format-regression', now, {
+    universe: [
+      { stock: 'RELIANCE', symbol: 'NSE:RELIANCE-EQ' },
+      { stock: 'SBIN', symbol: 'NSE:SBIN-EQ' }
+    ]
+  });
+  assert.equal(result.quotesChecked, 2);
+  assert.equal(result.prescreen.length, 2);
 });

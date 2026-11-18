@@ -176,8 +176,8 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
           <p>First identify bullish and bearish weekly/daily setups across NSE F&amp;O. Then look for completed 5-minute and 3-minute entry triggers. The watchlist stays visible while entries are checked.</p>
         </div>
         <div className="stock-scanner-actions">
-          <span className={error ? 'stock-status warn' : active && scan ? 'stock-status live' : 'stock-status'}>
-            <i aria-hidden="true" /> {error ? 'Stock data warning' : stage ? 'Scanning FYERS' : active && scan ? 'Watchlist updated' : active ? 'Checking FYERS' : 'Reconnect FYERS'}
+          <span className={error || (scan?.universeCount > 0 && scan?.quotesChecked === 0) ? 'stock-status warn' : active && scan?.quotesChecked > 0 ? 'stock-status live' : 'stock-status'}>
+            <i aria-hidden="true" /> {error ? 'Stock data warning' : stage ? 'Scanning FYERS' : scan?.universeCount > 0 && scan?.quotesChecked === 0 ? 'No valid FYERS stock quotes' : active && scan?.quotesChecked > 0 ? 'Quotes received' : active ? 'Checking FYERS' : 'Reconnect FYERS'}
           </span>
           <button type="button" className="stock-refresh-button" onClick={() => setReload(value => value + 1)}
             disabled={!active || loading}>{loading ? 'Scanning…' : 'Scan now'}</button>

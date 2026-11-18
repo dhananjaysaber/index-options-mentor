@@ -567,7 +567,12 @@ async function handleStockScanner(request) {
     const phase = params.get('phase') || 'universe';
     // Limit each external Stock-only FYERS call; a slow quote must never
     // block the whole function until the Netlify 30-second gateway timeout.
-    const get = (path, args) => fyersGet(path, args, auth.token, { signal: AbortSignal.timeout(6500) });
+    const get = async (path, args) => {
+      const data = await fyersGet(path, args, auth.token, { signal: AbortSignal.timeout(6500) });
+      // Stock-only quote freshness tracks when the server actually obtained
+      // the FYERS response. FYERS quote.v.tt is NOT last tick time.
+      return path === '/quotes' ? { ...data, receivedAt: Date.now() } : data;
+    };
     const query = {
       symbols: params.get('symbols') || '',
       bias: params.get('bias') || ''

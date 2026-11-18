@@ -246,7 +246,7 @@ export async function runStockEntryCheck(get, scope, now = Date.now(), query = {
         strike: Number(leg.strike_price), expiry: formatDate(expiry * 1000),
         lotSize, delta, bid, ask, bidSize, askSize, min, max, spot: currentSpot,
         target: row.setup.entry + (row.setup.side === 'CE' ? 1 : -1) * row.setup.distance * 2,
-        validUntil: Math.min(Number(option.tt) * 1000 + 20000, now + 20000),
+        validUntil: Date.now() + 20000,
         status: 'CONFIRMED', setupScore: 90 };
     } catch (error) {
       if (error?.status === 401 || error?.status === 429) throw error;

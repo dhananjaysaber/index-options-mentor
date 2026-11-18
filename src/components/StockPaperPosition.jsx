@@ -39,15 +39,16 @@ export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
       // A displayed 20-second-old ask is not a valid scalp paper fill.
       // Revalidate the exact FYERS option + stock quote immediately on click.
       const symbols = encodeURIComponent([`NSE:${card.stock}-EQ`, card.symbol].join(','));
+      const requestedAt = Date.now();
       const response = await fetch(`/api/fyers/quote?symbol=${symbols}`, {
         cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)])
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Cannot confirm current stock option prices.');
-      const get = symbol => {
-        const row = data.d?.find(item => item.n === symbol && item.s === 'ok')?.v;
-        return row && Math.abs(Date.now() / 1000 - Number(row.tt)) <= 10 ? row : null;
-      };
+      // FYERS v.tt is not a last-trade timestamp; protect fills using the
+      // actual age of this authenticated, no-cache broker response instead.
+      if (Date.now() - requestedAt > 8000) throw new Error('Stock option quote request was too slow. Please retry.');
+      const get = symbol => data.d?.find(item => item.n === symbol && item.s === 'ok')?.v || null;
       const underlying = get(`NSE:${card.stock}-EQ`);
       const option = get(card.symbol);
       const spot = Number(underlying?.lp);
@@ -96,16 +97,14 @@ export default function StockPaperPosition({ cards, onCloseTrade, settings }) {
     request.current = controller;
     try {
       const symbols = encodeURIComponent([position.underlyingSymbol, position.symbol].join(','));
+      const requestedAt = Date.now();
       const response = await fetch(`/api/fyers/quote?symbol=${symbols}`, {
         cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12000)])
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Cannot refresh the paper exit quote.');
-      const get = symbol => {
-        const value = data.d?.find(row => row.n === symbol && row.s === 'ok')?.v;
-        if (Math.abs(Date.now() / 1000 - Number(value?.tt)) <= 10) return value;
-        return null;
-      };
+      if (Date.now() - requestedAt > 8000) throw new Error('Stock option exit quote took too long. Please retry.');
+      const get = symbol => data.d?.find(row => row.n === symbol && row.s === 'ok')?.v || null;
       const option = get(position.symbol);
       const exit = Number(option?.bid);
       const spot = Number(get(position.underlyingSymbol)?.lp);
