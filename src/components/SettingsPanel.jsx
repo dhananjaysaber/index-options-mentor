@@ -18,6 +18,7 @@ export default function SettingsPanel({ settings, onSave }) {
       ...draft,
       capital: Math.max(10000, Number(draft.capital) || 50000),
       riskPct: Math.max(0.1, Math.min(10, Number(draft.riskPct) || 1)),
+      stockMaxHoldMinutes: Math.max(1, Math.min(240, Math.round(Number(draft.stockMaxHoldMinutes) || 12))),
       defaultLots: Math.max(1, Math.min(20, Math.round(Number(draft.defaultLots) || 1))),
       lotCap: Math.max(1, Math.min(20, Math.round(Number(draft.lotCap) || 5)))
     };
@@ -69,6 +70,11 @@ export default function SettingsPanel({ settings, onSave }) {
           <Toggle checked={draft.mentorAutoClose} onChange={value => update('mentorAutoClose', value)} title="Mentor auto-close" copy="Close the 13-point simulated position automatically when the position Mentor reaches a genuine EXIT condition." />
           <Toggle checked={draft.scalpAutoOpen !== false} onChange={value => update('scalpAutoOpen', value)} title="Scalp auto-open" copy="Open a scalp simulation automatically only when the strict 5m-context / 3m-execution scalp rules qualify." />
           <Toggle checked={draft.scalpAutoClose !== false} onChange={value => update('scalpAutoClose', value)} title="Scalp auto-close" copy="Auto-close scalp simulations on +1R target, hard stop, time limit, context failure or profit-protection exit. Applies to both auto and manually opened scalp positions." />
+          <Toggle checked={draft.stockAutoOpen === true} onChange={value => update('stockAutoOpen', value)} title="Stock auto-open (paper)" copy="Automatically open only fully qualified Stock 5m/3m setups with verified option contract, spread and capital risk. WATCH alone never triggers automatic entry." />
+          <Toggle checked={draft.stockAutoClose !== false} onChange={value => update('stockAutoClose', value)} title="Stock auto-close (paper)" copy="Monitor stock paper positions for underlying stop, target, trailing protection and maximum holding time using the shared live quote loop while the PWA is open." />
+          <Field label="Stock paper maximum hold (minutes)" hint="Automatic time exit in an active app session; not an exchange-side order.">
+            <input type="number" min="1" max="240" step="1" value={draft.stockMaxHoldMinutes ?? 12} onChange={e => update('stockMaxHoldMinutes', e.target.value)} />
+          </Field>
           <Toggle checked={draft.controlledResearch} onChange={value => update('controlledResearch', value)} title="4/5 controlled research" copy="Track 4/5 mandatory + at least 7/8 confirmation setups when hard safety gates still pass." />
           <Toggle checked={draft.experimentalResearch} onChange={value => update('experimentalResearch', value)} title="3/5 experimental research" copy="Track 3/5 mandatory + at least 6/8 confirmation setups when hard safety gates still pass. Research only." />
         </SettingsCard>
