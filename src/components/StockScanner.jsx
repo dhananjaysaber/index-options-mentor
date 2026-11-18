@@ -212,8 +212,8 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
 
       {!active && <div className="stock-alert" role="status">Connect FYERS to start the Stock Options scanner. The Normal and Scalp modes remain available separately.</div>}
       {error && <div className="stock-alert" role="alert">{error}</div>}
-      {storageError && <div className="stock-alert" role="alert">Your device could not save the Stock signal log.</div>
-      {manualError && <div className="stock-alert" role="alert">{manualError}</div>}}
+      {storageError && <div className="stock-alert" role="alert">Your device could not save the Stock signal log.</div>}
+      {manualError && <div className="stock-alert" role="alert">{manualError}</div>}
       {scan?.quoteBatchErrors > 0 && <div className="stock-alert subtle">{scan.quoteBatchErrors} quote batch(es) failed; available stocks are still shown below.</div>}
       {scan?.failures?.length > 0 && <div className="stock-alert subtle">FYERS data could not be confirmed for: {scan.failures.join(', ')}. These stocks are not trade-ready.</div>}
 
