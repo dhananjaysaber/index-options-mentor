@@ -85,3 +85,47 @@
 .stock-manual-preview input{max-width:90px;min-height:38px;border:1px solid #bbd0df;border-radius:8px;padding:6px;font-size:15px;color:#173e58;background:white}
 .stock-manual-preview button{width:100%;border-radius:11px;background:#0c5b8d!important;color:#fff!important;border:0;min-height:44px;font-weight:850}
 .stock-manual-preview button:disabled{background:#adc5d2!important;cursor:not-allowed}
+
+
+/* v49 Stock-watch card overflow fix — scoped to Stock, no Index/Scalp styles. */
+.stock-scanner-page,.stock-watch-panel,.stock-watch-grid,.stock-watch-item{min-width:0;max-width:100%}
+.stock-watch-item{grid-template-columns:34px minmax(125px,1fr) minmax(95px,auto) minmax(125px,auto)}
+.stock-watch-identity{min-width:0;overflow-wrap:anywhere}
+.stock-watch-prices{min-width:0;white-space:nowrap}
+.stock-watch-signal{min-width:0;max-width:100%}
+.stock-watch-signal small{overflow-wrap:normal;white-space:nowrap}
+.stock-watch-paper-btn{display:inline-flex;align-items:center;justify-content:center;max-width:100%;
+  min-height:36px;padding:7px 9px;white-space:normal;line-height:1.25;text-align:center;
+  font-size:11px;font-weight:850;overflow-wrap:anywhere}
+.stock-manual-status,.stock-manual-error{display:block;font-size:11px;line-height:1.45;
+  padding:8px 10px;border-radius:9px;overflow-wrap:anywhere}
+.stock-manual-status{color:#365e84;background:#e9f5ff}
+.stock-manual-error{color:#995326;background:#fff0df}
+#stock-manual-ticket{min-width:0;scroll-margin-top:110px}
+@media (max-width:720px) {
+  .stock-watch-item{display:grid;grid-template-columns:26px minmax(0,1fr) minmax(82px,max-content);
+    grid-template-areas:"rank identity prices" "signal signal signal";
+    align-items:start;column-gap:8px;row-gap:11px;
+    padding:12px 11px;border-radius:16px;overflow:hidden}
+  .stock-watch-rank{grid-area:rank;align-self:start;margin-top:1px}
+  .stock-watch-identity{grid-area:identity;min-width:0;gap:5px}
+  .stock-watch-identity strong{font-size:14px;line-height:1.25;overflow-wrap:anywhere}
+  .stock-watch-identity small{font-size:11px;line-height:1.4}
+  .stock-watch-prices{grid-area:prices;text-align:right;justify-items:end;min-width:0}
+  .stock-watch-prices strong{font-size:12px;white-space:nowrap}
+  .stock-watch-prices small{font-size:10px}
+  .stock-watch-signal{grid-area:signal;display:flex;flex-flow:row wrap;align-items:center;
+    justify-content:flex-start;width:100%;gap:7px;max-width:100%;min-width:0;
+    border-top:1px solid #dae8ed;padding-top:10px;text-align:left}
+  .stock-watch-signal small{font-size:11px;letter-spacing:.3px;font-weight:850}
+  .stock-watch-paper-btn{margin-left:auto;min-height:38px;max-width:100%;
+    flex:0 1 auto;padding:8px 12px;font-size:12px;white-space:normal}
+  .stock-manual-status,.stock-manual-error{flex-basis:100%}
+  .stock-panel-heading>div{min-width:0}
+  .stock-scanner-stats>div{min-width:0;overflow:hidden}
+}
+@media (max-width:350px) {
+  .stock-watch-item{grid-template-columns:23px minmax(0,1fr) minmax(76px,max-content);column-gap:5px}
+  .stock-watch-prices strong{font-size:11px}
+  .stock-watch-paper-btn{margin-left:0;flex-basis:100%;width:100%}
+}
