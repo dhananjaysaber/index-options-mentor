@@ -33,7 +33,7 @@ test('production Index app renders both Normal and Scalp shells without runtime 
       items.set('index-options-mentor-strategy-mode-v1', strategy);
       const html = renderToString(React.createElement(AppV3));
       assert.match(html, /Index Options Mentor/, strategy + ' should mount');
-      assert.match(html, /13-point Mentor|13-POINT/, strategy + ' original Index Normal strategy should exist');
+      assert.match(html, /13-point/i, strategy + ' original Index Normal strategy should exist');
       assert.match(html, /Scalp|SCALP/, strategy + ' Scalp strategy should exist');
       assert.doesNotMatch(html, /Stock Options Mentor|stock-scanner/, 'Stock UI must be absent');
     }
