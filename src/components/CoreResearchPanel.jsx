@@ -29,7 +29,6 @@ export default function CoreResearchPanel({ snapshot, settings }) {
     { label: 'Contract', value: option ? `${option.strike} ${option.optionType}` : 'Waiting' },
     { label: 'Lots / Qty', value: sizing ? `${sizing.lots} / ${sizing.quantity}` : '—' },
     { label: 'Option LTP', value: liveOption != null ? `₹${fmt(liveOption)}` : '—' },
-    { label: 'NIFTY', value: fmt(liveSpot) },
     { label: 'Invalidation', value: fmt(structure?.underlyingStop), tone: 'danger' },
     { label: 'Target', value: fmt(structure?.underlyingTarget), tone: 'positive' },
     { label: 'R:R', value: Number.isFinite(rr) ? `1 : ${rr.toFixed(1)}` : '—' }
@@ -47,9 +46,8 @@ export default function CoreResearchPanel({ snapshot, settings }) {
         <strong>{checkpoint}</strong>
       </div>
       <div className="core-checkpoint-card" aria-live="polite">
-        <span>13-POINT GATE AUDIT · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
-        <strong>{classification.eligible ? 'Research setup qualified.' : blockers.length ? blockers.slice(0, 3).join(' · ') : classification.reason}</strong>
-        <small>Candidate monitoring is not a trade. The full Mentor, 4/5 controlled and 3/5 experimental tiers still require real option liquidity, an adequate structural stop and room, a confirmed 5m close and a held retest.</small>
+        <span>QUALIFICATION · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
+        <strong>{classification.eligible ? 'Setup qualified' : blockers.length ? blockers.slice(0, 2).join(' · ') : classification.reason}</strong>
       </div>
 
       <div className="core-compact-grid">
