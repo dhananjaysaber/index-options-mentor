@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { recordStockPaperEvent } from '../services/tradeJournal.js';
-import { rankStockCandidates } from '../engine/stockRanking.js';
+import { rankStockCandidates, explainStockPaperEligibility } from '../engine/stockRanking.js';
 
 const key = 'index-options-mentor-stock-paper-position-v1';
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value);
@@ -20,8 +20,17 @@ export default function StockPaperPosition({ cards, manualTicket, onCloseTrade, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [manualLots, setManualLots] = useState(1);
+  const [ticketNow, setTicketNow] = useState(Date.now);
+  useEffect(() => {
+    if (!manualTicket) return undefined;
+    setTicketNow(Date.now());
+    const timer = window.setInterval(() => setTicketNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [manualTicket?.validUntil]);
+  const manualSettings = { ...settings, defaultLots: manualLots };
+  const manualEvaluation = manualTicket ? explainStockPaperEligibility(manualTicket, manualSettings, ticketNow) : null;
   const manualCard = manualTicket?.score >= 85 && manualTicket.manualOverride && manualTicket.strictEligible === false
-    ? rankStockCandidates([manualTicket], { ...settings, defaultLots: manualLots }, Date.now())[0] || null
+    ? rankStockCandidates([manualTicket], manualSettings, ticketNow)[0] || null
     : null;
   const request = useRef(null);
   const locked = useRef(false);
@@ -150,7 +159,9 @@ export default function StockPaperPosition({ cards, manualTicket, onCloseTrade, 
       <p>Paper fills use the displayed ask and bid. Journal P&amp;L is before fees and extra slippage.</p>
     </section>}
     {!position && manualTicket && <section className="stock-manual-preview panel">
-      <h2>Manual paper research · {manualTicket.stock} {manualTicket.side}</h2>
+      <h2>Review simulated trade · {manualTicket.stock} {manualTicket.side}</h2>
+      <p><strong>Step 2 of 2:</strong> Review the verified contract, adjust lots and confirm the paper entry. Tapping the watchlist button did not open a position.</p>
+      <p className="stock-manual-expiry">Contract preview: {Math.max(0, Math.ceil((manualTicket.validUntil - ticketNow) / 1000))}s remaining. The actual entry price will be checked again with FYERS.</p>
       <p><strong>WATCH {manualTicket.score}/100</strong> · Weekly {manualTicket.weekBias} · Daily {manualTicket.dayBias}</p>
       <p>{manualTicket.reason}</p>
       <p><strong>Verified option:</strong> {manualTicket.symbol} · {manualTicket.expiry} expiry · {manualTicket.lotSize} units/lot</p>
@@ -162,10 +173,13 @@ export default function StockPaperPosition({ cards, manualTicket, onCloseTrade, 
           value={manualLots} onChange={event => setManualLots(Math.max(1, Math.min(Number(settings?.lotCap) || 1, Math.floor(Number(event.target.value) || 1))))} />
       </label>
       {manualCard ? <p><strong>Estimated risk:</strong> {money(manualCard.risk)} · <strong>Estimated reward:</strong> {money(manualCard.reward)} · {manualCard.ratio.toFixed(2)}R · {manualCard.quantity} units</p>
-        : <p role="status">This contract/lot selection does not pass the capital, spread, 1.2R reward-to-risk or risk-budget checks.</p>}
+        : <div className="stock-manual-blockers" role="status">
+          <strong>Paper entry not available yet</strong>
+          <ul>{(manualEvaluation?.reasons || ['The option contract is not ready.']).map(reason => <li key={reason}>{reason}</li>)}</ul>
+        </div>}
       <button type="button" className="secondary-btn" disabled={busy || !manualCard || manualTicket.validUntil <= Date.now()}
         onClick={() => open(manualCard)}>{busy ? 'Checking FYERS premium…' : 'Open manual paper position'}</button>
-      <p>Simulated only. No broker order. This 85+ WATCH exception is not a confirmed 5-minute/3-minute entry.</p>
+      <p>Simulated only. No broker order. The 85+ WATCH score is a research filter, not a guaranteed winning trade or a confirmed 5-minute/3-minute entry.</p>
     </section>}
     <div className="history-list">
       {cards.map(card => (
