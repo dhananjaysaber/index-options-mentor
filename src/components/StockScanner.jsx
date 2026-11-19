@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import StockPaperPosition from './StockPaperPosition.jsx';
 import { rankStockCandidates } from '../engine/stockRanking.js';
 
@@ -28,6 +28,9 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
   const [manualTicket, setManualTicket] = useState(null);
   const [manualBusy, setManualBusy] = useState('');
   const [manualError, setManualError] = useState('');
+  const [manualErrorStock, setManualErrorStock] = useState('');
+  const scanRequestRef = useRef(null);
+  const manualInFlightRef = useRef(false);
   const cards = useMemo(() => rankStockCandidates((scan?.candidates || []).filter(item =>
     (scan?.contextWatchlist || []).some(watch => watch.stock === item.stock && watch.side === item.side)
   ), settings, now), [scan, settings, now]);
@@ -42,6 +45,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
     let controller = null;
     async function request(phase, args = '') {
       controller = new AbortController();
+      scanRequestRef.current = controller;
       const url = '/api/fyers/stock-scanner?phase=' + phase + args;
       const response = await fetch(url, {
         cache: 'no-store',
@@ -55,6 +59,12 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
     }
     async function refresh() {
       let delay = 60000;
+      // A requested manual paper ticket takes priority over background Stock
+      // scanning to avoid doubling FYERS calls and cancelling the ticket.
+      if (manualInFlightRef.current) {
+        if (!stopped) timer = window.setTimeout(refresh, 12000);
+        return;
+      }
       if (document.visibilityState === 'hidden') {
         if (!stopped) timer = window.setTimeout(refresh, delay);
         return;
@@ -64,7 +74,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       try {
         setStage('Scanning active NSE F&O stocks');
         const universe = await request('universe');
-        if (stopped) return;
+        if (stopped || manualInFlightRef.current) return;
         setNow(Date.now());
         setScan(current => ({ ...current, ...universe, candidates: [],
           contextWatchlist: [], watchlist: universe.prescreen || [], detailedChecked: 0 }));
@@ -78,12 +88,12 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         let assessed = 0;
         const batchErrors = [];
         for (let offset = 0; offset < shortlist.length; offset += 4) {
-          if (stopped) return;
+          if (stopped || manualInFlightRef.current) return;
           const group = shortlist.slice(offset, offset + 4);
           try {
             const context = await request('context',
               '&symbols=' + encodeURIComponent(group.map(item => item.symbol).join(',')));
-            if (stopped) return;
+            if (stopped || manualInFlightRef.current) return;
             assessed += Number(context.contextChecked) || 0;
             for (const row of context.watchlist || []) watchByStock.set(row.stock, row);
             const combined = [...watchByStock.values()]
@@ -114,7 +124,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         const bias = qualified.map(row => row.stock + ':' + row.side).join(',');
         const entries = await request('entry',
           '&symbols=' + encodeURIComponent(symbols) + '&bias=' + encodeURIComponent(bias));
-        if (stopped) return;
+        if (stopped || manualInFlightRef.current) return;
         setScan(current => ({
           ...current, candidates: entries.candidates || [],
           detailedChecked: entries.detailedChecked || 0,
@@ -123,7 +133,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         setStage('');
         setNow(Date.now());
       } catch (failure) {
-        if (!stopped && failure?.name !== 'AbortError') {
+        if (!stopped && !manualInFlightRef.current && failure?.name !== 'AbortError') {
           setError(failure?.name === 'TimeoutError'
             ? 'A Stock data stage timed out. The last watchlist is kept; try Scan now.'
             : failure.message || 'Stock data temporarily unavailable.');
@@ -141,6 +151,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
     return () => {
       stopped = true;
       controller?.abort();
+      scanRequestRef.current = null;
       window.clearTimeout(timer);
     };
   }, [active, reload]);
@@ -152,30 +163,51 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
   }, [active]);
 
   async function prepareManualTicket(row) {
-    if (!active || manualBusy || row?.status !== 'WATCH' || Number(row.score) < 85 ||
-      !['CE', 'PE'].includes(row.side) || row.weekBias !== row.dayBias) return;
-    setManualBusy(row.stock);
+    if (!active || manualInFlightRef.current || row?.status !== 'WATCH' ||
+        Number(row.score) < 85 || !['CE','PE'].includes(row.side) ||
+        row.weekBias !== row.dayBias) return;
     setManualError('');
+    setManualErrorStock('');
     setManualTicket(null);
+    if (!row.watchGrant) {
+      setManualErrorStock(row.stock);
+      setManualError('This 85+ score needs a refreshed server verification. Select Scan now and try again.');
+      return;
+    }
+    manualInFlightRef.current = true;
+    scanRequestRef.current?.abort();
+    setManualBusy(row.stock);
     try {
-      const url = '/api/fyers/stock-scanner?phase=manual-ticket&stock=' +
-        encodeURIComponent(row.stock) + '&side=' + encodeURIComponent(row.side);
-      const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(25000) });
+      // The watch grant proves the server ALREADY checked both completed
+      // timeframes. This request validates the option, expiry, lot, Greeks
+      // and live bid/ask; it does NOT submit a paper position yet.
+      const params = new URLSearchParams({
+        phase: 'manual-ticket', stock: row.stock,
+        side: row.side, grant: row.watchGrant
+      });
+      const response = await fetch('/api/fyers/stock-scanner?' + params.toString(), {
+        cache: 'no-store', signal: AbortSignal.timeout(18000)
+      });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.error) throw Error(data.error || 'The FYERS option ticket is unavailable.');
+      if (!response.ok || data?.error) throw Error(data.error ||
+        'FYERS did not verify a tradable option contract.');
       if (data.stock !== row.stock || data.side !== row.side || data.score < 85 ||
         data.manualOverride !== true || !data.symbol || !(data.validUntil > Date.now())) {
-        throw Error('A valid current 85+ manual paper ticket was not returned. Please rescan.');
+        throw Error('The broker returned an incomplete or expired paper ticket. Re-scan.');
       }
       setManualTicket(data);
       window.setTimeout(() => document.getElementById('stock-manual-ticket')?.scrollIntoView({
         behavior: 'smooth', block: 'start'
-      }), 60);
+      }), 80);
     } catch (error) {
+      setManualErrorStock(row.stock);
       setManualError(error.name === 'TimeoutError'
-        ? 'FYERS did not verify the option contract in time. Try again.'
-        : error.message || 'Could not prepare the manual Stock option ticket.');
-    } finally { setManualBusy(''); }
+        ? 'Option contract verification timed out. No paper trade was opened. Please retry.'
+        : error.message || 'Could not prepare a verified option ticket.');
+    } finally {
+      manualInFlightRef.current = false;
+      setManualBusy('');
+    }
   }
 
   const signalIds = cards.map(card => [card.stock, card.side, card.confirmedAt].join(':')).join('|');
@@ -217,7 +249,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       {!active && <div className="stock-alert" role="status">Connect FYERS to start the Stock Options scanner. The Normal and Scalp modes remain available separately.</div>}
       {error && <div className="stock-alert" role="alert">{error}</div>}
       {storageError && <div className="stock-alert" role="alert">Your device could not save the Stock signal log.</div>}
-      {manualError && <div className="stock-alert" role="alert">{manualError}</div>}
+      {manualError && <div className="stock-alert" role="alert">Manual ticket for {manualErrorStock}: {manualError}</div>}
       {scan?.quoteBatchErrors > 0 && <div className="stock-alert subtle">{scan.quoteBatchErrors} quote batch(es) failed; available stocks are still shown below.</div>}
       {scan?.failures?.length > 0 && <div className="stock-alert subtle">FYERS data could not be confirmed for: {scan.failures.join(', ')}. These stocks are not trade-ready.</div>}
 
@@ -251,8 +283,10 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
                   <button type="button" className="stock-watch-paper-btn"
                     disabled={!active || Boolean(manualBusy)}
                     onClick={() => prepareManualTicket(row)}>
-                    {manualBusy === row.stock ? 'Verifying…' : 'Manual paper'}
+                    {manualBusy === row.stock ? 'Checking contract…' : 'Review paper trade'}
                   </button>}
+                {manualBusy === row.stock && <span className="stock-manual-status" role="status">Verifying FYERS option, lot size and bid/ask. No trade has been opened.</span>}
+                {manualErrorStock === row.stock && manualError && <span className="stock-manual-error" role="alert">{manualError}</span>}
               </div>
             </div>
           ))}
@@ -261,7 +295,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
 
       <section className="stock-trade-panel">
         <div className="stock-panel-heading"><div><span className="stock-scanner-eyebrow">SEPARATE PAPER STRATEGY</span><h2>Confirmed stock option setups</h2></div><span className="stock-panel-meta">{cards.length} eligible</span></div>
-        <p className="stock-explainer">Paper trades only. Validated FYERS expiry and lot size, current bid/ask depth and capital/risk limits are required. No live broker orders are placed here.</p>
+        <p className="stock-explainer">Review paper trade prepares an option ticket. A second confirmation opens the simulated position, subject to capital and risk checks. Paper trades only. Validated FYERS expiry and lot size, current bid/ask depth and capital/risk limits are required. No live broker orders are placed here.</p>
         {active && scan && !cards.length && <p className="stock-scanner-empty">{scan.entryStatus || 'No paper-ready 5-minute/3-minute option entry yet. Weekly/daily watch candidates remain visible above.'}</p>}
         <div id="stock-manual-ticket"><StockPaperPosition cards={cards} manualTicket={manualTicket} settings={settings} onCloseTrade={onCloseTrade} /></div>
       </section>
