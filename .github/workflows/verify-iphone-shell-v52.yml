@@ -1,0 +1,32 @@
+name: Verify iPhone header and fixed trading dock
+on:
+  push:
+    branches: [fix/iphone-header-dock-2026-11-19]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install
+        run: npm install
+      - name: Run Index and layout regression tests
+        run: npm test
+      - name: Build FYERS Prime PWA
+        run: npm run build
+        env:
+          VITE_API_BASE: https://optionsmentor.netlify.app
+          VITE_PUBLIC_BASE: /index-options-mentor-pwa/
+          VITE_FYERS_TIER: prime
+      - name: Install Chromium for mobile UI geometry verification
+        run: |
+          npm install --no-save playwright@1.58.2
+          npx playwright install --with-deps chromium
+      - name: Run real mobile viewport smoke test
+        run: node scripts/verify-iphone-shell.mjs
