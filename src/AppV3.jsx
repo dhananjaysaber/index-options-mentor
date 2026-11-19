@@ -18,7 +18,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
-import { clearFyersCooldown } from './services/fyersRequestGuard.js';
+import { clearFyersCooldown, readFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 
@@ -409,10 +409,19 @@ export default function AppV3() {
   }
 
   function retryFyersAfterUpgrade() {
-    // FYERS upgrades Prime API limits immediately after payment, but a
-    // Standard daily-limit response may still be locally remembered.
-    // Only a deliberate user click clears this safeguard.
-    clearFyersCooldown();
+    // A temporary FYERS 429 is a broker throttle, NOT a token/plan problem.
+    // Clearing the cooldown on every retry creates another burst and can
+    // exhaust the account's per-second limit even under FYERS Prime.
+    const cooldown = readFyersCooldown();
+    if (cooldown?.kind === 'temporary') {
+      const seconds = Math.max(1, Math.ceil((cooldown.until - Date.now()) / 1000));
+      setLiveError('FYERS request cooldown active. ' + seconds +
+        ' seconds remaining before automatic data retries resume. Existing paper positions are preserved.');
+      return;
+    }
+    // Permit the existing deliberate Prime-upgrade recheck to clear only a
+    // legacy STANDARD daily cooldown, never a temporary broker throttle.
+    if (cooldown?.kind === 'daily' && FYERS_REFRESH.tier === 'prime') clearFyersCooldown();
     void refreshSnapshot({ manual: true });
   }
 
