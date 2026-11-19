@@ -1,71 +1,61 @@
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 
-function fmt(value) {
-  return value == null ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+function formatLevel(value) {
+  const number = Number(value);
+  return value == null || !Number.isFinite(number) || number <= 0
+    ? '—'
+    : number.toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
+/**
+ * A single market-level summary. NiftyStrategyChart still draws real-time
+ * VWAP, trigger, stop and target overlays; it no longer duplicates this
+ * numerical grid inside the chart on the 13-Point screen.
+ */
 export default function TraderMarketPanel({ snapshot }) {
   if (!snapshot) return null;
-  const { market, decision, parameters = [] } = snapshot;
 
+  const market = snapshot.market || {};
   const metrics = [
     ['VWAP', market.vwap],
     ['ORH', market.orh],
     ['ORL', market.orl],
     ['PDH', market.pdh],
     ['PDL', market.pdl],
-    ['5m ATR', market.atr5],
-    ['India VIX', market.vix],
-    ['OI PCR', market.putCallOiRatio]
+    ['5m ATR', market.atr5]
   ];
 
-  const reasons = simpleReasons({ market, decision, parameters });
-
   return (
-    <section className="panel trader-market-panel">
-      <div className="panel-heading compact">
+    <section className="panel trader-market-panel premium-market-panel" aria-label="NIFTY chart and context">
+      <div className="panel-heading compact premium-market-heading">
         <div>
-          <div className="eyebrow">MARKET MAP</div>
-          <h2>Levels & context</h2>
+          <div className="eyebrow">EXECUTION CHART</div>
+          <h2>NIFTY 50 · Price action</h2>
         </div>
-        <span className={`phase-pill ${market.phase === 'LIVE' ? 'live' : ''}`}>{market.phase.replaceAll('_', ' ')}</span>
+        <span className={'phase-pill ' + (market.phase === 'LIVE' ? 'live' : '')}>
+          {String(market.phase || 'WAITING').replaceAll('_', ' ')}
+        </span>
       </div>
 
-      <NiftyStrategyChart snapshot={snapshot} compact />
+      <NiftyStrategyChart
+        snapshot={snapshot}
+        compact
+        showLevelSummary={false}
+        showRuleNote={false}
+      />
 
-      <div className="market-metric-grid">
+      <div className="premium-context-header">
+        <strong>Key market levels</strong>
+        <small>Single live context view</small>
+      </div>
+      <div className="market-metric-grid premium-context-grid" aria-label="VWAP, opening range and prior day levels">
         {metrics.map(([label, value]) => (
           <div className="market-metric" key={label}>
             <span>{label}</span>
-            <strong>{fmt(value)}</strong>
+            <strong>{formatLevel(value)}</strong>
           </div>
         ))}
       </div>
-
-      <div className="mentor-reasoning">
-        <div className="mentor-reasoning-title">Mentor view</div>
-        <div className="mentor-reasoning-list">
-          {reasons.slice(0, 3).map((reason, index) => (
-            <span key={index}>{reason}</span>
-          ))}
-        </div>
-      </div>
     </section>
   );
-}
-
-function simpleReasons({ market, decision, parameters }) {
-  if (market.phase === 'LIVE' && !decision.side) {
-    const regime = parameters.find(row => row.id === 'chop');
-    const notes = ['I do not have a clear CE or PE direction yet.'];
-    if (regime && Number(regime.value) < 0.58) notes.push('Price action is choppy, so I am protecting capital instead of forcing a trade.');
-    notes.push('I am waiting for trend and VWAP to agree before I choose an option.');
-    return notes;
-  }
-
-  if (decision.state === 'RETEST_FAILED') {
-    return ['The latest breakout failed its retest.', 'That setup is cancelled.', 'I am waiting for a completely fresh breakout and retest sequence.'];
-  }
-
-  return decision.reasons || [];
 }

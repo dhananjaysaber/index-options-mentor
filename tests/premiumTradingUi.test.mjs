@@ -21,9 +21,9 @@ test('premium trading navigation uses only the 13-point and scalp strategies', (
   const main = read('src/main.jsx');
   const sw = read('public/sw.js');
   assert.match(app, /className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell"/);
-  assert.match(app, /Select index strategy/);
-  assert.match(app, /aria-pressed=\{!scalp\}/);
-  assert.match(app, /aria-pressed=\{scalp\}/);
+  assert.doesNotMatch(app, /Select index strategy|<StrategyModeBar/);
+  assert.match(app, /label="13-Point"/);
+  assert.match(app, /label="Scalp"/);
   assert.match(app, /className="premium-mobile-bottom-nav"/);
   assert.match(app, /aria-label="Primary trading navigation"/);
   assert.match(app, /navigate\('position'\)/);
@@ -33,7 +33,7 @@ test('premium trading navigation uses only the 13-point and scalp strategies', (
   assert.ok(main.indexOf("import './premium-trading-v51.css';") >
             main.indexOf("import './footer-clearance-v42.css';"),
             'Premium design stylesheet must load last');
-  assert.match(sw, /index-options-mentor-pwa-v52-header-safearea/);
+  assert.match(sw, /index-options-mentor-pwa-v54-compact-chart-nav/);
 });
 
 test('premium design keeps real FYERS data and existing paper buy/sell actions', () => {
