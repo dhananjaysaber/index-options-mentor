@@ -19,6 +19,7 @@ export function useScalpResearch({ snapshot, liveQuote, brokerAuthenticated, mar
     }
     let cancelled = false;
     let inFlight = false;
+    let firstLoad = true;
     let request = null;
     const load = async () => {
       if (cancelled || inFlight || document.visibilityState !== 'visible') return;
