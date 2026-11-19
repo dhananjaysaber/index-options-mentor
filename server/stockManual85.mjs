@@ -96,7 +96,7 @@ export async function prepareManualStockPaperTicket(get, scope, query, now = Dat
     score: watch.score, weekBias: watch.weekBias, dayBias: watch.dayBias,
     reason: watch.reason, stockLastPrice: currentSpot, underlyingSymbol,
     setup: 'Manual 85+ weekly/daily research; 5-minute/3-minute trigger not confirmed',
-    confirmedAt: now, validUntil: Date.now() + 45000,
+    confirmedAt: now, validUntil: Date.now() + 120000,
     symbol: leg.symbol, strike: number(leg.strike_price), expiry: dateIST(expiry * 1000),
     lotSize, delta, bid, ask, bidSize, askSize,
     spot: currentSpot, stop, target, min: currentSpot * 0.997, max: currentSpot * 1.003,
