@@ -1,14 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
-import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
 import SnapshotIssueBanner from './SnapshotIssueBanner.jsx';
 import FyersLiveHandoff from './FyersLiveHandoff.jsx';
-import { buildScalpTicket, evaluateScalpSetup } from '../engine/scalpStrategy.js';
-
-const LEDGER_KEY = 'index-options-mentor-scalp-ledger-v1';
+import { buildScalpTicket } from '../engine/scalpStrategy.js';
 
 export default function ScalpMentorDashboard({
   snapshot,
@@ -25,90 +22,16 @@ export default function ScalpMentorDashboard({
   onReconnect,
   onTakeTrade,
   onExit,
-  onStatusChange
+  candles = [],
+  candleLoading = false,
+  candleError = '',
+  evaluation
 }) {
   const liveQuote = useLiveQuote();
-  const [candles, setCandles] = useState([]);
-  const [candleLoading, setCandleLoading] = useState(false);
-  const [candleError, setCandleError] = useState('');
   const [manualLots, setManualLots] = useState(() => clampLots(settings?.defaultLots, settings?.lotCap));
-  const sessionDate = snapshot?.market?.sessionDate || '';
-
   useEffect(() => {
     if (!position) setManualLots(current => clampLots(current || settings?.defaultLots, settings?.lotCap));
   }, [settings?.defaultLots, settings?.lotCap, position?.id]);
-
-  useEffect(() => {
-    if (!sessionDate) {
-      setCandles([]);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const load = async () => {
-      setCandleLoading(current => current || candles.length === 0);
-      try {
-        const params = new URLSearchParams({
-          symbol: 'NSE:NIFTY50-INDEX',
-          resolution: '3',
-          from: sessionDate,
-          to: sessionDate
-        });
-        const response = await fetch(`/api/fyers/history?${params.toString()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error('3-minute scalp candles are unavailable.');
-        const data = await response.json();
-        const rows = Array.isArray(data?.candles) ? data.candles : [];
-        if (!cancelled) {
-          setCandles(rows);
-          setCandleError(rows.length ? '' : 'Waiting for 3-minute candles.');
-        }
-      } catch (error) {
-        if (!cancelled) setCandleError(error?.message || '3-minute scalp candles are unavailable.');
-      } finally {
-        if (!cancelled) setCandleLoading(false);
-      }
-    };
-
-    void load();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && isNseMarketHours()) void load();
-    }, FYERS_REFRESH.scalpCandlesMs);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [sessionDate]);
-
-  const liveSpot = Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
-  const evaluation = useMemo(() => {
-    const computed = evaluateScalpSetup(snapshot, candles, liveSpot);
-    // Keep the historical evidence visible, but do not allow a stale snapshot
-    // to qualify an automatic or manual NEW position.
-    if (marketDataReady) return computed;
-    return {
-      ...computed,
-      eligible: false,
-      manualEligible: false,
-      reason: 'Waiting for fresh Mentor data before considering a scalp entry.',
-      manualReason: 'New simulated entries are paused while the Mentor snapshot is unavailable.'
-    };
-  }, [snapshot, candles, liveSpot, marketDataReady]);
-
-  useEffect(() => {
-    onStatusChange?.(evaluation);
-  }, [evaluation?.eligible, evaluation?.score, evaluation?.side, evaluation?.reason, evaluation?.setupId]);
-
-  useEffect(() => {
-    if (settings?.scalpAutoOpen === false || position || !evaluation?.eligible || !evaluation?.setupId) return;
-    const ledger = readJson(LEDGER_KEY, {});
-    if (ledger[evaluation.setupId]) return;
-    const ticket = buildScalpTicket(snapshot, evaluation, settings, 'MENTOR');
-    if (!ticket) return;
-    ledger[evaluation.setupId] = { openedAt: ticket.openedAt, side: ticket.side, score: ticket.score };
-    pruneLedger(ledger);
-    writeJson(LEDGER_KEY, ledger);
-    onTakeTrade(ticket);
-  }, [evaluation?.setupId, evaluation?.eligible, position?.id, settings?.scalpAutoOpen, settings?.defaultLots, settings?.lotCap]);
 
   function openManualScalp() {
     if (position || !evaluation?.manualEligible) return;
@@ -330,22 +253,8 @@ function fmt(value) {
     : '—';
 }
 
-function readJson(key, fallback) {
-  try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch { return fallback; }
-}
-function writeJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
 function clampLots(value, cap) {
   const max = Math.max(1, Number(cap) || 5);
   const parsed = Math.round(Number(value) || 1);
   return Math.max(1, Math.min(max, parsed));
-}
-
-function pruneLedger(ledger) {
-  const keys = Object.keys(ledger);
-  if (keys.length <= 160) return;
-  keys.sort((a, b) => String(ledger[a]?.openedAt || '').localeCompare(String(ledger[b]?.openedAt || '')))
-    .slice(0, keys.length - 160)
-    .forEach(key => delete ledger[key]);
 }
