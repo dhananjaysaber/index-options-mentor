@@ -8,7 +8,10 @@ const GRANT_TTL_MS = 3 * 60 * 1000;
 export function createStockWatchGrant(watch, scope, secret, now = Date.now()) {
   if (!secret || !scope || watch?.status !== 'WATCH' || Number(watch.score) < 85 ||
       !['CE','PE'].includes(watch.side) || !['BULLISH','BEARISH'].includes(watch.weekBias) ||
-      watch.weekBias !== watch.dayBias || !(Number(watch.spot) > 0)) return null;
+      watch.weekBias !== watch.dayBias ||
+      (watch.side === 'CE' && watch.weekBias !== 'BULLISH') ||
+      (watch.side === 'PE' && watch.weekBias !== 'BEARISH') ||
+      !(Number(watch.spot) > 0)) return null;
   const payload = {
     version: FORMAT_VERSION, scope,
     stock: watch.stock, side: watch.side, score: Number(watch.score),
