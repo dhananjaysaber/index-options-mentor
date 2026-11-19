@@ -27,6 +27,6 @@ jobs:
       - name: Install Chromium for mobile UI geometry verification
         run: |
           npm install --no-save playwright@1.58.2
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
       - name: Run real mobile viewport smoke test
         run: node scripts/verify-iphone-shell.mjs
