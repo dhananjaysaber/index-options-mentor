@@ -10,7 +10,7 @@ Copy the included files to the same paths in your Index Options Mentor project:
 2. `src/components/TraderMarketPanel.jsx` — show a single VWAP / ORH / ORL / PDH / PDL / 5m ATR context grid beneath the chart.
 3. `src/components/NiftyStrategyChart.jsx` — dynamically fit the candlestick SVG to the phone viewport; preserve 5m/3m switching, live candle feed and structural overlays; optional summary and rule note props.
 4. `src/components/CoreResearchPanel.jsx` — remove the verbose “Candidate monitoring is not a trade” paragraph and duplicate NIFTY price card while retaining gates and risk levels.
-5. `src/index-compact-v53.css` — **new** compact 13-Point styling, 410px mobile chart, premium candle colours, 3-column level grid, hides the redundant top strategy toggle only on mobile.
+5. `src/index-compact-v53.css` and `src/index-compact-v54.css` — compact 13-Point and Scalp styling; 430px chart, premium candle colours, fewer oversized cards; no redundant top strategy toggle on either layout.
 6. `src/main.jsx` — complete file included with the new CSS imported after `iphone-shell-v52.css`.
 7. `public/sw.js` — complete service worker with cache name bumped to `v53-compact-chart` for installed PWA refresh.
 
