@@ -108,13 +108,16 @@ export default function ScalpMentorDashboard({
         </>
       )}
 
-      <section className="scalp-chart-panel premium-scalp-chart-panel" aria-label="NIFTY 3-minute execution chart">
+      <section className="scalp-chart-panel">
+        <div className="scalp-section-heading">
+          <div><span>EXECUTION CHART</span><strong>3-minute scalp structure</strong></div>
+          <em>5m context · 3m execution</em>
+        </div>
         <NiftyStrategyChart
           snapshot={snapshot}
           position={position?.strategyFamily === 'SCALP' ? position : null}
           defaultTimeframe="3"
-          showLevelSummary={false}
-          showRuleNote={false}
+          strategyNote="Scalp mode uses 5-minute directional context and 3-minute execution. The 5-minute tab is available for context."
         />
       </section>
 
