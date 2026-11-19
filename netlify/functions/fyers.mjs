@@ -568,11 +568,25 @@ async function handleStockScanner(request) {
     const phase = params.get('phase') || 'universe';
     // Limit each external Stock-only FYERS call; a slow quote must never
     // block the whole function until the Netlify 30-second gateway timeout.
-    const get = async (path, args) => {
-      const data = await fyersGet(path, args, auth.token, { signal: AbortSignal.timeout(6500) });
-      // Stock-only quote freshness tracks when the server actually obtained
-      // the FYERS response. FYERS quote.v.tt is NOT last tick time.
-      return path === '/quotes' ? { ...data, receivedAt: Date.now() } : data;
+    // FYERS Prime has a per-second limit as well as the per-minute allowance.
+    // Earlier Stock context batches launched eight history reads at once,
+    // colliding with the Index's fast quote/snapshot feed and causing HTTP 429.
+    // Serialise and pace STOCK-only broker calls. This cannot slow or alter
+    // the Index/Scalp handlers, which do not use this queue.
+    let priorStockCall = Promise.resolve();
+    let nextStockStart = 0;
+    const get = (path, args) => {
+      const current = priorStockCall.catch(() => {}).then(async () => {
+        const delay = Math.max(0, nextStockStart - Date.now());
+        if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+        nextStockStart = Date.now() + 500;
+        const data = await fyersGet(path, args, auth.token, { signal: AbortSignal.timeout(6500) });
+        // Stock quote freshness tracks when the server obtained this response:
+        // the FYERS quote.v.tt field is not a last-tick timestamp.
+        return path === '/quotes' ? { ...data, receivedAt: Date.now() } : data;
+      });
+      priorStockCall = current.catch(() => {});
+      return current;
     };
     const query = {
       symbols: params.get('symbols') || '',
