@@ -1,0 +1,38 @@
+# Index Options Mentor — Option B (complete replacement files)
+
+This branch is a **UI-only draft**. Production `main` remains unchanged.
+
+## What to replace
+
+Copy the included files to the same paths in your Index Options Mentor project:
+
+1. `src/components/MobileMentorDashboardV41.jsx` — show the main chart immediately beneath the compact 13-Point decision card; active positions keep their exit controls above the chart.
+2. `src/components/TraderMarketPanel.jsx` — show a single VWAP / ORH / ORL / PDH / PDL / 5m ATR context grid beneath the chart.
+3. `src/components/NiftyStrategyChart.jsx` — dynamically fit the candlestick SVG to the phone viewport; preserve 5m/3m switching, live candle feed and structural overlays; optional summary and rule note props.
+4. `src/components/CoreResearchPanel.jsx` — remove the verbose “Candidate monitoring is not a trade” paragraph and duplicate NIFTY price card while retaining gates and risk levels.
+5. `src/index-compact-v53.css` — **new** compact 13-Point styling, 410px mobile chart, premium candle colours, 3-column level grid, hides the redundant top strategy toggle only on mobile.
+6. `src/main.jsx` — complete file included with the new CSS imported after `iphone-shell-v52.css`.
+7. `public/sw.js` — complete service worker with cache name bumped to `v53-compact-chart` for installed PWA refresh.
+
+No new environment variables, backend changes, FYERS order functions, quote timers or strategy changes.
+
+## Important notes
+
+- **Normal** and **Scalp** remain accessible via bottom Home / Scalp navigation on mobile.
+- Desktop users still need the existing top strategy selector; it is not removed on desktop.
+- Normal automatic and manual paper trading, Scalp auto/manual paper trading and trade journalling are unchanged.
+- The chart's taller mobile display is purely presentation; the 3-minute timeframe remains a visual option and does not turn the 13-Point entry system into a 3-minute strategy.
+- The chart's level lines remain; duplicate numerical level tiles are removed **from the 13-Point chart only**.
+- Existing entry safety checks, open-position alerts and manual exit actions remain intact.
+
+## Verify
+
+```sh
+npm install
+npm test
+VITE_FYERS_TIER=prime npm run build
+```
+
+A mobile Chromium smoke test can run using `node scripts/verify-iphone-shell.mjs` with Playwright installed.
+
+Review in [GitHub PR #23](https://github.com/dhananjaysaber/index-options-mentor/pull/23). This PR is draft and not deployed.
