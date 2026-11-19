@@ -75,7 +75,7 @@ try {
     'Header must not move offscreen during chart scrolling');
 
   await page.locator('.premium-mobile-bottom-nav button').nth(3).click();
-  await page.getByText('Trade journal', { exact: true }).first().waitFor();
+  await page.locator('.mentor-page-head h1').filter({ hasText: 'Trade journal' }).waitFor({ state: 'visible' });
   await page.waitForTimeout(80);
   const top = await page.evaluate(() => window.scrollY);
   assert.ok(top < 3, 'Navigating from Scalp to Journal must reset scroll position');
