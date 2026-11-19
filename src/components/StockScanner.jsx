@@ -77,7 +77,8 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         if (!shortlist.length) { setStage(''); return; }
 
         setStage('Checking weekly and daily trends in small batches');
-        // Three bounded requests mean a slow stock cannot hide every result.
+        // Small bounded batches provide genuine weekly/daily scores progressively
+        // without overloading the live Index/Scalp feed.
         // Context is shown after each successful batch, before paper-entry checks.
         const watchByStock = new Map();
         const examinedByStock = new Map();
@@ -85,9 +86,9 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         let attempted = 0;
         let limited = false;
         const batchErrors = [];
-        for (let offset = 0; offset < shortlist.length; offset += 4) {
+        for (let offset = 0; offset < shortlist.length; offset += 2) {
           if (stopped) return;
-          const group = shortlist.slice(offset, offset + 4);
+          const group = shortlist.slice(offset, offset + 2);
           try {
             const context = await request('context',
               '&symbols=' + encodeURIComponent(group.map(item => item.symbol).join(',')));
@@ -261,7 +262,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
           <div><span className="stock-scanner-eyebrow">WEEKLY + DAILY CONTEXT</span><h2>Bullish and bearish Stock watchlist</h2></div>
           <span className="stock-panel-meta">Weekly / Daily → 5m / 3m</span>
         </div>
-        <p className="stock-explainer">Market movers are pre-screened from the NSE F&amp;O universe. A <strong>WATCH</strong> requires aligned completed weekly and daily bullish/bearish structure; the 5-minute/3-minute trigger is checked separately. A <strong>SCREENING</strong> row has not passed the weekly/daily checks yet. Scores reflect rule-based context, not win probability. Last response: {ist(scan?.generatedAt)}.</p>
+        <p className="stock-explainer">Market movers are pre-screened from the NSE F&amp;O universe. A <strong>WATCH</strong> displays an actual verified weekly/daily setup score out of 100; <strong>85+</strong> permits manual paper research after fresh option and risk checks. A <strong>SCORE PENDING</strong> stock has no verified score yet and cannot be traded. Mixed weekly/daily directions score zero under this strategy; scores are rule-based context, not win probability. Last response: {ist(scan?.generatedAt)}.</p>
         {loading && <div className="stock-scanner-loading" role="status">{stage || 'Checking FYERS market data…'}{scan?.watchlist?.length ? ' · Watchlist remains visible below' : ''}</div>}
         {!loading && scan?.status && <div className="stock-scanner-loading" role="status">{scan.status}</div>}
         {!watchlist.length && !loading && !scan && active && <div className="stock-scanner-loading">No stock scan returned yet. Select Scan now to retry.</div>}
@@ -278,6 +279,8 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
                   : row.status === 'INSUFFICIENT' ? 'INSUFFICIENT'
                   : row.status === 'DATA_UNAVAILABLE' || row.status === 'QUOTE_UNAVAILABLE' ? 'DATA UNAVAILABLE'
                   : row.status === 'SCREENING' ? 'SCORE PENDING' : 'NOT VERIFIED'}</small>
+                {row.status === 'WATCH' && Number(row.score) < 85 &&
+                  <small>Manual paper needs 85+</small>}
                 {row.status === 'WATCH' && Number(row.score) >= 85 &&
                   row.weekBias === row.dayBias && ['CE','PE'].includes(row.side) &&
                   <button type="button" className="stock-watch-paper-btn"
