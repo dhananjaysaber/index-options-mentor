@@ -1,0 +1,26 @@
+name: Verify Index-only FYERS Prime stability
+on:
+  push:
+    branches: [feature/index-prime-stability-2026-11-19]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: Test all Index, Scalp, FYERS, journal and prior regressions
+        run: npm test
+      - name: Build production Prime PWA
+        run: npm run build
+        env:
+          VITE_API_BASE: https://optionsmentor.netlify.app
+          VITE_PUBLIC_BASE: /index-options-mentor-pwa/
+          VITE_FYERS_TIER: prime
