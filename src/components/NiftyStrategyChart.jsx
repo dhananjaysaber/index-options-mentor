@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 
@@ -7,10 +7,8 @@ const TIMEFRAMES = {
   '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 }
 };
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', showLevelSummary = true, showRuleNote = true }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '' }) {
   const liveQuote = useLiveQuote();
-  const chartRootRef = useRef(null);
-  const [canvasWidth, setCanvasWidth] = useState(920);
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [candles, setCandles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -18,27 +16,6 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
   const [now, setNow] = useState(() => Date.now());
   const sessionDate = snapshot?.market?.sessionDate || '';
   const timeframeConfig = TIMEFRAMES[timeframe] || TIMEFRAMES['5'];
-  // Recompute only the visible chart geometry. Trading candles, quote
-  // refreshes and all signal calculations are unchanged.
-  useEffect(() => {
-    const node = chartRootRef.current;
-    if (!node) return undefined;
-    const resize = () => {
-      const next = Math.max(320, Math.min(920, Math.floor(node.clientWidth - 2) || 920));
-      setCanvasWidth(previous => previous === next ? previous : next);
-    };
-    resize();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', resize);
-      return () => window.removeEventListener('resize', resize);
-    }
-    const observer = new ResizeObserver(resize);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  const visibleCount = canvasWidth < 520
-    ? (timeframe === '5' ? 21 : 25) : timeframeConfig.visibleCandles;
-  const futureSlots = canvasWidth < 520 ? 3 : timeframeConfig.rightPaddingSlots;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -96,18 +73,13 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     ?? priceOrNull(position?.underlyingCurrent)
     ?? priceOrNull(snapshot?.market?.spot);
   const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
-  // Display-only guard: never synthesise an evening/weekend candle from the
-  // last FYERS quote. Research, entry and exit calculations are unaffected.
-  const canDrawLiveCandle = Boolean(snapshot?.live) && isNseMarketHours(now);
   const displayCandles = useMemo(
-    () => canDrawLiveCandle
-      ? mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles)
-      : candles.slice(-timeframeConfig.maxCandles),
-    [candles, liveSpot, liveTimestamp, canDrawLiveCandle, timeframeConfig.seconds, timeframeConfig.maxCandles]
+    () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
+    [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
   const chart = useMemo(
-    () => buildChartModel(displayCandles, snapshot, position, visibleCount, futureSlots, canvasWidth),
-    [displayCandles, snapshot, position, visibleCount, futureSlots, canvasWidth]
+    () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots),
+    [displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots]
   );
   const side = position?.side || snapshot?.decision?.side || '';
   const retest = snapshot?.setup?.retestStatus || 'NOT_STARTED';
@@ -117,7 +89,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
   const changePct = latest && latest.open ? (change / latest.open) * 100 : null;
 
   return (
-    <section ref={chartRootRef} className={`nifty-strategy-chart live-trading-chart ${compact ? 'compact' : ''}`} aria-label={`Live NIFTY ${timeframeConfig.label} strategy chart`}>
+    <section className={`nifty-strategy-chart live-trading-chart ${compact ? 'compact' : ''}`} aria-label={`Live NIFTY ${timeframeConfig.label} strategy chart`}>
       <div className="nifty-live-toolbar">
         <div className="nifty-live-title">
           <div className="nifty-live-symbol-row">
@@ -163,21 +135,21 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
       ) : chart ? (
         <>
           <div className="nifty-chart-canvas-wrap">
-            <svg className="nifty-chart-canvas" viewBox={`0 0 ${canvasWidth} 390`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
-              <rect x="0" y="0" width={canvasWidth} height="390" className="nifty-chart-bg" />
+            <svg className="nifty-chart-canvas" viewBox="0 0 920 390" preserveAspectRatio="xMidYMid meet" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
+              <rect x="0" y="0" width="920" height="390" className="nifty-chart-bg" />
 
               {chart.grid.map((row, index) => (
                 <g key={`grid-${index}`}>
-                  <line x1={chart.plotLeft} x2={chart.plotRight} y1={row.y} y2={row.y} className="nifty-chart-grid" />
-                  <text x={chart.labelX} y={row.y + 4} className="nifty-chart-price-label">{formatPrice(row.value)}</text>
+                  <line x1="42" x2="824" y1={row.y} y2={row.y} className="nifty-chart-grid" />
+                  <text x="840" y={row.y + 4} className="nifty-chart-price-label">{formatPrice(row.value)}</text>
                 </g>
               ))}
 
               {chart.levels.map(level => (
                 <g key={level.key} className={`nifty-level nifty-level-${level.kind}`}>
-                  <line x1={chart.plotLeft} x2={chart.plotRight} y1={level.y} y2={level.y} className="nifty-level-line" />
-                  <rect x={chart.plotLeft + 5} y={level.y - 9} width={level.labelWidth} height="18" rx="5" className="nifty-level-pill" />
-                  <text x={chart.plotLeft + 11} y={level.y + 3} className="nifty-level-label">{level.label}</text>
+                  <line x1="42" x2="824" y1={level.y} y2={level.y} className="nifty-level-line" />
+                  <rect x="48" y={level.y - 9} width={level.labelWidth} height="18" rx="5" className="nifty-level-pill" />
+                  <text x="54" y={level.y + 3} className="nifty-level-label">{level.label}</text>
                 </g>
               ))}
 
@@ -194,16 +166,16 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
 
               {chart.current && (
                 <g className="nifty-current-price-line">
-                  <line x1={chart.plotLeft} x2={chart.plotRight} y1={chart.current.y} y2={chart.current.y} />
-                  <rect x={chart.plotRight} y={chart.current.y - 22} width={canvasWidth - chart.plotRight - 2} height="44" rx="5" />
-                  <text x={chart.plotRight + 6} y={chart.current.y - 3} className="nifty-current-price-value">{formatPrice(chart.current.value)}</text>
-                  <text x={chart.plotRight + 6} y={chart.current.y + 14} className="nifty-current-countdown">{countdown}</text>
+                  <line x1="42" x2="824" y1={chart.current.y} y2={chart.current.y} />
+                  <rect x="824" y={chart.current.y - 22} width="92" height="44" rx="5" />
+                  <text x="832" y={chart.current.y - 3} className="nifty-current-price-value">{formatPrice(chart.current.value)}</text>
+                  <text x="832" y={chart.current.y + 14} className="nifty-current-countdown">{countdown}</text>
                 </g>
               )}
             </svg>
           </div>
 
-          {showLevelSummary && <div className="nifty-chart-level-strip">
+          <div className="nifty-chart-level-strip">
             <LevelChip label="VWAP" value={snapshot?.market?.vwap} />
             <LevelChip label="ORH" value={snapshot?.market?.orh} />
             <LevelChip label="ORL" value={snapshot?.market?.orl} />
@@ -212,8 +184,8 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
             <LevelChip label={position ? 'ENTRY' : 'TRIGGER'} value={position?.underlyingEntry ?? snapshot?.structure?.trigger} />
             <LevelChip label="STOP" value={position?.underlyingStop ?? snapshot?.structure?.underlyingStop} />
             <LevelChip label="TARGET" value={position?.underlyingTarget ?? snapshot?.structure?.underlyingTarget} />
-          </div>}
-          {showRuleNote && strategyNote && <div className="nifty-chart-rule-note">{strategyNote}</div>}
+          </div>
+          <div className="nifty-chart-rule-note">{strategyNote || 'Mentor entry logic remains based on completed 5-minute candles. The 3-minute tab changes the visual view only.'}</div>
         </>
       ) : (
         <div className="nifty-chart-empty">Waiting for NIFTY chart data.</div>
@@ -258,14 +230,13 @@ function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) 
   return next.slice(-maxCandles);
 }
 
-function buildChartModel(rows, snapshot, position, visibleCount = 52, rightPaddingSlots = 6, viewportWidth = 920) {
+function buildChartModel(rows, snapshot, position, visibleCount = 52, rightPaddingSlots = 6) {
   if (!rows.length) return null;
 
   const visibleRows = rows.slice(-visibleCount);
-  const canvasWidth = Math.max(320, Math.min(920, Number(viewportWidth) || 920));
-  const left = canvasWidth < 520 ? 32 : 42;
-  const right = canvasWidth - (canvasWidth < 520 ? 72 : 96);
-  const width = right - left;
+  const width = 782;
+  const left = 42;
+  const right = 824;
   const top = 18;
   const bottom = 350;
   const plotHeight = bottom - top;
@@ -343,9 +314,6 @@ function buildChartModel(rows, snapshot, position, visibleCount = 52, rightPaddi
     levels,
     grid,
     timeLabels,
-    plotLeft: left,
-    plotRight: right,
-    labelX: right + 6,
     current: { x: last.x, y: yFor(last.close), value: last.close }
   };
 }

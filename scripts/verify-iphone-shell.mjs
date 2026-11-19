@@ -33,7 +33,22 @@ try {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-feed-status').waitFor({ state: 'visible' });
   assert.equal(await page.locator('.strategy-mode-bar').count(), 0,
-    'The top Strategy Mode selector must be removed, not merely hidden');
+    'Redundant top 13-Point/Scalp toggle must not exist');
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-advanced').count(),
+    'Advanced must be the default on new PWA load');
+  await page.locator('.mentor-v2-menu-button').click();
+  const displayMode = page.locator('.drawer-segmented');
+  await displayMode.waitFor({ state: 'visible' });
+  assert.equal(await displayMode.getByRole('button', { name: 'Advanced' }).getAttribute('aria-pressed'), 'true');
+  await displayMode.getByRole('button', { name: 'Basic' }).click();
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-simple').count(),
+    'Basic must be applied by selecting it inside the hamburger menu');
+  assert.equal(await page.locator('.mentor-drawer-backdrop').count(), 0,
+    'Drawer should close when selecting Basic');
+  await page.locator('.mentor-v2-menu-button').click();
+  await page.locator('.drawer-segmented').getByRole('button', { name: 'Advanced' }).click();
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-advanced').count(),
+    'Advanced selection should restore the advanced workspace');
 
   const header = page.locator('.mentor-v2-topbar');
   const nav = page.locator('.premium-mobile-bottom-nav');
@@ -63,16 +78,6 @@ try {
 
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
   await page.locator('.scalp-decision-card').waitFor({ state: 'visible' });
-  const scalpChart = page.locator('.premium-scalp-chart-panel .nifty-strategy-chart');
-  await scalpChart.waitFor({ state: 'visible' });
-  const scalpToolbar = scalpChart.locator('.nifty-live-toolbar');
-  const toolbarRect = await scalpToolbar.boundingBox();
-  assert.ok(toolbarRect?.height <= 110,
-    'The Scalp chart instrument header must stay compact');
-  assert.equal(await scalpChart.locator('.nifty-chart-level-strip').count(), 0,
-    'The Scalp chart must not have duplicate bulky level cards');
-  assert.equal(await scalpChart.locator('.nifty-chart-rule-note').count(), 0,
-    'The Scalp chart must not have redundant strategy commentary');
   const dock = page.locator('.scalp-quick-actions');
   const dockBox = await dock.boundingBox();
   const navBox2 = await nav.boundingBox();
