@@ -96,9 +96,14 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     ?? priceOrNull(position?.underlyingCurrent)
     ?? priceOrNull(snapshot?.market?.spot);
   const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
+  // Display-only guard: never synthesise an evening/weekend candle from the
+  // last FYERS quote. Research, entry and exit calculations are unaffected.
+  const canDrawLiveCandle = Boolean(snapshot?.live) && isNseMarketHours(now);
   const displayCandles = useMemo(
-    () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
-    [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
+    () => canDrawLiveCandle
+      ? mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles)
+      : candles.slice(-timeframeConfig.maxCandles),
+    [candles, liveSpot, liveTimestamp, canDrawLiveCandle, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
   const chart = useMemo(
     () => buildChartModel(displayCandles, snapshot, position, visibleCount, futureSlots, canvasWidth),
