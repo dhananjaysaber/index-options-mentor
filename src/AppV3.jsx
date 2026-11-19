@@ -11,6 +11,9 @@ import MentorFooter from './components/MentorFooter.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import ScalpMentorDashboard from './components/ScalpMentorDashboard.jsx';
 import ScalpFooter from './components/ScalpFooter.jsx';
+import useLiveQuote from './hooks/useLiveQuote.js';
+import { useScalpResearch } from './hooks/useScalpResearch.js';
+import { buildScalpTicket } from './engine/scalpStrategy.js';
 import CoreResearchPanel from './components/CoreResearchPanel.jsx';
 import CoreQuickActions from './components/CoreQuickActions.jsx';
 import MobileMentorDashboardV41 from './components/MobileMentorDashboardV41.jsx';
@@ -32,6 +35,7 @@ const ALERTS_KEY = 'index-options-mentor-alerts-enabled-v07';
 const THEME_KEY = 'index-options-mentor-theme-v1';
 const SETTINGS_KEY = 'index-options-mentor-settings-v2';
 const AUTO_SETUP_KEY = 'index-options-mentor-auto-setups-v1';
+const SCALP_LEDGER_KEY = 'index-options-mentor-scalp-ledger-v1';
 const STRATEGY_MODE_KEY = 'index-options-mentor-strategy-mode-v1';
 
 const DEFAULT_SETTINGS = {
@@ -52,7 +56,8 @@ export default function AppV3() {
   const [view, setView] = useState('dashboard');
   const [mode, setMode] = useState('simple');
   const [strategyMode, setStrategyMode] = useState(() => readString(STRATEGY_MODE_KEY, 'core') === 'scalp' ? 'scalp' : 'core');
-  const [scalpStatus, setScalpStatus] = useState(null);
+  const [marketClock, setMarketClock] = useState(Date.now);
+  const liveQuote = useLiveQuote();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [brokerStatus, setBrokerStatus] = useState({ configured: false, authenticated: false });
   const [snapshot, setSnapshot] = useState(null);
@@ -72,6 +77,21 @@ export default function AppV3() {
   const audioRef = useRef(null);
   const autoExitRef = useRef({ core: '', scalp: '', trail: '', time: '' });
 
+  // A locally displayed quote may look live after an iOS tab resumes.
+  // Enforce bounded staleness on ALL new paper entries, never on display only.
+  const latestSnapshotAt = Date.parse(snapshot?.generatedAt || '');
+  const latestQuoteAt = Date.parse(liveQuote?.at || '');
+  const snapshotFresh = Number.isFinite(latestSnapshotAt) &&
+    marketClock - latestSnapshotAt >= -3000 && marketClock - latestSnapshotAt <= 12000;
+  const quoteFresh = Number.isFinite(latestQuoteAt) && Number(liveQuote?.nifty) > 0 &&
+    marketClock - latestQuoteAt >= -3000 && marketClock - latestQuoteAt <= 5000;
+  const marketDataReady = Boolean(brokerStatus.authenticated && !liveError && snapshotFresh && quoteFresh);
+  const scalpResearch = useScalpResearch({
+    snapshot, liveQuote, brokerAuthenticated: brokerStatus.authenticated,
+    marketDataReady, clock: marketClock
+  });
+  const scalpStatus = scalpResearch.evaluation;
+
   const activePosition = strategyMode === 'scalp' ? scalpPosition : corePosition;
   const positionCount = Number(Boolean(corePosition)) + Number(Boolean(scalpPosition));
 
@@ -83,6 +103,19 @@ export default function AppV3() {
   }, [theme]);
 
   useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') setMarketClock(Date.now());
+    }, 2000);
+    const resumed = () => {
+      if (document.visibilityState === 'visible') {
+        setMarketClock(Date.now());
+        if (brokerStatus.authenticated && isNseMarketHours()) void refreshSnapshot();
+      }
+    };
+    document.addEventListener('visibilitychange', resumed);
+    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', resumed); };
+  }, [brokerStatus.authenticated]);
   useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
   useEffect(() => { persistPosition(SCALP_POSITION_KEY, scalpPosition); }, [scalpPosition]);
@@ -125,7 +158,7 @@ export default function AppV3() {
   }
 
   async function refreshSnapshot(options = {}) {
-    // The 15-second timer must not stack expensive FYERS snapshot requests.
+    // Never overlap FYERS Prime snapshot requests; 4-second cadence is unchanged.
     if (snapshotRequestRef.current) return null;
     snapshotRequestRef.current = true;
     const manual = options?.manual === true;
@@ -196,7 +229,7 @@ export default function AppV3() {
   }, [scalpPosition?.id]);
 
   useEffect(() => {
-    // Subscribe to the existing 2-second shared quote loop. Both strategy
+    // Subscribe to the existing 1-second shared Prime quote loop. Both strategy
     // positions receive their own option LTP from the same FYERS request.
     // No second high-frequency loop is started when a position opens.
     const updatePositions = event => {
@@ -252,7 +285,9 @@ export default function AppV3() {
   }, [scalpPosition, snapshot, clockTick]);
 
   useEffect(() => {
-    if (strategyMode !== 'core' || liveError || !settings.mentorAutoOpen || corePosition || !setupClassification.eligible || !tierEnabled(setupClassification, settings)) return;
+    if (!marketDataReady || document.visibilityState !== 'visible' || !isNseMarketHours() ||
+      !settings.mentorAutoOpen || corePosition || !setupClassification.eligible ||
+      !tierEnabled(setupClassification, settings)) return;
     const ledger = readJson(AUTO_SETUP_KEY, {});
     const key = setupClassification.setupId;
     if (!key || ledger[key]) return;
@@ -262,7 +297,28 @@ export default function AppV3() {
     pruneLedger(ledger);
     localStorage.setItem(AUTO_SETUP_KEY, JSON.stringify(ledger));
     takeTrade({ ...ticket, researchQualificationTier: setupClassification.tier, researchQualificationLabel: setupClassification.label, researchTagAtEntry: `${setupClassification.label} · auto entry` });
-  }, [snapshot?.generatedAt, strategyMode, liveError, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
+  }, [snapshot?.generatedAt, marketDataReady, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
+
+  // Both Index strategies monitor and simulate entries independently of which
+  // view is selected. The Scalp dashboard is now presentation-only; no extra
+  // FYERS quote loop or duplicate auto-entry effect is created.
+  useEffect(() => {
+    if (!marketDataReady || document.visibilityState !== 'visible' || !isNseMarketHours() ||
+        !settings.scalpAutoOpen || scalpPosition || !scalpStatus?.eligible ||
+        !scalpStatus.setupId) return;
+    const ledger = readJson(SCALP_LEDGER_KEY, {});
+    if (ledger[scalpStatus.setupId]) return;
+    const ticket = buildScalpTicket(snapshot, scalpStatus, settings, 'MENTOR');
+    if (!ticket) return;
+    ledger[scalpStatus.setupId] = {
+      openedAt: ticket.openedAt, side: ticket.side, score: ticket.score
+    };
+    pruneLedger(ledger);
+    localStorage.setItem(SCALP_LEDGER_KEY, JSON.stringify(ledger));
+    takeTrade(ticket);
+  }, [snapshot?.generatedAt, scalpStatus?.setupId, scalpStatus?.eligible,
+      marketDataReady, scalpPosition?.id, settings.scalpAutoOpen,
+      settings.defaultLots, settings.lotCap]);
 
   useEffect(() => {
     if (!corePosition || !coreMentor || settings.mentorAutoClose === false || coreMentor.alertLevel !== 'exit') {
@@ -373,7 +429,7 @@ export default function AppV3() {
   function takeTrade(ticket) {
     // Old 5m/3m structure may remain visible when the calculation endpoint
     // fails. It must not open NEW positions until a fresh snapshot succeeds.
-    if (!ticket?.quantity || liveError) return;
+    if (!ticket?.quantity || !marketDataReady) return;
     const initiatedBy = ticket.initiatedBy || 'USER';
     const enriched = {
       ...ticket,
@@ -425,8 +481,6 @@ export default function AppV3() {
   }
 
   const reconnectRequired = authRequired;
-  const marketDataReady = Boolean(snapshot?.generatedAt && !liveError);
-
   return (
     <div className="app-shell mentor-v2-shell research-v41-shell">
       <header className="topbar mentor-v2-topbar">
@@ -470,7 +524,10 @@ export default function AppV3() {
                 onReconnect={reconnectFyers}
                 onTakeTrade={takeTrade}
                 onExit={meta => exitStrategy('scalp', meta)}
-                onStatusChange={setScalpStatus}
+                candles={scalpResearch.candles}
+                candleLoading={scalpResearch.candleLoading}
+                candleError={scalpResearch.candleError}
+                evaluation={scalpStatus}
               />
             ) : (
               <>
