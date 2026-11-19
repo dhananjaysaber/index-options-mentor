@@ -31,12 +31,29 @@ try {
     body: JSON.stringify({ error: 'FYERS not connected in test session' })
   }));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
-  await page.locator('.premium-strategy-segment').waitFor({ state: 'visible' });
+  await page.locator('.premium-feed-status').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.strategy-mode-bar').count(), 0,
+    'Redundant top 13-Point/Scalp toggle must not exist');
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-advanced').count(),
+    'Advanced must be the default on new PWA load');
+  await page.locator('.mentor-v2-menu-button').click();
+  const displayMode = page.locator('.drawer-segmented');
+  await displayMode.waitFor({ state: 'visible' });
+  assert.equal(await displayMode.getByRole('button', { name: 'Advanced' }).getAttribute('aria-pressed'), 'true');
+  await displayMode.getByRole('button', { name: 'Basic' }).click();
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-simple').count(),
+    'Basic must be applied by selecting it inside the hamburger menu');
+  assert.equal(await page.locator('.mentor-drawer-backdrop').count(), 0,
+    'Drawer should close when selecting Basic');
+  await page.locator('.mentor-v2-menu-button').click();
+  await page.locator('.drawer-segmented').getByRole('button', { name: 'Advanced' }).click();
+  assert.ok(await page.locator('.mobile-mentor-flow.mode-advanced').count(),
+    'Advanced selection should restore the advanced workspace');
 
   const header = page.locator('.mentor-v2-topbar');
   const nav = page.locator('.premium-mobile-bottom-nav');
   const main = page.locator('.mentor-v2-content');
-  const strategy = page.locator('.premium-strategy-bar');
+  const strategy = page.locator('.premium-feed-status');
 
   const headBox = await header.boundingBox();
   const strategyBox = await strategy.boundingBox();
@@ -59,7 +76,7 @@ try {
   assert.ok(navBox.y >= 740 && navBox.y + navBox.height <= 846,
     'Navigation must stay within bottom of 844px iPhone viewport');
 
-  await page.locator('.premium-strategy-segment button').nth(1).click();
+  await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
   await page.locator('.scalp-decision-card').waitFor({ state: 'visible' });
   const dock = page.locator('.scalp-quick-actions');
   const dockBox = await dock.boundingBox();
@@ -85,7 +102,7 @@ try {
     'Trading dock should not overlay the journal');
 
   await page.locator('.premium-mobile-bottom-nav button').nth(0).click();
-  await page.locator('.premium-strategy-segment').waitFor();
+  await page.locator('.premium-feed-status').waitFor({ state: 'visible' });
   await page.waitForTimeout(80);
   assert.ok(Math.abs((await header.boundingBox()).y) < 2);
   const refreshedStrategyBox = await strategy.boundingBox();
