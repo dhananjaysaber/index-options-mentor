@@ -32,6 +32,8 @@ try {
   }));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-feed-status').waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.strategy-mode-bar').count(), 0,
+    'The top Strategy Mode selector must be removed, not merely hidden');
 
   const header = page.locator('.mentor-v2-topbar');
   const nav = page.locator('.premium-mobile-bottom-nav');
@@ -61,6 +63,16 @@ try {
 
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
   await page.locator('.scalp-decision-card').waitFor({ state: 'visible' });
+  const scalpChart = page.locator('.premium-scalp-chart-panel .nifty-strategy-chart');
+  await scalpChart.waitFor({ state: 'visible' });
+  const scalpToolbar = scalpChart.locator('.nifty-live-toolbar');
+  const toolbarRect = await scalpToolbar.boundingBox();
+  assert.ok(toolbarRect?.height <= 110,
+    'The Scalp chart instrument header must stay compact');
+  assert.equal(await scalpChart.locator('.nifty-chart-level-strip').count(), 0,
+    'The Scalp chart must not have duplicate bulky level cards');
+  assert.equal(await scalpChart.locator('.nifty-chart-rule-note').count(), 0,
+    'The Scalp chart must not have redundant strategy commentary');
   const dock = page.locator('.scalp-quick-actions');
   const dockBox = await dock.boundingBox();
   const navBox2 = await nav.boundingBox();
