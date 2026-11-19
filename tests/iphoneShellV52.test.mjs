@@ -28,7 +28,7 @@ test('one consistent mobile dock/nav stack reserves chart clearance and home ind
   assert.match(css, /height:\s*var\(--iom-v52-mobile-trade\) !important/);
   assert.match(css, /\.premium-fintech-shell \.premium-mobile-bottom-nav\s*\{/);
   assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\) !important/);
-  assert.match(css, /padding-bottom:\s*calc\(\s*var\(--iom-v52-mobile-nav\) \+ var\(--iom-v52-mobile-trade\)/);
+  assert.match(css, /padding:\s*12px 10px calc\(\s*var\(--iom-v52-mobile-nav\) \+ var\(--iom-v52-mobile-trade\)/);
   assert.match(css, /scroll-margin-top:/);
 });
 
