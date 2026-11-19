@@ -1,0 +1,32 @@
+name: Verify restored v52 Advanced hamburger release
+on:
+  push:
+    branches: [fix/restore-v52-advanced-hamburger-2026-11-19]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: Run complete Index and Scalp regression suite
+        run: npm test
+      - name: Build FYERS Prime Index-only PWA
+        run: npm run build
+        env:
+          VITE_API_BASE: https://optionsmentor.netlify.app
+          VITE_PUBLIC_BASE: /index-options-mentor-pwa/
+          VITE_FYERS_TIER: prime
+      - name: Install Chromium for actual mobile layout check
+        run: |
+          npm install --no-save playwright@1.58.2
+          npx playwright install chromium
+      - name: Verify iPhone header, bottom nav, hamburger modes and layout
+        run: node scripts/verify-iphone-shell.mjs
