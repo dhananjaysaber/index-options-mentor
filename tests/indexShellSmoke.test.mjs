@@ -8,11 +8,17 @@ import { createServer } from 'vite';
 // cannot detect (the Stock release previously built but loaded a white screen).
 test('production Index app renders both Normal and Scalp shells without runtime crash', async () => {
   const originalStorage = globalThis.localStorage;
+  const originalWindow = globalThis.window;
   const items = new Map();
   globalThis.localStorage = {
     getItem: key => items.has(key) ? items.get(key) : null,
     setItem: (key, value) => items.set(key, String(value)),
     removeItem: key => items.delete(key)
+  };
+  globalThis.window = {
+    location: { hostname: 'localhost', origin: 'http://localhost', pathname: '/' },
+    __indexOptionsLiveQuote: null,
+    addEventListener() {}, removeEventListener() {}, dispatchEvent() {}
   };
   let vite;
   try {
@@ -34,5 +40,6 @@ test('production Index app renders both Normal and Scalp shells without runtime 
   } finally {
     if (vite) await vite.close();
     globalThis.localStorage = originalStorage;
+    globalThis.window = originalWindow;
   }
 });
