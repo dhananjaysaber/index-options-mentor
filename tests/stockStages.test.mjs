@@ -176,3 +176,67 @@ test('actual FYERS quote timestamps no longer eliminate the preliminary watchlis
   assert.equal(result.quotesChecked, 2);
   assert.equal(result.prescreen.length, 2);
 });
+
+
+test('weekly/daily stock checks never start concurrent broker history calls', async () => {
+  let activeCalls = 0;
+  let peakCalls = 0;
+  const get = async (path, params) => {
+    activeCalls += 1;
+    peakCalls = Math.max(peakCalls, activeCalls);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 3));
+      if (path === '/quotes') return { d: params.symbols.split(',').map(symbol => ({
+        n: symbol, s: 'ok', v: { lp: 128, chp: 2.1, tt: now / 1000 }
+      })) };
+      if (path === '/history') return {
+        candles: params.resolution === '1D' ? makeDaily(1) : makeWeekly(1)
+      };
+      throw new Error('Unexpected FYERS endpoint ' + path);
+    } finally { activeCalls -= 1; }
+  };
+  const result = await runStockContext(get, 'serial-context-no-429-test', now, {
+    symbols: 'NSE:SYM01-EQ,NSE:SYM02-EQ,NSE:SYM03-EQ,NSE:SYM04-EQ'
+  });
+  assert.equal(peakCalls, 1, 'Stock history must be serial to avoid Prime per-second 429 bursts');
+  assert.equal(result.contextChecked, 4);
+  assert.equal(result.contextVerified, 4);
+  assert.equal(result.assessedRows.length, 4);
+  assert.equal(result.watchlist.length, 4);
+  assert.ok(result.assessedRows.every(row => row.status === 'WATCH' && row.score > 0));
+});
+
+test('Stock screening keeps a truthful MIXED score rather than inventing 85+', async () => {
+  const get = async (path, params) => {
+    if (path === '/quotes') return { d: [{ n: 'NSE:SYM01-EQ',
+      s: 'ok', v: { lp: 120, chp: 3, tt: now / 1000 } }] };
+    if (path === '/history') return {
+      candles: params.resolution === '1D' ? makeDaily(1) : makeWeekly(-1)
+    };
+    throw new Error('Unexpected FYERS endpoint ' + path);
+  };
+  const result = await runStockContext(get, 'mixed-context-score-test', now, {
+    symbols: 'NSE:SYM01-EQ'
+  });
+  assert.equal(result.contextVerified, 1);
+  assert.equal(result.watchlist.length, 0);
+  assert.equal(result.assessedRows[0].status, 'MIXED');
+  assert.equal(result.assessedRows[0].score, 0);
+  assert.equal(result.assessedRows[0].dayBias, 'BULLISH');
+  assert.equal(result.assessedRows[0].weekBias, 'BEARISH');
+});
+
+test('Stock 429 propagates immediately and does not continue checking the remaining stocks', async () => {
+  let requests = 0;
+  const get = async (path, params) => {
+    requests += 1;
+    if (path === '/quotes') return { d: params.symbols.split(',').map(symbol => ({
+      n: symbol, s: 'ok', v: { lp: 120, chp: 1.2, tt: now / 1000 }
+    })) };
+    throw Object.assign(new Error('FYERS temporary per-second limit'), { status: 429 });
+  };
+  await assert.rejects(() => runStockContext(get, 'context-429-no-storm-test', now, {
+    symbols: 'NSE:SYM01-EQ,NSE:SYM02-EQ,NSE:SYM03-EQ'
+  }), { status: 429 });
+  assert.equal(requests, 2, 'Do not issue more FYERS calls after first 429');
+});

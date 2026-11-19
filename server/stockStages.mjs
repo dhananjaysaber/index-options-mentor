@@ -156,31 +156,43 @@ export async function runStockContext(get, scope, now = Date.now(), query = {}, 
   if (!symbols.length) return { ...base, status: 'Choose stocks from the active F&O quote shortlist.' };
   const quotes = options.quotes || await get('/quotes', { symbols: symbols.join(',') });
   const failures = [];
-  const checked = await mapLimited(symbols, 4, async symbol => {
+  // One Stock at a time. The Netlify Stock-only broker adapter further paces
+  // individual FYERS requests; this avoids an eight-history-call burst that
+  // previously rate limited the separate NIFTY/Scalp feed.
+  const checked = await mapLimited(symbols, 1, async symbol => {
+    const stock = symbol.slice(4, -3);
     const quote = quoteValue(quotes, symbol, now);
-    if (!quote) return null;
+    if (!quote) return { stock, symbol, side: '', score: null,
+      status: 'QUOTE_UNAVAILABLE', reason: 'Fresh FYERS equity quote unavailable',
+      weekBias: '—', dayBias: '—' };
     try {
-      const [daily, weekly] = await Promise.all([
-        historic(get, scope, symbol, '1D', now),
-        historic(get, scope, symbol, '1W', now)
-      ]);
+      const daily = await historic(get, scope, symbol, '1D', now);
+      const weekly = await historic(get, scope, symbol, '1W', now);
       const context = analyseWeeklyDaily(daily, weekly, now, Number(quote.lp));
-      const stock = symbol.slice(4, -3);
       return { stock, symbol, spot: Number(quote.lp), changePct: Number(quote.chp) || 0, ...context };
     } catch (error) {
       if (error?.status === 401 || error?.status === 429) throw error;
-      failures.push(symbol.slice(4, -3));
-      return null;
+      failures.push(stock);
+      return { stock, symbol, spot: Number(quote.lp), changePct: Number(quote.chp) || 0,
+        side: '', score: null, status: 'DATA_UNAVAILABLE',
+        weekBias: '—', dayBias: '—',
+        reason: 'Weekly/daily chart data could not be verified' };
     }
   });
-  const all = checked.filter(Boolean);
-  const watchlist = all.filter(row => row.status === 'WATCH')
+  const assessedRows = checked.filter(Boolean);
+  const verifiedRows = assessedRows.filter(row =>
+    ['WATCH', 'MIXED', 'INSUFFICIENT'].includes(row.status));
+  const watchlist = verifiedRows.filter(row => row.status === 'WATCH')
     .sort((a, b) => b.score - a.score || a.stock.localeCompare(b.stock)).slice(0, 10);
   stageCache.set(scope, { at: now, watchlist });
   if (stageCache.size > 20) stageCache.clear();
-  return { ...base, watchlist, contextChecked: symbols.length, failures,
-    neutralCount: all.length - watchlist.length, status: watchlist.length ? null
-      : 'No aligned completed weekly/daily trends among the screened stocks. The preliminary market watchlist remains available.' };
+  return { ...base, watchlist, assessedRows, contextChecked: symbols.length,
+    contextVerified: verifiedRows.length, failures,
+    neutralCount: verifiedRows.length - watchlist.length,
+    status: watchlist.length ? null
+      : verifiedRows.length
+        ? 'No aligned weekly/daily setup among these completed chart checks.'
+        : 'Weekly/daily data could not be verified. Screened movers are not trade-eligible.' };
 }
 
 export async function runStockEntryCheck(get, scope, now = Date.now(), query = {}, options = {}) {

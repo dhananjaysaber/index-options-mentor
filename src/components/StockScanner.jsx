@@ -48,13 +48,18 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(phase === 'universe' ? 10000 : 14500)])
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(response.status === 401
-        ? 'Reconnect FYERS to start Stock research.'
-        : data.error || ('FYERS ' + phase + ' scan returned HTTP ' + response.status));
+      if (!response.ok) {
+        const failure = new Error(response.status === 401
+          ? 'Reconnect FYERS to start Stock research.'
+          : data.error || ('FYERS ' + phase + ' scan returned HTTP ' + response.status));
+        failure.status = response.status;
+        failure.limitScope = data.limitScope;
+        throw failure;
+      }
       return data;
     }
     async function refresh() {
-      let delay = 60000;
+      let delay = 90000;
       if (document.visibilityState === 'hidden') {
         if (!stopped) timer = window.setTimeout(refresh, delay);
         return;
@@ -72,43 +77,67 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
         if (!shortlist.length) { setStage(''); return; }
 
         setStage('Checking weekly and daily trends in small batches');
-        // Three bounded requests mean a slow stock cannot hide every result.
+        // Small bounded batches provide genuine weekly/daily scores progressively
+        // without overloading the live Index/Scalp feed.
         // Context is shown after each successful batch, before paper-entry checks.
         const watchByStock = new Map();
+        const examinedByStock = new Map();
         let assessed = 0;
+        let attempted = 0;
+        let limited = false;
         const batchErrors = [];
-        for (let offset = 0; offset < shortlist.length; offset += 4) {
+        for (let offset = 0; offset < shortlist.length; offset += 2) {
           if (stopped) return;
-          const group = shortlist.slice(offset, offset + 4);
+          const group = shortlist.slice(offset, offset + 2);
           try {
             const context = await request('context',
               '&symbols=' + encodeURIComponent(group.map(item => item.symbol).join(',')));
             if (stopped) return;
-            assessed += Number(context.contextChecked) || 0;
+            attempted += Number(context.contextChecked) || 0;
+            assessed += Number(context.contextVerified) || 0;
+            for (const row of context.assessedRows || []) examinedByStock.set(row.stock, row);
             for (const row of context.watchlist || []) watchByStock.set(row.stock, row);
             const combined = [...watchByStock.values()]
               .sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 10);
+            // Keep all promising pre-screened stocks visible, but replace each
+            // with its actual FYERS weekly/daily assessment when available.
+            // MIXED, insufficient data and broker failures must never show an
+            // invented 85+ score or a Manual paper action.
+            const visible = universe.prescreen.map(row =>
+              examinedByStock.get(row.stock) || row
+            ).sort((a, b) => Number(b.status === 'WATCH') - Number(a.status === 'WATCH') ||
+              (b.status === 'WATCH' ? Number(b.score || 0) - Number(a.score || 0) : 0));
             setScan(current => ({
               ...current, universeCount: universe.universeCount,
               quotesChecked: universe.quotesChecked, prescreen: universe.prescreen,
-              contextChecked: assessed,
+              contextChecked: assessed, contextAttempted: attempted,
               contextWatchlist: combined,
-              watchlist: combined.length ? combined : universe.prescreen,
-              status: combined.length ? null : 'No verified weekly/daily alignment yet. Preliminary movers remain under screening.'
+              watchlist: visible,
+              status: combined.length ? null : context.status ||
+                'No qualifying weekly/daily setup yet; screening candidates remain visible.'
             }));
             setNow(Date.now());
           } catch (reason) {
             if (reason?.name === 'AbortError' && stopped) return;
+            if (reason?.status === 429) {
+              limited = true;
+              delay = 180000;
+              batchErrors.push('FYERS API rate limit. Stock scanning is paused for three minutes to protect the NIFTY/Scalp feed.');
+              break;
+            }
             batchErrors.push(reason?.message || 'History checks unavailable');
           }
         }
         const qualified = [...watchByStock.values()]
           .sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 5);
         if (batchErrors.length && !stopped) {
-          setError('Some weekly/daily chart checks could not be completed. ' +
-            'The preliminary watchlist is preserved; only verified setups may proceed.');
+          setError(batchErrors[0].startsWith('FYERS API rate limit')
+            ? batchErrors[0]
+            : 'Some weekly/daily chart checks could not be completed. ' +
+              'Results show which stocks are verified, mixed or still unverified.');
         }
-        if (!qualified.length) { setStage(''); return; }
+        // Never launch the extra intraday/option requests after a stock 429.
+        if (limited || !qualified.length) { setStage(''); return; }
         setStage('Checking 5-minute/3-minute entry triggers');
         const symbols = qualified.map(row => row.symbol).join(',');
         const bias = qualified.map(row => row.stock + ':' + row.side).join(',');
@@ -127,7 +156,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
           setError(failure?.name === 'TimeoutError'
             ? 'A Stock data stage timed out. The last watchlist is kept; try Scan now.'
             : failure.message || 'Stock data temporarily unavailable.');
-          delay = 90000;
+          delay = failure?.status === 429 ? 180000 : 90000;
         }
       } finally {
         if (!stopped) {
@@ -224,7 +253,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
       <div className="stock-scanner-stats">
         <div><span>F&amp;O screening pool</span><strong>{scan?.universeCount ?? '—'}</strong></div>
         <div><span>FYERS quotes verified</span><strong>{scan?.quotesChecked ?? '—'}</strong></div>
-        <div><span>Weekly/daily assessed</span><strong>{scan?.contextChecked ?? '—'}</strong></div>
+        <div><span>Weekly/daily verified</span><strong>{scan?.contextChecked ?? '—'}<small>{scan?.contextAttempted ? ' / ' + scan.contextAttempted + ' attempted' : ''}</small></strong></div>
         <div><span>Watch candidates</span><strong>{scan?.contextWatchlist?.length ?? '—'}<small> / 10 max</small></strong></div>
       </div>
 
@@ -233,7 +262,7 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
           <div><span className="stock-scanner-eyebrow">WEEKLY + DAILY CONTEXT</span><h2>Bullish and bearish Stock watchlist</h2></div>
           <span className="stock-panel-meta">Weekly / Daily → 5m / 3m</span>
         </div>
-        <p className="stock-explainer">Market movers are pre-screened from the NSE F&amp;O universe. A <strong>WATCH</strong> requires aligned completed weekly and daily bullish/bearish structure; the 5-minute/3-minute trigger is checked separately. A <strong>SCREENING</strong> row has not passed the weekly/daily checks yet. Scores reflect rule-based context, not win probability. Last response: {ist(scan?.generatedAt)}.</p>
+        <p className="stock-explainer">Market movers are pre-screened from the NSE F&amp;O universe. A <strong>WATCH</strong> displays an actual verified weekly/daily setup score out of 100; <strong>85+</strong> permits manual paper research after fresh option and risk checks. A <strong>SCORE PENDING</strong> stock has no verified score yet and cannot be traded. Mixed weekly/daily directions score zero under this strategy; scores are rule-based context, not win probability. Last response: {ist(scan?.generatedAt)}.</p>
         {loading && <div className="stock-scanner-loading" role="status">{stage || 'Checking FYERS market data…'}{scan?.watchlist?.length ? ' · Watchlist remains visible below' : ''}</div>}
         {!loading && scan?.status && <div className="stock-scanner-loading" role="status">{scan.status}</div>}
         {!watchlist.length && !loading && !scan && active && <div className="stock-scanner-loading">No stock scan returned yet. Select Scan now to retry.</div>}
@@ -245,7 +274,13 @@ export default function StockScanner({ active, settings, onCloseTrade }) {
               <div className="stock-watch-prices"><strong>{money(row.spot)}</strong><small>{Number.isFinite(row.changePct) ? `${row.changePct >= 0 ? '+' : ''}${row.changePct.toFixed(2)}%` : '—'}</small></div>
               <div className="stock-watch-signal">
                 <span className={`stock-side ${row.side === 'CE' ? 'call' : row.side === 'PE' ? 'put' : ''}`}>{row.side || '—'}</span>
-                <small>{row.status === 'WATCH' ? `WATCH ${row.score}/100` : row.status === 'SCREENING' ? 'SCREENING' : 'NO DATA'}</small>
+                <small>{row.status === 'WATCH' ? `WATCH ${row.score}/100`
+                  : row.status === 'MIXED' ? 'MIXED · 0/100'
+                  : row.status === 'INSUFFICIENT' ? 'INSUFFICIENT'
+                  : row.status === 'DATA_UNAVAILABLE' || row.status === 'QUOTE_UNAVAILABLE' ? 'DATA UNAVAILABLE'
+                  : row.status === 'SCREENING' ? 'SCORE PENDING' : 'NOT VERIFIED'}</small>
+                {row.status === 'WATCH' && Number(row.score) < 85 &&
+                  <small>Manual paper needs 85+</small>}
                 {row.status === 'WATCH' && Number(row.score) >= 85 &&
                   row.weekBias === row.dayBias && ['CE','PE'].includes(row.side) &&
                   <button type="button" className="stock-watch-paper-btn"
