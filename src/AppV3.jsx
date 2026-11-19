@@ -501,7 +501,7 @@ export default function AppV3() {
   return (
     <div className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell">
       <header className="topbar mentor-v2-topbar">
-        <button className="brand-group brand-button" onClick={() => navigate('dashboard')} type="button">
+        <button className="brand-group brand-button" onClick={() => { setStrategyMode('core'); navigate('dashboard'); }} type="button">
           <div className="brand-mark">IO</div>
           <div><div className="brand-kicker">INDEX-ONLY · FYERS PRIME</div><div className="brand-title">Index Options Mentor</div></div>
         </button>
@@ -516,14 +516,13 @@ export default function AppV3() {
         <button className="mentor-v2-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><MenuIcon /></button>
       </header>
 
-      <DesktopNav view={view} navigate={navigate} settings={settings} setup={setupClassification} positionCount={positionCount} corePosition={corePosition} scalpPosition={scalpPosition} />
+      <DesktopNav view={view} navigate={navigate} strategyMode={strategyMode} setStrategyMode={setStrategyMode} settings={settings} setup={setupClassification} positionCount={positionCount} corePosition={corePosition} scalpPosition={scalpPosition} />
 
-      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
+      {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} strategyMode={strategyMode} setStrategyMode={setStrategyMode} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
 
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
           <>
-            <StrategyModeBar strategyMode={strategyMode} setStrategyMode={setStrategyMode} corePosition={corePosition} scalpPosition={scalpPosition} />
             <section className={`premium-feed-status ${marketDataReady ? 'live' : 'waiting'}`}
               role="status" aria-label="NIFTY data connection status">
               <div className="premium-feed-indicator" aria-hidden="true" />
@@ -682,30 +681,12 @@ function ResearchStatus({ classification, position, settings, manualReady }) {
   );
 }
 
-function StrategyModeBar({ strategyMode, setStrategyMode, corePosition, scalpPosition }) {
-  const scalp = strategyMode === 'scalp';
-  return (
-    <section className="strategy-mode-bar premium-strategy-bar" aria-label="Strategy mode">
-      <div className="strategy-mode-copy">
-        <span>STRATEGY MODE</span>
-        <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
-        <small>{corePosition ? '13-point position open' : '13-point monitoring'} · {scalpPosition ? 'Scalp position open' : 'Scalp monitoring'} · Paper trading</small>
-      </div>
-      <div className="premium-strategy-segment" role="group" aria-label="Select index strategy">
-        <button type="button" className={!scalp ? 'active' : ''}
-          aria-pressed={!scalp} onClick={() => setStrategyMode('core')}>13-Point</button>
-        <button type="button" className={scalp ? 'active' : ''}
-          aria-pressed={scalp} onClick={() => setStrategyMode('scalp')}>Scalp</button>
-      </div>
-    </section>
-  );
-}
-
-function DesktopNav({ view, navigate, settings, setup, positionCount, corePosition, scalpPosition }) {
+function DesktopNav({ view, navigate, strategyMode, setStrategyMode, settings, setup, positionCount, corePosition, scalpPosition }) {
   return (
     <aside className="mentor-sidebar-v2">
       <div className="sidebar-section-label">WORKSPACE</div>
-      <NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" />
+      <NavButton active={view === 'dashboard' && strategyMode === 'core'} onClick={() => { setStrategyMode('core'); navigate('dashboard'); }} icon="⌁" label="13-Point" />
+      <NavButton active={view === 'dashboard' && strategyMode === 'scalp'} onClick={() => { setStrategyMode('scalp'); navigate('dashboard'); }} icon="ϟ" label="Scalp" />
       <button type="button" className={`sidebar-nav-button ${view === 'position' ? 'active' : ''}`} onClick={() => navigate('position')}><span>↗</span><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong></button>
       <NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" />
       <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />
@@ -720,7 +701,7 @@ function DesktopNav({ view, navigate, settings, setup, positionCount, corePositi
   );
 }
 
-function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot, liveError, authRequired, onReconnect }) {
+function MobileDrawer({ view, navigate, strategyMode, setStrategyMode, positionCount, activePosition, onClose, brokerStatus, mode, setMode, settings, theme, setTheme, alertsEnabled, toggleAlerts, refreshing, refreshSnapshot, liveError, authRequired, onReconnect }) {
   return (
     <div className="mentor-drawer-backdrop" onMouseDown={event => event.target === event.currentTarget && onClose()}>
       <aside className="mentor-mobile-drawer">
