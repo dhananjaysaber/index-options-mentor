@@ -53,7 +53,8 @@ try {
   });
   assert.equal(visual.position, 'fixed');
   assert.equal(visual.backdrop, 'none', 'Header must not blur its own text');
-  assert.equal(visual.webkitBackdrop, 'none');
+  assert.ok(!visual.webkitBackdrop || visual.webkitBackdrop === 'none',
+    'Unsupported vendor-prefixed backdrop property may be undefined in Chromium');
   assert.equal(visual.background, 'rgb(8, 26, 43)', 'Header must use opaque dark surface');
   assert.ok(navBox.y >= 740 && navBox.y + navBox.height <= 846,
     'Navigation must stay within bottom of 844px iPhone viewport');
