@@ -1,6 +1,7 @@
 // Shared browser-side FYERS request coordinator. Preserves the same API and
 // research logic while preventing duplicate reads and retry storms on 429.
-// Across tabs, the cooldown is stored on this origin; no token is stored here.
+// Only a confirmed daily allowance is persisted across tabs. Short FYERS
+// throttles are isolated to the affected route; no token is stored here.
 import { FYERS_REFRESH } from './fyersRefreshPolicy.js';
 
 const COOLDOWN_KEY = 'iom-fyers-data-cooldown-v1';
@@ -14,10 +15,18 @@ const protectedRoutes = new Set([
 ]);
 const pending = new Map();
 const recentlyCompleted = new Map();
+const routeBackoff = new Map();
+const SHORT_BACKOFF_MS = 2500;
 
 function cooldownState() {
   try {
     const value = JSON.parse(localStorage.getItem(COOLDOWN_KEY) || 'null');
+    // A temporary rate limit from an older app build must NOT disable the
+    // entire Prime feed for three minutes after upgrading this deployment.
+    if (value?.kind === 'temporary') {
+      localStorage.removeItem(COOLDOWN_KEY);
+      return null;
+    }
     if (value?.until > Date.now()) return value;
     if (value) localStorage.removeItem(COOLDOWN_KEY);
   } catch {}
@@ -40,13 +49,25 @@ export function clearFyersCooldown() {
   try { localStorage.removeItem(COOLDOWN_KEY); } catch {}
 }
 
-function saveCooldown(kind, message) {
+function saveCooldown(kind, message, route) {
   const now = Date.now();
-  const until = kind === 'daily' ? nextMarketOpenIST(now) : now + 180000;
+  if (kind === 'temporary') {
+    // A snapshot or candle throttle must not stop the independent 1s
+    // NIFTY quote stream or automatic paper-position monitoring.
+    const until = now + SHORT_BACKOFF_MS;
+    if (route) routeBackoff.set(route, { kind, until, message });
+    window.dispatchEvent(new CustomEvent('mentor:fyers-rate-limit', {
+      detail: { kind, until, route, message }
+    }));
+    return;
+  }
+  const until = nextMarketOpenIST(now);
   const old = cooldownState();
-  if (old && old.until > until) return;
+  if (old && old.until >= until) return;
   try { localStorage.setItem(COOLDOWN_KEY, JSON.stringify({ kind, until, message })); } catch {}
-  window.dispatchEvent(new CustomEvent('mentor:fyers-rate-limit', { detail: { kind, until, message } }));
+  window.dispatchEvent(new CustomEvent('mentor:fyers-rate-limit', {
+    detail: { kind, until, route, message }
+  }));
 }
 
 function refusedResponse(state) {
@@ -79,8 +100,11 @@ export function installFyersRequestGuard() {
       && (!init.method || String(init.method).toUpperCase() === 'GET');
     if (!isProtected) return nativeFetch(input, init);
 
-    const blocked = cooldownState();
-    if (blocked) return refusedResponse(blocked);
+    const globalDaily = cooldownState();
+    if (globalDaily) return refusedResponse(globalDaily);
+    const routeState = routeBackoff.get(url.pathname);
+    if (routeState?.until > Date.now()) return refusedResponse(routeState);
+    if (routeState) routeBackoff.delete(url.pathname);
 
     const key = url.toString();
     const now = Date.now();
@@ -96,7 +120,7 @@ export function installFyersRequestGuard() {
         const msg = String([payload?.detail, payload?.error].filter(Boolean).join(' '));
         const daily = payload?.limitScope === 'daily'
           || /5[,.]?000\s*requests\s*\/\s*day|daily (?:api )?(?:request )?limit|requests\/day/i.test(msg);
-        saveCooldown(daily ? 'daily' : 'temporary', msg);
+        saveCooldown(daily ? 'daily' : 'temporary', msg, url.pathname);
       } else if (response.ok) {
         const fast = FYERS_REFRESH.tier === 'prime';
         // Prime's 4-second completed-candle refresh must NEVER receive a

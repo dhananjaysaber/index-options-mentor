@@ -8,6 +8,8 @@ const HISTORY_EVENT = 'mentor:journal-history';
 
 let dbPromise = null;
 let flushPromise = null;
+let journalFailureCount = 0;
+let nextJournalSyncAt = 0;
 let watchTimer = null;
 let syncTimer = null;
 let knownHistoryIds = new Set();
@@ -245,6 +247,9 @@ async function queueJournalEvent({ eventId, type, trade, source }) {
 }
 
 async function flushJournalQueue({ keepalive = false } = {}) {
+  // Sheet/Apps Script failures must never compete with market-data requests.
+  // Keep all journal events in IndexedDB/localStorage and retry later.
+  if (!keepalive && Date.now() < nextJournalSyncAt) return;
   if (flushPromise) return flushPromise;
   flushPromise = (async () => {
     const events = await getOutbox();
@@ -259,11 +264,23 @@ async function flushJournalQueue({ keepalive = false } = {}) {
           cache: 'no-store',
           keepalive
         });
-        if (!response.ok) break;
+        if (!response.ok) {
+          journalFailureCount = Math.min(5, journalFailureCount + 1);
+          nextJournalSyncAt = Date.now() + Math.min(120000, 5000 * (2 ** (journalFailureCount - 1)));
+          break;
+        }
         const data = await response.json().catch(() => ({}));
-        if (!data?.ok) break;
+        if (!data?.ok) {
+          journalFailureCount = Math.min(5, journalFailureCount + 1);
+          nextJournalSyncAt = Date.now() + Math.min(120000, 5000 * (2 ** (journalFailureCount - 1)));
+          break;
+        }
+        journalFailureCount = 0;
+        nextJournalSyncAt = 0;
         await deleteOutbox(event.id);
       } catch {
+        journalFailureCount = Math.min(5, journalFailureCount + 1);
+        nextJournalSyncAt = Date.now() + Math.min(120000, 5000 * (2 ** (journalFailureCount - 1)));
         break;
       }
     }

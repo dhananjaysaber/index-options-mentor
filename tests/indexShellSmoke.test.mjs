@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+import { createServer } from 'vite';
+
+// A Vite-transformed React render catches runtime errors that npm build alone
+// cannot detect (the Stock release previously built but loaded a white screen).
+test('production Index app renders both Normal and Scalp shells without runtime crash', async () => {
+  const originalStorage = globalThis.localStorage;
+  const originalWindow = globalThis.window;
+  const items = new Map();
+  globalThis.localStorage = {
+    getItem: key => items.has(key) ? items.get(key) : null,
+    setItem: (key, value) => items.set(key, String(value)),
+    removeItem: key => items.delete(key)
+  };
+  globalThis.window = {
+    location: { hostname: 'localhost', origin: 'http://localhost', pathname: '/' },
+    __indexOptionsLiveQuote: null,
+    addEventListener() {}, removeEventListener() {}, dispatchEvent() {}
+  };
+  let vite;
+  try {
+    vite = await createServer({
+      configFile: new URL('../vite.config.js', import.meta.url).pathname,
+      server: { middlewareMode: true },
+      appType: 'custom',
+      logLevel: 'error'
+    });
+    const { default: AppV3 } = await vite.ssrLoadModule('/src/AppV3.jsx');
+    for (const strategy of ['core', 'scalp']) {
+      items.set('index-options-mentor-strategy-mode-v1', strategy);
+      const html = renderToString(React.createElement(AppV3));
+      assert.match(html, /Index Options Mentor/, strategy + ' should mount');
+      assert.match(html, /13-point/i, strategy + ' original Index Normal strategy should exist');
+      assert.match(html, /Scalp|SCALP/, strategy + ' Scalp strategy should exist');
+      assert.doesNotMatch(html, /Stock Options Mentor|stock-scanner/, 'Stock UI must be absent');
+    }
+  } finally {
+    if (vite) await vite.close();
+    globalThis.localStorage = originalStorage;
+    globalThis.window = originalWindow;
+  }
+});

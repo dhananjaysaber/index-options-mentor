@@ -93,8 +93,10 @@ async function pollLiveQuote() {
       return;
     }
     if (response.status === 429) {
-      // Back off exponentially instead of hammering the FYERS rate limit every 2s.
-      throttleDelay = Math.min(60000, throttleDelay ? throttleDelay * 2 : 15000);
+      // Prime API throttles can be transient: retry this quote stream after
+      // a short bounded delay. Never impose a 15/30/60-second artificial pause.
+      // FYERS may still reject the next request; no stale quote is ever forged.
+      throttleDelay = Math.min(4500, throttleDelay ? throttleDelay + 1000 : 1500);
       nextPollAfter = Date.now() + throttleDelay;
       return;
     }
