@@ -21,17 +21,34 @@ export async function prepareManualStockPaperTicket(get, scope, query, now = Dat
     return fail('Select an eligible Stock WATCH candidate and its CE/PE direction.', 400);
   }
   const underlyingSymbol = 'NSE:' + stock + '-EQ';
-  const verified = await runStockContext(get, scope, now, { symbols: underlyingSymbol });
+  // The Stock context endpoint already verified the completed weekly/daily
+  // candles and issued a session-bound signed grant. Do not fetch those
+  // candles AGAIN while the user is trying to open a manual paper ticket.
+  // Without a valid proof, the current PWA must re-scan first.
+  if (options.requireGrant && !options.validatedWatch) {
+    return fail('The verified 85+ WATCH confirmation expired. Tap Scan now and then Manual paper again.', 409);
+  }
+  const verified = options.validatedWatch
+    ? { watchlist: [options.validatedWatch] }
+    : await runStockContext(get, scope, now, { symbols: underlyingSymbol });
   const watch = verified.watchlist?.find(row =>
     row.stock === stock && row.side === side && row.status === 'WATCH' &&
-    Number(row.score) >= MIN_MANUAL_SCORE);
-  if (!watch) return fail('Manual paper entry requires a fresh, verified weekly/daily WATCH score of at least 85/100. Re-scan.');
+    Number(row.score) >= MIN_MANUAL_SCORE &&
+    row.weekBias === row.dayBias &&
+    (side === 'CE' ? row.weekBias === 'BULLISH' : row.weekBias === 'BEARISH'));
+  if (!watch) return fail('Manual paper entry requires a currently verified aligned weekly/daily score of at least 85/100.', 409);
   // Start the option-master download in parallel with the option chain, rather
   // than making the first watchlist request wait for it.
-  const [master, chain] = await Promise.all([
-    options.master ? Promise.resolve(options.master) : symbolMaster(),
-    get('/options-chain-v3', { symbol: underlyingSymbol, strikecount: 3, greeks: '1' })
-  ]);
+  let master, chain;
+  try {
+    [master, chain] = await Promise.all([
+      options.master ? Promise.resolve(options.master) : symbolMaster(),
+      get('/options-chain-v3', { symbol: underlyingSymbol, strikecount: 3, greeks: '1' })
+    ]);
+  } catch (error) {
+    if (error?.status === 429 || error?.status === 401) throw error;
+    return fail('FYERS could not verify the option contract and lot size. No paper entry was opened; please try again.', 503);
+  }
   const data = chain?.data || chain;
   const expiry = number(data?.expiryData?.[0]?.expiry);
   if (!(expiry > now / 1000) || dateIST(expiry * 1000) === dateIST(now)) {
@@ -46,7 +63,7 @@ export async function prepareManualStockPaperTicket(get, scope, query, now = Dat
   const leg = optionsList.find(row => {
     const instrument = master[row.symbol];
     return number(instrument?.minLotSize) > 0 && instrument?.optType === side &&
-      instrument?.tradeStatus !== 0; // Expiry is verified against the live FYERS option chain above.
+      Number(instrument?.tradeStatus) === 1; // Expiry is verified against the live FYERS option chain above.
   });
   if (!leg) return fail('No current exchange-listed FYERS option with a verified lot size was found.');
   const lotSize = number(master[leg.symbol].minLotSize);
@@ -79,7 +96,7 @@ export async function prepareManualStockPaperTicket(get, scope, query, now = Dat
     score: watch.score, weekBias: watch.weekBias, dayBias: watch.dayBias,
     reason: watch.reason, stockLastPrice: currentSpot, underlyingSymbol,
     setup: 'Manual 85+ weekly/daily research; 5-minute/3-minute trigger not confirmed',
-    confirmedAt: now, validUntil: Date.now() + 45000,
+    confirmedAt: now, validUntil: Date.now() + 120000,
     symbol: leg.symbol, strike: number(leg.strike_price), expiry: dateIST(expiry * 1000),
     lotSize, delta, bid, ask, bidSize, askSize,
     spot: currentSpot, stop, target, min: currentSpot * 0.997, max: currentSpot * 1.003,

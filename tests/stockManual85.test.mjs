@@ -86,3 +86,87 @@ test('no manual Stock ticket outside market hours or for unsupported stock',asyn
     {stock:'FAKESTOCK',side:'CE'},now,{master});
   assert.equal(invalid.status,400);
 });
+
+
+import { createStockWatchGrant, verifyStockWatchGrant } from '../server/stockWatchGrant.mjs';
+import { explainStockPaperEligibility } from '../src/engine/stockRanking.js';
+
+const signedWatch = {
+  stock: 'EXIDEIND', status: 'WATCH', side: 'CE', score: 93,
+  weekBias: 'BULLISH', dayBias: 'BULLISH',
+  reason: 'Weekly and daily bullish', spot: 130
+};
+const watchKey = 'test-secret-only';
+const watchScope = 'fyers-session-hash-test';
+
+test('signed 93/100 WATCH proof is valid for this FYERS session and three minutes only', () => {
+  const grant = createStockWatchGrant(signedWatch, watchScope, watchKey, now);
+  assert.ok(grant);
+  const verified = verifyStockWatchGrant(grant, watchScope, watchKey, now + 25000);
+  assert.equal(verified.score, 93);
+  assert.equal(verified.stock, 'EXIDEIND');
+  assert.equal(verified.side, 'CE');
+  assert.equal(verifyStockWatchGrant(grant, 'another-account', watchKey, now + 500), null);
+  assert.equal(verifyStockWatchGrant(grant, watchScope, 'wrong-secret', now + 500), null);
+  assert.equal(verifyStockWatchGrant(grant, watchScope, watchKey, now + 181000), null);
+  const [body, sig] = grant.split('.');
+  const forged = Buffer.from(JSON.stringify({ ...signedWatch, version: 1,
+    scope: watchScope, score: 100, issuedAt: now, expiresAt: now + 180000 })).toString('base64url');
+  assert.equal(verifyStockWatchGrant(forged + '.' + sig, watchScope, watchKey, now), null,
+    'User must not be able to raise the score or change the contract direction');
+});
+
+test('mixed, under-85 and inconsistent-direction watches cannot receive signed grants', () => {
+  assert.equal(createStockWatchGrant({ ...signedWatch, score: 84 }, watchScope, watchKey, now), null);
+  assert.equal(createStockWatchGrant({ ...signedWatch, side: 'PE' }, watchScope, watchKey, now), null,
+    'PE with bullish weekly/daily structure must not pass');
+  assert.equal(createStockWatchGrant({ ...signedWatch, dayBias: 'BEARISH' }, watchScope, watchKey, now), null);
+});
+
+test('signed WATCH allows contract verification without downloading weekly/daily history AGAIN', async () => {
+  const { get, called } = fakeBroker();
+  const proof = createStockWatchGrant(signedWatch, watchScope, watchKey, now);
+  const checked = verifyStockWatchGrant(proof, watchScope, watchKey, now + 1000);
+  const ticket = await prepareManualStockPaperTicket(get, watchScope,
+    { stock: 'EXIDEIND', side: 'CE' }, now, {
+      validatedWatch: checked, requireGrant: true, master
+    });
+  assert.ok(!ticket.error, ticket.error);
+  assert.equal(ticket.score, 93);
+  assert.equal(ticket.manualOverride, true);
+  assert.equal(ticket.strictEligible, false);
+  assert.equal(called.filter(path => path === '/history').length, 0,
+    'Manual button should not refetch 1D/1W candles');
+  assert.equal(called.filter(path => path === '/options-chain-v3').length, 1);
+  assert.ok(ticket.validUntil >= Date.now() + 110000,
+    'Give time for informed paper ticket review; still reprice at paper entry');
+});
+
+test('missing or expired signed grant fails fast without any FYERS calls', async () => {
+  let calls = 0;
+  const get = async () => { calls++; throw Error('Should not call broker'); };
+  const denied = await prepareManualStockPaperTicket(get,watchScope,
+    { stock: 'EXIDEIND', side: 'CE' }, now,
+    { requireGrant: true, validatedWatch: null });
+  assert.equal(denied.status, 409);
+  assert.match(denied.error, /expired/i);
+  assert.equal(calls, 0);
+});
+
+test('Stock paper risk explanations show exact reasons before allowing a manual entry', () => {
+  const candidate = {
+    stock: 'EXIDEIND', side: 'CE', validUntil: Date.now() + 120000,
+    spot: 130, stop: 129, target: 140, lotSize: 100, delta: 0.5,
+    bid: 11, ask: 11.1, bidSize: 400, askSize: 400
+  };
+  const settings = { defaultLots: 1, capital: 50000, riskPct: 1, lotCap: 5 };
+  assert.equal(explainStockPaperEligibility(candidate,settings).eligible, true);
+  const budgetFail = explainStockPaperEligibility(candidate,
+    { ...settings, riskPct: 0.1 });
+  assert.equal(budgetFail.eligible,false);
+  assert.ok(budgetFail.reasons.some(x => /risk budget/i.test(x)));
+  const depthFail = explainStockPaperEligibility({ ...candidate, askSize: 0 },settings);
+  assert.ok(depthFail.reasons.some(x => /depth/i.test(x)));
+  const expired = explainStockPaperEligibility({ ...candidate, validUntil: Date.now() - 5 },settings);
+  assert.ok(expired.reasons.some(x => /expired/i.test(x)));
+});
