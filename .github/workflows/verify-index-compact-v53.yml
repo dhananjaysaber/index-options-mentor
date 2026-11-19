@@ -2,6 +2,8 @@ name: Verify compact premium 13-Point chart UI
 on:
   push:
     branches: [feature/index-compact-chart-ui-v53]
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
