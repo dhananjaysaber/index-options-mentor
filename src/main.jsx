@@ -40,6 +40,7 @@ import './research-cockpit-v41.css';
 import './footer-clearance-v42.css';
 import './premium-trading-v51.css';
 import './iphone-shell-v52.css';
+import './view-mode-menu-v55.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
