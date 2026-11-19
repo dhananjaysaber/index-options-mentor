@@ -129,3 +129,11 @@
   .stock-watch-prices strong{font-size:11px}
   .stock-watch-paper-btn{margin-left:0;flex-basis:100%;width:100%}
 }
+
+
+.stock-manual-preview .stock-manual-expiry{font-weight:800;color:#175c85;background:#e8f5ff;padding:10px 12px;border-radius:10px}
+.stock-manual-preview .stock-manual-blockers{padding:12px 13px;border:1px solid #e6c49f;
+  border-radius:12px;background:#fff8ec;color:#77411b;font-size:12px;line-height:1.5}
+.stock-manual-preview .stock-manual-blockers strong{display:block;margin-bottom:5px}
+.stock-manual-preview .stock-manual-blockers ul{margin:5px 0 0;padding-left:18px}
+.stock-manual-preview .stock-manual-blockers li{margin:4px 0}
