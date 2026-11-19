@@ -1,6 +1,6 @@
 # Index Options Mentor — Option B (complete replacement files)
 
-This branch is a **UI-only draft**. Production `main` remains unchanged.
+This UI-only change is designed for the **Index Options Mentor production PWA**. It does not change Index/Scalp strategies, FYERS Prime timing or paper trading logic.
 
 ## What to replace
 
@@ -12,7 +12,7 @@ Copy the included files to the same paths in your Index Options Mentor project:
 4. `src/components/CoreResearchPanel.jsx` — remove the verbose “Candidate monitoring is not a trade” paragraph and duplicate NIFTY price card while retaining gates and risk levels.
 5. `src/index-compact-v53.css` and `src/index-compact-v54.css` — compact 13-Point and Scalp styling; 430px chart, premium candle colours, fewer oversized cards; no redundant top strategy toggle on either layout.
 6. `src/main.jsx` — complete file included with the new CSS imported after `iphone-shell-v52.css`.
-7. `public/sw.js` — complete service worker with cache name bumped to `v53-compact-chart` for installed PWA refresh.
+7. `public/sw.js` — complete service worker with cache name bumped to `v54-compact-chart-nav` for installed PWA refresh.
 
 No new environment variables, backend changes, FYERS order functions, quote timers or strategy changes.
 
@@ -35,4 +35,4 @@ VITE_FYERS_TIER=prime npm run build
 
 A mobile Chromium smoke test can run using `node scripts/verify-iphone-shell.mjs` with Playwright installed.
 
-Review in [GitHub PR #23](https://github.com/dhananjaysaber/index-options-mentor/pull/23). This PR is draft and not deployed.
+See [GitHub PR #23](https://github.com/dhananjaysaber/index-options-mentor/pull/23) for the reviewed changes and mobile browser test results.
