@@ -52,5 +52,5 @@ test('premium responsive CSS is last and PWA cache is versioned', () => {
   const main = read('src/main.jsx');
   const sw = read('public/sw.js');
   assert.ok(main.indexOf("import './index-compact-v53.css';") > main.indexOf("import './iphone-shell-v52.css';"));
-  assert.match(sw, /index-options-mentor-pwa-v53-compact-chart/);
+  assert.match(sw, /index-options-mentor-pwa-v54-compact-chart-nav/);
 });
