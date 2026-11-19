@@ -19,7 +19,7 @@ No new environment variables, backend changes, FYERS order functions, quote time
 ## Important notes
 
 - **Normal** and **Scalp** remain accessible via bottom Home / Scalp navigation on mobile.
-- Desktop users still need the existing top strategy selector; it is not removed on desktop.
+- Desktop users select 13-Point and Scalp from dedicated sidebar links; the redundant top selector is fully removed.
 - Normal automatic and manual paper trading, Scalp auto/manual paper trading and trade journalling are unchanged.
 - The chart's taller mobile display is purely presentation; the 3-minute timeframe remains a visual option and does not turn the 13-Point entry system into a 3-minute strategy.
 - The chart's level lines remain; duplicate numerical level tiles are removed **from the 13-Point chart only**.
