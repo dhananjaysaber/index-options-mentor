@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { runStockScan } from '../../server/stockScanner.mjs';
 import { runStockUniverse, runStockContext, runStockEntryCheck } from '../../server/stockStages.mjs';
 import { prepareManualStockPaperTicket } from '../../server/stockManual85.mjs';
+import { createStockWatchGrant, verifyStockWatchGrant } from '../../server/stockWatchGrant.mjs';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
@@ -578,19 +579,33 @@ async function handleStockScanner(request) {
       symbols: params.get('symbols') || '',
       bias: params.get('bias') || '',
       stock: params.get('stock') || '',
-      side: params.get('side') || ''
+      side: params.get('side') || '',
+      grant: params.get('grant') || ''
     };
     const now = Date.now();
-    const results = phase === 'universe'
+    let results = phase === 'universe'
       ? await runStockUniverse(get, scope, now)
       : phase === 'context'
         ? await runStockContext(get, scope, now, query)
         : phase === 'entry'
           ? await runStockEntryCheck(get, scope, now, query)
           : phase === 'manual-ticket'
-            ? await prepareManualStockPaperTicket(get, scope, query, now)
+            ? await prepareManualStockPaperTicket(get, scope, query, now, {
+                validatedWatch: verifyStockWatchGrant(query.grant, scope, sessionSecret(), now),
+                requireGrant: true
+              })
             : null;
     if (!results) return json({ error: 'Unknown stock scanner phase.' }, 400);
+    if (phase === 'context') {
+      // Sign confirmed 85+ WATCH results with the existing backend session
+      // secret; a browser-supplied score is never accepted as an entry gate.
+      results = {
+        ...results,
+        watchlist: (results.watchlist || []).map(watch => ({
+          ...watch, watchGrant: createStockWatchGrant(watch, scope, sessionSecret(), now)
+        }))
+      };
+    }
     return json(results, results.error ? results.status || 422 : 200);
   } catch (error) {
     console.error('Stock scan unavailable:', error?.code || error?.message);
