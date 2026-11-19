@@ -53,6 +53,7 @@ export function useScalpResearch({ snapshot, liveQuote, brokerAuthenticated, mar
         }
       } finally {
         inFlight = false;
+        firstLoad = false;
         if (request === controller) request = null;
         if (!cancelled) setCandleLoading(false);
       }
