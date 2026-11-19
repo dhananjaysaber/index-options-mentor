@@ -39,10 +39,14 @@ import './research-analysis-v40.css';
 import './research-cockpit-v41.css';
 import './footer-clearance-v42.css';
 import './premium-trading-v51.css';
+import './iphone-shell-v52.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
 // bundled into the public GitHub Pages build.
+// Do not reopen a standalone PWA halfway down a strategy card.
+// Browser-restored scroll positions caused the approved header to appear clipped.
+if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
 installApiBridge();
 installFyersRequestGuard();
 

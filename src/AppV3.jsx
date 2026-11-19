@@ -102,6 +102,15 @@ export default function AppV3() {
   const activePosition = strategyMode === 'scalp' ? scalpPosition : corePosition;
   const positionCount = Number(Boolean(corePosition)) + Number(Boolean(scalpPosition));
 
+  // iOS standalone PWAs can restore the prior scroll offset on launch.
+  // Reset the main document when opening or changing a view/strategy so
+  // the fixed status-bar-safe header never starts over a half-hidden card.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    const frame = window.requestAnimationFrame(() => window.scrollTo(0, 0));
+    return () => window.cancelAnimationFrame(frame);
+  }, [view, strategyMode]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
