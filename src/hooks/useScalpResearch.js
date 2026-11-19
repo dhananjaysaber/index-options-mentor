@@ -24,7 +24,7 @@ export function useScalpResearch({ snapshot, liveQuote, brokerAuthenticated, mar
     const load = async () => {
       if (cancelled || inFlight || document.visibilityState !== 'visible') return;
       inFlight = true;
-      setCandleLoading(current => current || lastCandlesAt === 0);
+      if (firstLoad) setCandleLoading(true);
       const controller = new AbortController();
       request = controller;
       try {
