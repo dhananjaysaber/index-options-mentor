@@ -33,7 +33,7 @@ test('premium trading navigation uses only the 13-point and scalp strategies', (
   assert.ok(main.indexOf("import './premium-trading-v51.css';") >
             main.indexOf("import './footer-clearance-v42.css';"),
             'Premium design stylesheet must load last');
-  assert.match(sw, /index-options-mentor-pwa-v52-header-safearea/);
+  assert.match(sw, /index-options-mentor-pwa-v53-compact-chart/);
 });
 
 test('premium design keeps real FYERS data and existing paper buy/sell actions', () => {
