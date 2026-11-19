@@ -33,7 +33,7 @@ jobs:
           cp src/components/TraderMarketPanel.jsx option-b/src/components/
           cp src/components/CoreResearchPanel.jsx option-b/src/components/
           cp src/components/NiftyStrategyChart.jsx option-b/src/components/
-          cp src/index-compact-v53.css src/main.jsx option-b/src/
+          cp src/index-compact-v53.css src/index-compact-v54.css src/main.jsx option-b/src/
           cp public/sw.js option-b/public/
           cp OPTION_B_README.md option-b/README.md
       - name: Publish copy-ready files for review
