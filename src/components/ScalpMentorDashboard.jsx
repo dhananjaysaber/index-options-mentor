@@ -28,6 +28,7 @@ export default function ScalpMentorDashboard({
   evaluation
 }) {
   const liveQuote = useLiveQuote();
+  const liveSpot = Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
   const [manualLots, setManualLots] = useState(() => clampLots(settings?.defaultLots, settings?.lotCap));
   useEffect(() => {
     if (!position) setManualLots(current => clampLots(current || settings?.defaultLots, settings?.lotCap));
