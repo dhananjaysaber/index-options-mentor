@@ -67,7 +67,14 @@ export default function AppV3() {
   const [authRequired, setAuthRequired] = useState(false);
   const snapshotRequestRef = useRef(false);
   const [clockTick, setClockTick] = useState(0);
-  const [theme, setTheme] = useState(() => readString(THEME_KEY, 'light') === 'dark' ? 'dark' : 'light');
+  const [theme, setTheme] = useState(() => {
+    // Introduce the approved dark premium interface once, then honour the
+    // user's normal Light/Dark preference for subsequent launches.
+    const premiumActivated = readString('iom-premium-theme-v1', '0') === '1';
+    return premiumActivated
+      ? (readString(THEME_KEY, 'dark') === 'light' ? 'light' : 'dark')
+      : 'dark';
+  });
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...readJson(SETTINGS_KEY, {}) }));
   const [corePosition, setCorePosition] = useState(() => initialPosition('core'));
   const [scalpPosition, setScalpPosition] = useState(() => initialPosition('scalp'));
@@ -98,6 +105,7 @@ export default function AppV3() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem(THEME_KEY, theme);
+    localStorage.setItem('iom-premium-theme-v1', '1');
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#ffffff');
   }, [theme]);
@@ -482,11 +490,11 @@ export default function AppV3() {
 
   const reconnectRequired = authRequired;
   return (
-    <div className="app-shell mentor-v2-shell research-v41-shell">
+    <div className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell">
       <header className="topbar mentor-v2-topbar">
         <button className="brand-group brand-button" onClick={() => navigate('dashboard')} type="button">
           <div className="brand-mark">IO</div>
-          <div><div className="brand-kicker">DATA-DRIVEN TRADING MENTOR</div><div className="brand-title">Index Options Mentor</div></div>
+          <div><div className="brand-kicker">INDEX-ONLY · FYERS PRIME</div><div className="brand-title">Index Options Mentor</div></div>
         </button>
         <div className="mentor-v2-desktop-actions">
           <span className={`connection-pill ${reconnectRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}>FYERS {reconnectRequired ? 'Reconnect' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</span>
@@ -507,6 +515,23 @@ export default function AppV3() {
         {view === 'dashboard' && (
           <>
             <StrategyModeBar strategyMode={strategyMode} setStrategyMode={setStrategyMode} corePosition={corePosition} scalpPosition={scalpPosition} />
+            <section className={`premium-feed-status ${marketDataReady ? 'live' : 'waiting'}`}
+              role="status" aria-label="NIFTY data connection status">
+              <div className="premium-feed-indicator" aria-hidden="true" />
+              <div className="premium-feed-copy">
+                <strong>{marketDataReady ? 'LIVE MARKET DATA' : brokerStatus.authenticated ? 'WAITING FOR FRESH DATA' : 'FYERS CONNECTION REQUIRED'}</strong>
+                <small>{marketDataReady ? 'NIFTY quote and Mentor analysis in sync' :
+                  brokerStatus.authenticated ? 'Entries paused until fresh prices return' : 'Connect FYERS in the menu to load market research'}</small>
+              </div>
+              <div className="premium-feed-time">
+                <span>Last refresh</span>
+                <strong>{formatTime(snapshot?.generatedAt)}</strong>
+              </div>
+              <button type="button" className="premium-feed-refresh"
+                onClick={() => refreshSnapshot({ manual: true })}
+                disabled={!brokerStatus.authenticated || refreshing}
+                title="Refresh Mentor data" aria-label="Refresh Mentor data">{refreshing ? '…' : '↻'}</button>
+            </section>
 
             {strategyMode === 'scalp' ? (
               <ScalpMentorDashboard
@@ -602,6 +627,27 @@ export default function AppV3() {
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
 
+      <nav className="premium-mobile-bottom-nav" aria-label="Primary trading navigation">
+        <button type="button" className={view === 'dashboard' && strategyMode === 'core' ? 'active' : ''}
+          aria-current={view === 'dashboard' && strategyMode === 'core' ? 'page' : undefined}
+          onClick={() => { setStrategyMode('core'); navigate('dashboard'); }}>
+          <span className="premium-nav-icon" aria-hidden="true">⌂</span><span>Home</span>
+        </button>
+        <button type="button" className={view === 'dashboard' && strategyMode === 'scalp' ? 'active' : ''}
+          aria-current={view === 'dashboard' && strategyMode === 'scalp' ? 'page' : undefined}
+          onClick={() => { setStrategyMode('scalp'); navigate('dashboard'); }}>
+          <span className="premium-nav-icon" aria-hidden="true">ϟ</span><span>Scalp</span>
+        </button>
+        <button type="button" className={view === 'position' ? 'active' : ''}
+          aria-current={view === 'position' ? 'page' : undefined} onClick={() => navigate('position')}>
+          <span className="premium-nav-icon" aria-hidden="true">▣</span><span>Positions{positionCount ? ` · ${positionCount}` : ''}</span>
+        </button>
+        <button type="button" className={view === 'history' ? 'active' : ''}
+          aria-current={view === 'history' ? 'page' : undefined} onClick={() => navigate('history')}>
+          <span className="premium-nav-icon" aria-hidden="true">≡</span><span>Journal</span>
+        </button>
+      </nav>
+
       {view === 'dashboard' && (strategyMode === 'scalp'
         ? <ScalpFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} evaluation={scalpStatus} positionMentor={scalpMentor} />
         : <MentorFooter snapshot={snapshot} brokerStatus={brokerStatus} refreshing={refreshing} positionMentor={coreMentor} />)}
@@ -630,15 +676,18 @@ function ResearchStatus({ classification, position, settings, manualReady }) {
 function StrategyModeBar({ strategyMode, setStrategyMode, corePosition, scalpPosition }) {
   const scalp = strategyMode === 'scalp';
   return (
-    <section className="strategy-mode-bar" aria-label="Strategy mode">
+    <section className="strategy-mode-bar premium-strategy-bar" aria-label="Strategy mode">
       <div className="strategy-mode-copy">
         <span>STRATEGY MODE</span>
         <strong>{scalp ? 'Scalp research · 5m context / 3m execution' : '13-point Mentor · structured 5m strategy'}</strong>
-        <small>{corePosition ? '13-point open' : '13-point clear'} · {scalpPosition ? 'Scalp open' : 'Scalp clear'}</small>
+        <small>{corePosition ? '13-point position open' : '13-point monitoring'} · {scalpPosition ? 'Scalp position open' : 'Scalp monitoring'} · Paper trading</small>
       </div>
-      <button type="button" className={`scalp-mode-switch ${scalp ? 'active' : ''}`} onClick={() => setStrategyMode(scalp ? 'core' : 'scalp')} aria-pressed={scalp}>
-        <span>SCALP</span><i aria-hidden="true" />
-      </button>
+      <div className="premium-strategy-segment" role="group" aria-label="Select index strategy">
+        <button type="button" className={!scalp ? 'active' : ''}
+          aria-pressed={!scalp} onClick={() => setStrategyMode('core')}>13-Point</button>
+        <button type="button" className={scalp ? 'active' : ''}
+          aria-pressed={scalp} onClick={() => setStrategyMode('scalp')}>Scalp</button>
+      </div>
     </section>
   );
 }
