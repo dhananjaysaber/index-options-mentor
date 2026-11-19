@@ -22,7 +22,7 @@ test('both strategies run outside the selected strategy tab without duplicate sc
   assert.match(app, /useScalpResearch/);
   assert.match(app, /buildScalpTicket\(snapshot, scalpStatus, settings, 'MENTOR'\)/);
   assert.match(app, /marketDataReady/);
-  assert.doesNotMatch(scalp, /setInterval|const LEDGER_KEY|scalpAutoOpen/);
+  assert.doesNotMatch(scalp, /setInterval|const LEDGER_KEY|localStorage\.setItem\(LEDGER/);
   assert.match(monitor, /FYERS_REFRESH\.scalpCandlesMs/);
   assert.match(monitor, /document\.visibilityState/);
 });
