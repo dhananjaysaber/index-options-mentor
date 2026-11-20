@@ -75,6 +75,15 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
           <small>{position.coreOptionTrailingActive
             ? `Peak observed gross profit +₹${fmt(Math.max(0, Number(position.peakUnrealizedPnl) || 0))} · Retains ${Math.round(100 * Number(position.coreOptionTrailKeepRatio || .35))}% of peak as the move extends · No broker stop order`
             : 'Original NIFTY structural stop still applies · Runner profit trail has not armed yet'}</small>
+          <div className={`runner-index-trail-status ${position.coreTargetIndexTrailActive ? 'armed' : 'waiting'}`} role="status">
+            <span>TARGET-BASED NIFTY TRAIL</span>
+            <strong>{position.coreTargetIndexTrailActive
+              ? `ARMED · NIFTY stop ${fmt(position.coreTargetIndexTrailStop)}`
+              : `WAITING · arms beyond ${fmt(position.coreTargetIndexTrailArmAtNifty)}`}</strong>
+            <small>{position.coreTargetIndexTrailActive
+              ? 'Original target is now protected; stop climbs 0.50R behind the best NIFTY move · Paper only'
+              : 'Target is a milestone, not an automatic exit. Allows another 0.25R beyond target before raising the stop'}</small>
+          </div>
         </div>
       )}
 
