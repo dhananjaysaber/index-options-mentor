@@ -14,6 +14,7 @@ import ScalpFooter from './components/ScalpFooter.jsx';
 import useLiveQuote from './hooks/useLiveQuote.js';
 import { useScalpResearch } from './hooks/useScalpResearch.js';
 import { buildScalpTicket } from './engine/scalpStrategy.js';
+import { computeScalpOptionTrail, isScalpOptionTrailBreached } from './engine/scalpOptionTrail.js';
 import CoreResearchPanel from './components/CoreResearchPanel.jsx';
 import CoreQuickActions from './components/CoreQuickActions.jsx';
 import MobileMentorDashboardV41 from './components/MobileMentorDashboardV41.jsx';
@@ -82,7 +83,7 @@ export default function AppV3() {
   const [alertsEnabled, setAlertsEnabled] = useState(() => readString(ALERTS_KEY, '0') === '1');
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const audioRef = useRef(null);
-  const autoExitRef = useRef({ core: '', scalp: '', trail: '', time: '' });
+  const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', time: '' });
 
   // A locally displayed quote may look live after an iOS tab resumes.
   // Enforce bounded staleness on ALL new paper entries, never on display only.
@@ -259,10 +260,10 @@ export default function AppV3() {
         return value == null ? NaN : Number(value);
       };
       setCorePosition(current => current
-        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null)
+        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null, quote.at)
         : current);
       setScalpPosition(current => current
-        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null)
+        ? updateLivePosition(current, optionPrice(current.symbol), nifty, null, quote.at)
         : current);
     };
     window.addEventListener('mentor:live-quote', updatePositions);
@@ -390,6 +391,33 @@ export default function AppV3() {
       closedBy: 'MENTOR'
     });
   }, [scalpPosition?.id, scalpPosition?.currentR, scalpPosition?.scalpTrailingFloorR, scalpPosition?.scalpTrailingActive, settings.scalpAutoClose]);
+
+  // Paper option-P&L protection is independent of NIFTY-index R trailing.
+  // Trigger only against fresh contract quotes, never stale/cached LTP.
+  useEffect(() => {
+    if (!scalpPosition || settings.scalpAutoClose === false ||
+        document.visibilityState !== 'visible' || !isNseMarketHours()) {
+      autoExitRef.current.option = '';
+      return;
+    }
+    if (!isScalpOptionTrailBreached(scalpPosition)) return;
+    const floor = Number(scalpPosition.optionTrailingFloorPnl);
+    const pnl = Number(scalpPosition.currentUnrealizedPnl);
+    const peak = Number(scalpPosition.peakUnrealizedPnl);
+    const signature = `${scalpPosition.id}:${floor.toFixed(2)}`;
+    if (autoExitRef.current.option === signature) return;
+    autoExitRef.current.option = signature;
+    exitStrategy('scalp', {
+      mentorState: 'SCALP OPTION PROFIT TRAIL',
+      reasonCode: 'SCALP_OPTION_PROFIT_TRAIL',
+      reason: `Observed gross option P&L ${formatCurrencyPnl(pnl)} crossed the paper trailing floor ${formatCurrencyPnl(floor)} after peaking at ${formatCurrencyPnl(peak)}. Simulated exit uses the current observed option quote, not the historical floor price.`,
+      closedBy: 'MENTOR'
+    });
+  }, [
+    scalpPosition?.id, scalpPosition?.optionTrailingActive,
+    scalpPosition?.optionTrailingFloorPnl, scalpPosition?.currentUnrealizedPnl,
+    scalpPosition?.lastOptionQuoteAt, settings.scalpAutoClose
+  ]);
 
   useEffect(() => {
     if (!scalpPosition || settings.scalpAutoClose === false) return undefined;
@@ -783,15 +811,19 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
     scalpTrailingFloorR: current.scalpTrailingFloorR ?? null,
     scalpTrailingGivebackR: current.scalpTrailingGivebackR ?? null,
     scalpTrailingExit: meta.reasonCode === 'SCALP_TRAILING_STOP',
+    scalpOptionProfitTrailExit: meta.reasonCode === 'SCALP_OPTION_PROFIT_TRAIL',
+    scalpOptionTrailFloorPnlAtExit: current.optionTrailingFloorPnl ?? null,
+    scalpOptionTrailPeakPnlAtExit: current.peakUnrealizedPnl ?? null,
     scalpTimeLimitExit: meta.reasonCode === 'SCALP_TIME_EXIT',
     scalpTrailPolicy: current.scalpTrailPolicy || null,
     exitSnapshot: snapshot ? { market: { ...snapshot.market }, decision: { ...snapshot.decision }, parameters: snapshot.parameters, structure: { ...snapshot.structure }, setup: { ...snapshot.setup } } : null
   };
 }
 
-function updateLivePosition(current, liveOption, liveNifty, fallbackSpot) {
+function updateLivePosition(current, liveOption, liveNifty, fallbackSpot, quoteAt = null) {
   if (!current) return current;
-  const currentPrice = Number.isFinite(liveOption) && liveOption > 0 ? liveOption : finite(current.currentPrice) ?? finite(current.entry) ?? 0;
+  const hasCurrentOptionQuote = Number.isFinite(liveOption) && liveOption > 0;
+  const currentPrice = hasCurrentOptionQuote ? liveOption : finite(current.currentPrice) ?? finite(current.entry) ?? 0;
   const underlyingCurrent = Number.isFinite(liveNifty) && liveNifty > 0 ? liveNifty : finite(fallbackSpot) ?? finite(current.underlyingCurrent) ?? finite(current.underlyingEntry) ?? 0;
   const riskPoints = Math.max(0.01, Math.abs(Number(current.underlyingEntry) - Number(current.underlyingStop)));
   const movePoints = current.side === 'CE' ? underlyingCurrent - Number(current.underlyingEntry) : Number(current.underlyingEntry) - underlyingCurrent;
@@ -804,6 +836,7 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot) {
   const next = {
     ...current,
     currentPrice,
+    lastOptionQuoteAt: hasCurrentOptionQuote && Number.isFinite(Date.parse(quoteAt || '')) ? quoteAt : (current.lastOptionQuoteAt || null),
     underlyingCurrent,
     currentR,
     bestR,
@@ -822,9 +855,26 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot) {
     next.scalpTrailingFloorR = trail.floorR;
     next.scalpTrailingGivebackR = Math.max(0, bestR - currentR);
     next.scalpTrailPolicy = 'SIMULATION ONLY, using NIFTY-index R (not an exchange or FYERS stop): +0.50R protects 0R gross; +0.60R protects +0.50R; +0.75R protects +0.55R; +0.90R protects +0.75R; never lower the floor.';
+    const optionTrail = computeScalpOptionTrail({
+      entryPrice: current.entry,
+      quantity,
+      peakGrossPnl: peakUnrealizedPnl,
+      previousFloorPnl: current.optionTrailingFloorPnl
+    });
+    next.optionTrailingActive = optionTrail.active;
+    next.optionTrailingFloorPnl = optionTrail.floorPnl;
+    next.optionTrailingArmAtGrossPnl = optionTrail.armAtGrossPnl;
+    next.optionTrailPolicy = 'PAPER ONLY: arms after +3% option-premium gain; protects at least 50% of peak observed gross P&L. This is neither a broker-side stop nor a guaranteed fill.';
+    if (optionTrail.active && !current.optionTrailingActivatedAt) next.optionTrailingActivatedAt = new Date().toISOString();
     if (trail.active && !current.scalpTrailingActivatedAt) next.scalpTrailingActivatedAt = new Date().toISOString();
   }
   return next;
+}
+
+function formatCurrencyPnl(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return 'unavailable';
+  return `${amount >= 0 ? '+' : '-'}₹${Math.abs(amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
 function scalpTrail(bestR, previousFloorR = null) {
