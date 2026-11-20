@@ -75,6 +75,10 @@ export default function History({ history }) {
                     {trade.maxProfitGivebackPnl != null && <Metric label="Profit given back" value={`₹${formatMoney(trade.maxProfitGivebackPnl)}`} />}
                     {(trade.coreOptionTrailFloorPnlAtExit != null || trade.scalpOptionTrailFloorPnlAtExit != null) &&
                       <Metric label="Runner / profit floor at exit" value={`₹${formatMoney(trade.coreOptionTrailFloorPnlAtExit ?? trade.scalpOptionTrailFloorPnlAtExit)}`} />}
+                    {trade.coreTargetIndexTrailStopAtExit != null &&
+                      <Metric label="Protected NIFTY stop at exit" value={formatNumber(trade.coreTargetIndexTrailStopAtExit)} />}
+                    {trade.lastUnderlyingQuoteAtExit &&
+                      <Metric label="NIFTY quote at exit" value={formatDateTime(trade.lastUnderlyingQuoteAtExit)} />}
                     {trade.lastOptionQuoteAtExit && <Metric label="Option quote at exit" value={formatDateTime(trade.lastOptionQuoteAtExit)} />}
                     {trade.optionExitQuoteAgeMs != null &&
                       <Metric label="Quote age at exit" value={`${Math.max(0, Math.round(Number(trade.optionExitQuoteAgeMs) / 1000))} sec`} />}
@@ -224,6 +228,7 @@ function humanReason(code) {
     STRATEGY_DETERIORATION: 'Strategy deterioration',
     PROFIT_PROTECTION_EXIT: 'Runner profit protection',
     CORE_OPTION_PROFIT_TRAIL: '13-Point runner option-profit trailing exit',
+    CORE_TARGET_INDEX_TRAIL: '13-Point target-based NIFTY trailing stop',
     SCALP_OPTION_PROFIT_TRAIL: 'Scalp option-profit trailing exit',
     SCALP_TRAILING_STOP: 'Scalp index-R trailing exit',
     TARGET_REACHED: 'Legacy target exit',
