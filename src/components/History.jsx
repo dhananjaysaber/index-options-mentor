@@ -71,6 +71,13 @@ export default function History({ history }) {
                         <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
                       </>
                     )}
+                    {trade.peakUnrealizedPnl != null && <Metric label="Peak observed profit" value={`₹${formatMoney(trade.peakUnrealizedPnl)}`} tone="positive" />}
+                    {trade.maxProfitGivebackPnl != null && <Metric label="Profit given back" value={`₹${formatMoney(trade.maxProfitGivebackPnl)}`} />}
+                    {(trade.coreOptionTrailFloorPnlAtExit != null || trade.scalpOptionTrailFloorPnlAtExit != null) &&
+                      <Metric label="Runner / profit floor at exit" value={`₹${formatMoney(trade.coreOptionTrailFloorPnlAtExit ?? trade.scalpOptionTrailFloorPnlAtExit)}`} />}
+                    {trade.lastOptionQuoteAtExit && <Metric label="Option quote at exit" value={formatDateTime(trade.lastOptionQuoteAtExit)} />}
+                    {trade.optionExitQuoteAgeMs != null &&
+                      <Metric label="Quote age at exit" value={`${Math.max(0, Math.round(Number(trade.optionExitQuoteAgeMs) / 1000))} sec`} />}
                     <Metric label="Best R" value={formatR(trade.bestR)} tone={Number(trade.bestR) > 0 ? 'positive' : ''} />
                     <Metric label="Worst R" value={formatR(trade.worstR)} tone={Number(trade.worstR) < 0 ? 'negative' : ''} />
                   </div>
@@ -216,6 +223,9 @@ function humanReason(code) {
     STRUCTURE_INVALIDATED: 'Hard stop / structure invalidated',
     STRATEGY_DETERIORATION: 'Strategy deterioration',
     PROFIT_PROTECTION_EXIT: 'Runner profit protection',
+    CORE_OPTION_PROFIT_TRAIL: '13-Point runner option-profit trailing exit',
+    SCALP_OPTION_PROFIT_TRAIL: 'Scalp option-profit trailing exit',
+    SCALP_TRAILING_STOP: 'Scalp index-R trailing exit',
     TARGET_REACHED: 'Legacy target exit',
     TARGET_APPROACHING: 'Legacy target zone exit',
     MANUAL_EXIT: 'Manual exit',
