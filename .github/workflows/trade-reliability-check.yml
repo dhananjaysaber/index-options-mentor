@@ -1,0 +1,43 @@
+name: Verify SELL and profit trail (no deploy)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'scripts/verify-sell-no-black.mjs'
+      - '.github/workflows/trade-reliability-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Existing and runner regression tests
+        run: npm test
+      - name: Build production PWA
+        run: npm run build
+        env:
+          GITHUB_ACTIONS: 'true'
+      - name: Browser dependencies
+        run: |
+          npm install --no-save playwright --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: SELL and navigation smoke on iPhone viewport
+        run: node scripts/verify-sell-no-black.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+      - name: Existing scalp trailing and guidance smoke
+        run: node scripts/verify-scalp-guidance.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
