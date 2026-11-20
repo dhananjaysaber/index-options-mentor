@@ -126,7 +126,9 @@ function readActivePositions() {
   // Consult it only for a genuinely old build that has neither keyed position.
   if (!active.length) {
     const legacy = readJson(POSITION_KEY, null);
-    if (legacy?.id) active.push(legacy);
+    const closedIds = new Set(readJson(HISTORY_KEY, [])
+      .filter(trade => Boolean(trade?.closedAt)).map(trade => trade.id));
+    if (legacy?.id && !closedIds.has(legacy.id)) active.push(legacy);
   }
   return [...new Map(active.map(position => [position.id, position])).values()];
 }
