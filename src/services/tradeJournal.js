@@ -1,5 +1,7 @@
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
+const CORE_POSITION_KEY = 'index-options-mentor-core-position-v41';
+const SCALP_POSITION_KEY = 'index-options-mentor-scalp-position-v41';
 const METRICS_KEY = 'index-options-mentor-journal-metrics-v1';
 const DB_NAME = 'index-options-mentor-journal-v1';
 const STORE_NAME = 'outbox';
@@ -13,7 +15,7 @@ let nextJournalSyncAt = 0;
 let watchTimer = null;
 let syncTimer = null;
 let knownHistoryIds = new Set();
-let currentPositionId = null;
+let currentPositionIds = new Set();
 let onlineHandler = null;
 let pageHideHandler = null;
 
@@ -48,8 +50,8 @@ export function startTradeJournalBridge() {
 
   const history = readJson(HISTORY_KEY, []);
   knownHistoryIds = new Set(history.map(trade => trade?.id).filter(Boolean));
-  const existingPosition = readJson(POSITION_KEY, null);
-  currentPositionId = existingPosition?.id || null;
+  const existingPositions = readActivePositions();
+  currentPositionIds = new Set(existingPositions.map(position => position.id));
 
   // Migrate any browser-only completed trades into the permanent journal.
   for (const trade of history) {
@@ -62,7 +64,7 @@ export function startTradeJournalBridge() {
     });
   }
 
-  if (existingPosition?.id) {
+  for (const existingPosition of existingPositions) {
     const tracked = updateMetrics(existingPosition);
     void queueJournalEvent({
       eventId: `open:${existingPosition.id}`,
@@ -116,16 +118,32 @@ export async function loadRemoteTrades(limit = 500) {
   }
 }
 
-async function watchTick() {
-  const position = readJson(POSITION_KEY, null);
-  const history = readJson(HISTORY_KEY, []);
+function readActivePositions() {
+  const core = readJson(CORE_POSITION_KEY, null);
+  const scalp = readJson(SCALP_POSITION_KEY, null);
+  const active = [core, scalp].filter(position => Boolean(position?.id));
+  // Legacy key was a pointer to only one of two simultaneous positions.
+  // Consult it only for a genuinely old build that has neither keyed position.
+  if (!active.length) {
+    const legacy = readJson(POSITION_KEY, null);
+    const closedIds = new Set(readJson(HISTORY_KEY, [])
+      .filter(trade => Boolean(trade?.closedAt)).map(trade => trade.id));
+    if (legacy?.id && !closedIds.has(legacy.id)) active.push(legacy);
+  }
+  return [...new Map(active.map(position => [position.id, position])).values()];
+}
 
-  if (position?.id) {
+async function watchTick() {
+  const positions = readActivePositions();
+  const history = readJson(HISTORY_KEY, []);
+  const latestIds = new Set();
+
+  for (const position of positions) {
+    latestIds.add(position.id);
     const tracked = updateMetrics(position);
     const metrics = getMetrics(position.id);
 
-    if (position.id !== currentPositionId) {
-      currentPositionId = position.id;
+    if (!currentPositionIds.has(position.id)) {
       void queueJournalEvent({
         eventId: `open:${position.id}`,
         type: 'TRADE_OPENED',
@@ -144,9 +162,8 @@ async function watchTick() {
         source: journalSource(tracked, 'mentor')
       });
     }
-  } else {
-    currentPositionId = null;
   }
+  currentPositionIds = latestIds;
 
   for (const trade of history) {
     if (!trade?.id || !trade?.closedAt || knownHistoryIds.has(trade.id)) continue;

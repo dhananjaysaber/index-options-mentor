@@ -15,6 +15,7 @@ import useLiveQuote from './hooks/useLiveQuote.js';
 import { useScalpResearch } from './hooks/useScalpResearch.js';
 import { buildScalpTicket } from './engine/scalpStrategy.js';
 import { computeScalpOptionTrail, isScalpOptionTrailBreached } from './engine/scalpOptionTrail.js';
+import { computeCoreOptionTrail, isCoreOptionTrailBreached } from './engine/coreOptionTrail.js';
 import CoreResearchPanel from './components/CoreResearchPanel.jsx';
 import CoreQuickActions from './components/CoreQuickActions.jsx';
 import MobileMentorDashboardV41 from './components/MobileMentorDashboardV41.jsx';
@@ -83,7 +84,11 @@ export default function AppV3() {
   const [alertsEnabled, setAlertsEnabled] = useState(() => readString(ALERTS_KEY, '0') === '1');
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const audioRef = useRef(null);
-  const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', time: '' });
+  const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', coreOption: '', time: '' });
+  const closingTradeIdsRef = useRef(new Set());
+  const positionRefs = useRef({ core: null, scalp: null });
+  positionRefs.current = { core: corePosition, scalp: scalpPosition };
+  const [operationError, setOperationError] = useState('');
 
   // A locally displayed quote may look live after an iOS tab resumes.
   // Enforce bounded staleness on ALL new paper entries, never on display only.
@@ -148,11 +153,11 @@ export default function AppV3() {
     let cancelled = false;
     const applyHistory = event => {
       const rows = event?.detail?.history;
-      if (!cancelled && Array.isArray(rows)) setHistory(rows);
+      if (!cancelled && Array.isArray(rows)) setHistory(previous => mergeCompletedHistory(previous, rows));
     };
     window.addEventListener('mentor:journal-history', applyHistory);
     syncJournalHistory().then(rows => {
-      if (!cancelled && Array.isArray(rows)) setHistory(rows);
+      if (!cancelled && Array.isArray(rows)) setHistory(previous => mergeCompletedHistory(previous, rows));
     }).catch(() => {});
     return () => {
       cancelled = true;
@@ -394,6 +399,34 @@ export default function AppV3() {
 
   // Paper option-P&L protection is independent of NIFTY-index R trailing.
   // Trigger only against fresh contract quotes, never stale/cached LTP.
+  // The 13-Point runner uses its own *option-premium* profit trail.
+  // Keep its structural stop and strategy-deterioration exits unchanged.
+  // This is a simulated exit at the current observed option LTP, not a broker order.
+  useEffect(() => {
+    if (!corePosition || settings.mentorAutoClose === false ||
+        !brokerStatus.authenticated || document.visibilityState !== 'visible' || !isNseMarketHours()) {
+      autoExitRef.current.coreOption = '';
+      return;
+    }
+    if (!isCoreOptionTrailBreached(corePosition)) return;
+    const floor = Number(corePosition.coreOptionTrailingFloorPnl);
+    const pnl = Number(corePosition.currentUnrealizedPnl);
+    const peak = Number(corePosition.peakUnrealizedPnl);
+    const signature = `${corePosition.id}:${floor.toFixed(2)}`;
+    if (autoExitRef.current.coreOption === signature) return;
+    autoExitRef.current.coreOption = signature;
+    exitStrategy('core', {
+      mentorState: '13-POINT RUNNER PROFIT TRAIL',
+      reasonCode: 'CORE_OPTION_PROFIT_TRAIL',
+      reason: `Option P&L ${formatCurrencyPnl(pnl)} fell through the 13-Point runner floor ${formatCurrencyPnl(floor)} after peaking at ${formatCurrencyPnl(peak)}. Simulated exit at the current observed option LTP (not a guaranteed floor fill).`,
+      closedBy: 'MENTOR'
+    });
+  }, [
+    corePosition?.id, corePosition?.coreOptionTrailingActive,
+    corePosition?.coreOptionTrailingFloorPnl, corePosition?.currentUnrealizedPnl,
+    corePosition?.lastOptionQuoteAt, settings.mentorAutoClose, brokerStatus.authenticated
+  ]);
+
   useEffect(() => {
     if (!scalpPosition || settings.scalpAutoClose === false ||
         document.visibilityState !== 'visible' || !isNseMarketHours()) {
@@ -489,17 +522,41 @@ export default function AppV3() {
   }
 
   function exitStrategy(strategy, meta = {}) {
-    const setter = strategy === 'scalp' ? setScalpPosition : setCorePosition;
-    setter(current => {
-      if (!current) return current;
+    // NEVER call setHistory from inside a setPosition functional updater:
+    // React can invoke those updaters during rendering, crashing the PWA.
+    // The synchronous ref also prevents double taps / competing auto exits.
+    const current = positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'];
+    if (!current?.id || closingTradeIdsRef.current.has(current.id)) return;
+    closingTradeIdsRef.current.add(current.id);
+    try {
       const closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
-      setHistory(previous => [closed, ...previous.filter(row => row.id !== closed.id)].slice(0, 1000));
-      if (alertsEnabled && meta.closedBy === 'MENTOR') {
-        playExitTone(audioRef);
-        sendBrowserExitNotification(current, meta);
+      if (!Number.isFinite(closed.pnl) || !Number.isFinite(closed.exit)) {
+        throw new Error('Cannot record this simulated exit: option price is invalid.');
       }
-      return null;
-    });
+      // Persist a completed trade before clearing its open-position state.
+      // The permanent journal bridge may be temporarily offline.
+      const saved = readJson(HISTORY_KEY, []);
+      const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
+      positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'] = null;
+      if (strategy === 'scalp') setScalpPosition(existing => existing?.id === closed.id ? null : existing);
+      else setCorePosition(existing => existing?.id === closed.id ? null : existing);
+      setOperationError('');
+      if (alertsEnabled && meta.closedBy === 'MENTOR') {
+        // Notification failures must never undo or misreport a completed SELL.
+        try {
+          playExitTone(audioRef);
+          sendBrowserExitNotification(current, meta);
+        } catch (notificationError) {
+          console.warn('Exit recorded; optional alert failed', notificationError);
+        }
+      }
+    } catch (error) {
+      closingTradeIdsRef.current.delete(current.id);
+      setOperationError(error?.message || 'Exit could not be recorded. Position remains open; retry SELL.');
+      console.error('Simulated SELL/exit failed:', error);
+    }
   }
 
   function navigate(next) {
@@ -548,6 +605,7 @@ export default function AppV3() {
 
       {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
 
+      {operationError && <div className="alert-bar" role="alert">{operationError}</div>}
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
           <>
@@ -748,6 +806,21 @@ function NavButton({ active, onClick, icon, label }) {
   return <button type="button" className={`sidebar-nav-button ${active ? 'active' : ''}`} onClick={onClick}><span>{icon}</span><strong>{label}</strong></button>;
 }
 
+// Keep browser-completed exits when an older Google Sheets sync returns later.
+// Completed IDs are immutable: a remote sync must never erase the latest local exit.
+function mergeCompletedHistory(local, remote) {
+  const seen = new Set();
+  const result = [];
+  for (const trade of [...(Array.isArray(local) ? local : []), ...(Array.isArray(remote) ? remote : [])]) {
+    if (!trade?.closedAt) continue;
+    const key = String(trade.id || `${trade.symbol}:${trade.openedAt}:${trade.closedAt}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trade);
+  }
+  return result.sort((a, b) => Date.parse(b.closedAt || 0) - Date.parse(a.closedAt || 0)).slice(0, 1000);
+}
+
 function closeTrade(current, meta, snapshot, scalpStatus, settings) {
   const underlyingExit = finite(current.underlyingCurrent) ?? finite(snapshot?.market?.spot) ?? finite(current.underlyingEntry) ?? 0;
   const optionExit = finite(current.currentPrice) ?? finite(current.entry) ?? 0;
@@ -815,6 +888,13 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
     scalpOptionTrailFloorPnlAtExit: current.optionTrailingFloorPnl ?? null,
     scalpOptionTrailPeakPnlAtExit: current.peakUnrealizedPnl ?? null,
     scalpTimeLimitExit: meta.reasonCode === 'SCALP_TIME_EXIT',
+    coreOptionProfitTrailExit: meta.reasonCode === 'CORE_OPTION_PROFIT_TRAIL',
+    coreOptionTrailFloorPnlAtExit: current.coreOptionTrailingFloorPnl ?? null,
+    coreOptionTrailPeakPnlAtExit: current.peakUnrealizedPnl ?? null,
+    coreOptionTrailKeepRatioAtExit: current.coreOptionTrailKeepRatio ?? null,
+    lastOptionQuoteAtExit: current.lastOptionQuoteAt || null,
+    optionExitQuoteAgeMs: Number.isFinite(Date.parse(current.lastOptionQuoteAt || ''))
+      ? Date.now() - Date.parse(current.lastOptionQuoteAt) : null,
     scalpTrailPolicy: current.scalpTrailPolicy || null,
     exitSnapshot: snapshot ? { market: { ...snapshot.market }, decision: { ...snapshot.decision }, parameters: snapshot.parameters, structure: { ...snapshot.structure }, setup: { ...snapshot.setup } } : null
   };
@@ -848,6 +928,18 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot, quoteA
     oneRReached: Boolean(current.oneRReached || currentR >= 1 || bestR >= 1)
   };
 
+  if (current.strategyFamily !== 'SCALP') {
+    const coreTrail = computeCoreOptionTrail({
+      entryPrice: current.entry, quantity, peakGrossPnl: peakUnrealizedPnl,
+      previousFloorPnl: current.coreOptionTrailingFloorPnl
+    });
+    next.coreOptionTrailingActive = coreTrail.active;
+    next.coreOptionTrailingFloorPnl = coreTrail.floorPnl;
+    next.coreOptionTrailKeepRatio = coreTrail.keepRatio;
+    next.coreOptionTrailArmAtGrossPnl = coreTrail.armAtGrossPnl;
+    next.coreOptionTrailPolicy = 'PAPER ONLY: arms after +5% option gain. Retains 35% / 50% / 60% / 70% of highest observed gross option profit at progressively larger peak gains. Not a FYERS order.';
+    if (coreTrail.active && !current.coreOptionTrailingActivatedAt) next.coreOptionTrailingActivatedAt = new Date().toISOString();
+  }
   if (current.strategyFamily === 'SCALP') {
     const trail = scalpTrail(bestR, current.scalpTrailingFloorR);
     next.scalpTrailingActive = trail.active;

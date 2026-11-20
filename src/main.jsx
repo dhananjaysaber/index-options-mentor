@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AppV3 from './AppV3.jsx';
+import AppErrorBoundary from './components/AppErrorBoundary.jsx';
 import PWAInstallPrompt from './PWAInstallPrompt.jsx';
 import FyersConnectButton from './FyersConnectButton.jsx';
 import ManualRefreshUX from './components/ManualRefreshUX.jsx';
@@ -76,7 +77,7 @@ installShadowResearchEngine();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <AppV3 />
+    <AppErrorBoundary><AppV3 /></AppErrorBoundary>
     <FooterClearanceSync />
     <ManualRefreshUX />
     <FyersConnectButton />

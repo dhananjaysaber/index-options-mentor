@@ -102,5 +102,5 @@ test('What matters now remains readable and appears ahead of position-metric gri
   const main = read('src/main.jsx');
   assert.ok(main.indexOf('scalp-profit-protection-v56.css') >
     main.indexOf('view-mode-menu-v55.css'));
-  assert.match(read('public/sw.js'), /index-options-mentor-pwa-v56-scalp-profit-trail/);
+  assert.match(read('public/sw.js'), /index-options-mentor-pwa-v57-sell-reliability-core-runner/);
 });
