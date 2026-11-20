@@ -63,6 +63,27 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         </div>
       </div>
 
+      {isScalp && (
+        <div className={`scalp-option-trail-indicator ${position.optionTrailingActive ? 'armed' : 'pending'}`}
+             role="status" aria-label="Simulated Scalp option profit trailing protection">
+          <div className="scalp-option-trail-heading">
+            <span>OPTION PROFIT TRAIL · PAPER</span>
+            <strong>{position.optionTrailingActive
+              ? `ARMED · floor +₹${fmt(position.optionTrailingFloorPnl)}`
+              : 'WAITING · activates after +3% option premium'}</strong>
+          </div>
+          <small>{position.optionTrailingActive
+            ? `Peak observed gross profit +₹${fmt(Math.max(0, Number(position.peakUnrealizedPnl) || 0))} · Retains at least 50% of peak · No broker stop order`
+            : 'NIFTY structural stop remains active · Option-premium trail has not armed yet'}</small>
+        </div>
+      )}
+
+      <div className={`position-guidance position-guidance-compact ${mentor.tone}`}>
+        <span>WHAT MATTERS NOW</span>
+        <strong>{mentor.copy}</strong>
+        <small>Hard stop {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {isScalp ? 'Scalp research' : position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
+      </div>
+
       <div className="position-essential-grid">
         <Essential label="Option live" value={currentOption == null ? '—' : `₹${fmt(currentOption)}`} emphasis />
         <Essential label="Option entry" value={entryOption == null ? '—' : `₹${fmt(entryOption)}`} />
@@ -72,12 +93,6 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <Essential label="Target / milestone" value={fmt(position.underlyingTarget)} tone="positive" />
         <Essential label={isScalp ? 'Scalp score' : 'Score'} value={isScalp ? `${position.score ?? '—'}/100` : `${position.score ?? '—'} → ${mentor.currentScore ?? '—'}`} />
         <Essential label={isScalp ? 'Scalp plan' : 'Live gates'} value={isScalp ? `3m · ${position.scalpMaxHoldMinutes || 12}m max` : `${position.currentMandatoryPassCount ?? '—'}/5 · ${position.currentConfirmationPassCount ?? '—'}/8`} />
-      </div>
-
-      <div className={`position-guidance position-guidance-compact ${mentor.tone}`}>
-        <span>WHAT MATTERS NOW</span>
-        <strong>{mentor.copy}</strong>
-        <small>Hard stop {fmt(position.underlyingStop)} · Planned R:R 1:{Number(position.rr || 0).toFixed(1)} · {isScalp ? 'Scalp research' : position.initiatedBy === 'MENTOR' ? 'Mentor opened' : 'User opened'}</small>
       </div>
 
       <button className={`position-exit-button ${mentor.alertLevel === 'exit' ? 'urgent' : ''}`} onClick={() => onExit({ mentorState: mentor.title, reasonCode: mentor.reasonCode, reason: mentor.reason, rMultiple: mentor.rMultiple, closedBy: 'USER' })}>{mentor.alertLevel === 'exit' ? 'EXIT SIMULATED POSITION NOW' : 'EXIT SIMULATED TRADE'}</button>

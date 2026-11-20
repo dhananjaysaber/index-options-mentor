@@ -51,5 +51,5 @@ test('desktop hamburger can expose the same controls, and v52 chart styles stay 
   const main = read('src/main.jsx');
   assert.ok(main.indexOf("import './view-mode-menu-v55.css';") > main.indexOf("import './iphone-shell-v52.css';"));
   assert.doesNotMatch(main, /index-compact-v53|index-compact-v54/);
-  assert.match(read('public/sw.js'), /index-options-mentor-pwa-v55-restored-v52-advanced/);
+  assert.match(read('public/sw.js'), /index-options-mentor-pwa-v56-scalp-profit-trail/);
 });

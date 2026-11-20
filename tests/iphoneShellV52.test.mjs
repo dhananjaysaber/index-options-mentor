@@ -41,7 +41,7 @@ test('Index PWA resets scroll on initial load and when selecting strategy or pag
   assert.match(app, /\[view, strategyMode\]/);
   assert.ok(main.indexOf("import './iphone-shell-v52.css'") >
             main.indexOf("import './premium-trading-v51.css'"));
-  assert.match(sw, /index-options-mentor-pwa-v55-restored-v52-advanced/);
+  assert.match(sw, /index-options-mentor-pwa-v56-scalp-profit-trail/);
   assert.doesNotMatch(app, /StockScanner|StockPaperPosition|strategyMode === 'stock'/);
 });
 
