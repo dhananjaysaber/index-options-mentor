@@ -63,6 +63,21 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         </div>
       </div>
 
+      {!isScalp && (
+        <div className={`scalp-option-trail-indicator ${position.coreOptionTrailingActive ? 'armed' : 'pending'}`}
+             role="status" aria-label="13-Point runner simulated option profit trailing protection">
+          <div className="scalp-option-trail-heading">
+            <span>13-POINT RUNNER TRAIL · PAPER</span>
+            <strong>{position.coreOptionTrailingActive
+              ? `ARMED · floor +₹${fmt(position.coreOptionTrailingFloorPnl)}`
+              : 'WAITING · activates after +5% option premium'}</strong>
+          </div>
+          <small>{position.coreOptionTrailingActive
+            ? `Peak observed gross profit +₹${fmt(Math.max(0, Number(position.peakUnrealizedPnl) || 0))} · Retains ${Math.round(100 * Number(position.coreOptionTrailKeepRatio || .35))}% of peak as the move extends · No broker stop order`
+            : 'Original NIFTY structural stop still applies · Runner profit trail has not armed yet'}</small>
+        </div>
+      )}
+
       {isScalp && (
         <div className={`scalp-option-trail-indicator ${position.optionTrailingActive ? 'armed' : 'pending'}`}
              role="status" aria-label="Simulated Scalp option profit trailing protection">
