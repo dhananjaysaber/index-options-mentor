@@ -1,0 +1,36 @@
+/* 13-Point target-based stop; compact inside existing runner card. */
+.runner-index-trail-status{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:6px 12px;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid rgba(154,226,205,.25);
+  font-variant-numeric:tabular-nums;
+}
+.runner-index-trail-status>span{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:1.2px;
+  color:#a2e3cf;
+}
+.runner-index-trail-status>strong{
+  font-size:14px;
+  font-weight:800;
+  color:#a7efd9;
+  line-height:1.35;
+}
+.runner-index-trail-status.waiting>strong{color:#ecdbc0}
+.runner-index-trail-status>small{
+  display:block;
+  flex-basis:100%;
+  font-size:12px;
+  line-height:1.45;
+  color:#b9d7d0;
+}
+@media(max-width:480px){
+  .runner-index-trail-status{gap:5px 8px}
+  .runner-index-trail-status>strong{font-size:13px}
+}
