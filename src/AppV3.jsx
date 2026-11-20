@@ -404,7 +404,7 @@ export default function AppV3() {
   // This is a simulated exit at the current observed option LTP, not a broker order.
   useEffect(() => {
     if (!corePosition || settings.mentorAutoClose === false ||
-        document.visibilityState !== 'visible' || !isNseMarketHours()) {
+        !brokerStatus.authenticated || document.visibilityState !== 'visible' || !isNseMarketHours()) {
       autoExitRef.current.coreOption = '';
       return;
     }
@@ -424,7 +424,7 @@ export default function AppV3() {
   }, [
     corePosition?.id, corePosition?.coreOptionTrailingActive,
     corePosition?.coreOptionTrailingFloorPnl, corePosition?.currentUnrealizedPnl,
-    corePosition?.lastOptionQuoteAt, settings.mentorAutoClose
+    corePosition?.lastOptionQuoteAt, settings.mentorAutoClose, brokerStatus.authenticated
   ]);
 
   useEffect(() => {
@@ -544,8 +544,13 @@ export default function AppV3() {
       else setCorePosition(existing => existing?.id === closed.id ? null : existing);
       setOperationError('');
       if (alertsEnabled && meta.closedBy === 'MENTOR') {
-        playExitTone(audioRef);
-        sendBrowserExitNotification(current, meta);
+        // Notification failures must never undo or misreport a completed SELL.
+        try {
+          playExitTone(audioRef);
+          sendBrowserExitNotification(current, meta);
+        } catch (notificationError) {
+          console.warn('Exit recorded; optional alert failed', notificationError);
+        }
       }
     } catch (error) {
       closingTradeIdsRef.current.delete(current.id);
