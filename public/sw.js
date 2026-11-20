@@ -1,4 +1,4 @@
-const CACHE_NAME = 'index-options-mentor-pwa-v56-scalp-profit-trail';
+const CACHE_NAME = 'index-options-mentor-pwa-v57-sell-reliability-core-runner';
 const APP_SHELL = ['./', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
