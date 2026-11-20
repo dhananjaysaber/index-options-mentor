@@ -16,6 +16,7 @@ import { useScalpResearch } from './hooks/useScalpResearch.js';
 import { buildScalpTicket } from './engine/scalpStrategy.js';
 import { computeScalpOptionTrail, isScalpOptionTrailBreached } from './engine/scalpOptionTrail.js';
 import { computeCoreOptionTrail, isCoreOptionTrailBreached } from './engine/coreOptionTrail.js';
+import { computeCoreTargetIndexTrail, isCoreTargetIndexTrailBreached } from './engine/coreTargetIndexTrail.js';
 import CoreResearchPanel from './components/CoreResearchPanel.jsx';
 import CoreQuickActions from './components/CoreQuickActions.jsx';
 import MobileMentorDashboardV41 from './components/MobileMentorDashboardV41.jsx';
@@ -84,7 +85,7 @@ export default function AppV3() {
   const [alertsEnabled, setAlertsEnabled] = useState(() => readString(ALERTS_KEY, '0') === '1');
   const [notificationPermission, setNotificationPermission] = useState(() => typeof Notification !== 'undefined' ? Notification.permission : 'unsupported');
   const audioRef = useRef(null);
-  const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', coreOption: '', time: '' });
+  const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', coreOption: '', coreTarget: '', time: '' });
   const closingTradeIdsRef = useRef(new Set());
   const positionRefs = useRef({ core: null, scalp: null });
   positionRefs.current = { core: corePosition, scalp: scalpPosition };
@@ -396,6 +397,36 @@ export default function AppV3() {
       closedBy: 'MENTOR'
     });
   }, [scalpPosition?.id, scalpPosition?.currentR, scalpPosition?.scalpTrailingFloorR, scalpPosition?.scalpTrailingActive, settings.scalpAutoClose]);
+
+  // Target becomes the first protected NIFTY stop only AFTER price has moved
+  // +0.25R beyond it. Then the stop climbs 0.50R behind the best NIFTY move.
+  // The option contract must also have a fresh quote to simulate its true LTP
+  // exit; neither NIFTY level nor past option peak is a guaranteed fill.
+  useEffect(() => {
+    if (!corePosition || settings.mentorAutoClose === false ||
+        !brokerStatus.authenticated || document.visibilityState !== 'visible' || !isNseMarketHours()) {
+      autoExitRef.current.coreTarget = '';
+      return;
+    }
+    if (!isCoreTargetIndexTrailBreached(corePosition)) return;
+    const floor = Number(corePosition.coreTargetIndexTrailStop);
+    const nifty = Number(corePosition.underlyingCurrent);
+    const target = Number(corePosition.underlyingTarget);
+    const signature = `${corePosition.id}:${floor.toFixed(2)}`;
+    if (autoExitRef.current.coreTarget === signature) return;
+    autoExitRef.current.coreTarget = signature;
+    exitStrategy('core', {
+      mentorState: '13-POINT TARGET RUNNER EXIT',
+      reasonCode: 'CORE_TARGET_INDEX_TRAIL',
+      reason: `Fresh NIFTY ${nifty.toFixed(2)} crossed the rising 13-Point target-based stop at ${floor.toFixed(2)} (original target ${target.toFixed(2)}). Simulated close uses the latest observed option premium, NOT this NIFTY stop level.`,
+      closedBy: 'MENTOR'
+    });
+  }, [
+    corePosition?.id, corePosition?.coreTargetIndexTrailActive,
+    corePosition?.coreTargetIndexTrailStop, corePosition?.underlyingCurrent,
+    corePosition?.lastUnderlyingQuoteAt, corePosition?.lastOptionQuoteAt,
+    settings.mentorAutoClose, brokerStatus.authenticated
+  ]);
 
   // Paper option-P&L protection is independent of NIFTY-index R trailing.
   // Trigger only against fresh contract quotes, never stale/cached LTP.
@@ -892,6 +923,11 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
     coreOptionTrailFloorPnlAtExit: current.coreOptionTrailingFloorPnl ?? null,
     coreOptionTrailPeakPnlAtExit: current.peakUnrealizedPnl ?? null,
     coreOptionTrailKeepRatioAtExit: current.coreOptionTrailKeepRatio ?? null,
+    coreTargetIndexTrailExit: meta.reasonCode === 'CORE_TARGET_INDEX_TRAIL',
+    coreTargetIndexTrailStopAtExit: current.coreTargetIndexTrailStop ?? null,
+    coreTargetIndexTrailBestRAtExit: current.bestR ?? null,
+    coreTargetIndexTrailActivatedAt: current.coreTargetIndexTrailActivatedAt || null,
+    lastUnderlyingQuoteAtExit: current.lastUnderlyingQuoteAt || null,
     lastOptionQuoteAtExit: current.lastOptionQuoteAt || null,
     optionExitQuoteAgeMs: Number.isFinite(Date.parse(current.lastOptionQuoteAt || ''))
       ? Date.now() - Date.parse(current.lastOptionQuoteAt) : null,
@@ -903,6 +939,7 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
 function updateLivePosition(current, liveOption, liveNifty, fallbackSpot, quoteAt = null) {
   if (!current) return current;
   const hasCurrentOptionQuote = Number.isFinite(liveOption) && liveOption > 0;
+  const hasCurrentUnderlyingQuote = Number.isFinite(liveNifty) && liveNifty > 0;
   const currentPrice = hasCurrentOptionQuote ? liveOption : finite(current.currentPrice) ?? finite(current.entry) ?? 0;
   const underlyingCurrent = Number.isFinite(liveNifty) && liveNifty > 0 ? liveNifty : finite(fallbackSpot) ?? finite(current.underlyingCurrent) ?? finite(current.underlyingEntry) ?? 0;
   const riskPoints = Math.max(0.01, Math.abs(Number(current.underlyingEntry) - Number(current.underlyingStop)));
@@ -917,6 +954,7 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot, quoteA
     ...current,
     currentPrice,
     lastOptionQuoteAt: hasCurrentOptionQuote && Number.isFinite(Date.parse(quoteAt || '')) ? quoteAt : (current.lastOptionQuoteAt || null),
+    lastUnderlyingQuoteAt: hasCurrentUnderlyingQuote && Number.isFinite(Date.parse(quoteAt || '')) ? quoteAt : (current.lastUnderlyingQuoteAt || null),
     underlyingCurrent,
     currentR,
     bestR,
@@ -929,6 +967,24 @@ function updateLivePosition(current, liveOption, liveNifty, fallbackSpot, quoteA
   };
 
   if (current.strategyFamily !== 'SCALP') {
+    // Ignore a cached / missing NIFTY quote when arming a new target-based trail.
+    // Once activated, it remains armed until the simulated trade closes.
+    const indexTrail = computeCoreTargetIndexTrail({
+      side: current.side,
+      underlyingEntry: current.underlyingEntry,
+      underlyingStop: current.underlyingStop,
+      underlyingTarget: current.underlyingTarget,
+      bestR: hasCurrentUnderlyingQuote ? bestR : null,
+      previousFloorNifty: current.coreTargetIndexTrailStop
+    });
+    next.coreTargetIndexTrailActive = indexTrail.active;
+    next.coreTargetIndexTrailStop = indexTrail.floorNifty;
+    next.coreTargetIndexTrailArmAtNifty = indexTrail.armAtNifty;
+    next.coreTargetIndexTrailBestR = indexTrail.bestR;
+    next.coreTargetIndexTrailPolicy = 'PAPER ONLY: original NIFTY target is a milestone; after +0.25R beyond target the NIFTY stop moves to target, then trails 0.50R below the best NIFTY move (above for puts). Exits at fresh observed option price; never a broker stop or guaranteed fill.';
+    if (indexTrail.active && !current.coreTargetIndexTrailActivatedAt) {
+      next.coreTargetIndexTrailActivatedAt = new Date().toISOString();
+    }
     const coreTrail = computeCoreOptionTrail({
       entryPrice: current.entry, quantity, peakGrossPnl: peakUnrealizedPnl,
       previousFloorPnl: current.coreOptionTrailingFloorPnl
