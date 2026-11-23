@@ -24,7 +24,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
-import { queuePaperOpen, queuePaperClose, acknowledgeAwsPaperExit } from './services/paperSync.js';
+import { queuePaperOpen, queuePaperClose, acknowledgeAwsPaperExit, findVerifiedAwsPaperExit } from './services/paperSync.js';
 import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
@@ -117,16 +117,7 @@ export default function AppV3() {
       for (const strategy of ['core', 'scalp']) {
         const current = positionRefs.current[strategy];
         if (!current?.id) continue;
-        const receipt = closed.find(item =>
-          item?.strategy === strategy &&
-          item?.id === current.id &&
-          item?.exitPriceSource === 'OBSERVED_OPTION_QUOTE' &&
-          typeof item?.exitPrice === 'number' &&
-          Number.isFinite(item.exitPrice) &&
-          item.exitPrice > 0 &&
-          typeof item?.closedAt === 'string' &&
-          Number.isFinite(Date.parse(item.closedAt))
-        );
+        const receipt = findVerifiedAwsPaperExit(closed, strategy, current.id);
         if (!receipt) continue;
         exitStrategy(strategy, {
           closedBy: 'AWS_MONITOR',
@@ -912,7 +903,7 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
   const closedAt = aws?.closedAt || new Date().toISOString();
   const heldMs = Math.max(0, Date.now() - new Date(current.openedAt).getTime());
   const heldMinutes = Math.max(0, Math.round(heldMs / 60000));
-  const currentPnl = finite(current.currentUnrealizedPnl) ?? pnl;
+  const currentPnl = aws ? pnl : finite(current.currentUnrealizedPnl) ?? pnl;
   const peakPnl = finite(current.peakUnrealizedPnl) ?? Math.max(0, currentPnl);
   const maxGivebackPnl = Math.max(0, peakPnl - currentPnl);
 
