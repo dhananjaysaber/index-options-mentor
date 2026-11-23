@@ -90,6 +90,24 @@ export default function AppV3() {
   const closingTradeIdsRef = useRef(new Set());
   const positionRefs = useRef({ core: null, scalp: null });
   positionRefs.current = { core: corePosition, scalp: scalpPosition };
+
+
+  const [operationError, setOperationError] = useState('');
+
+  // A locally displayed quote may look live after an iOS tab resumes.
+  // Enforce bounded staleness on ALL new paper entries, never on display only.
+  const latestSnapshotAt = Date.parse(snapshot?.generatedAt || '');
+  const latestQuoteAt = Date.parse(liveQuote?.at || '');
+  const snapshotFresh = Number.isFinite(latestSnapshotAt) &&
+    marketClock - latestSnapshotAt >= -3000 && marketClock - latestSnapshotAt <= 12000;
+  const quoteFresh = Number.isFinite(latestQuoteAt) && Number(liveQuote?.nifty) > 0 &&
+    marketClock - latestQuoteAt >= -3000 && marketClock - latestQuoteAt <= 5000;
+  const marketDataReady = Boolean(brokerStatus.authenticated && !liveError && snapshotFresh && quoteFresh);
+  const scalpResearch = useScalpResearch({
+    snapshot, liveQuote, brokerAuthenticated: brokerStatus.authenticated,
+    marketDataReady, clock: marketClock
+  });
+  const scalpStatus = scalpResearch.evaluation;
   // Process only a verified AWS paper-exit receipt for this exact local trade.
   // Never treat a missing AWS position as proof of exit.
   useEffect(() => {
@@ -121,23 +139,6 @@ export default function AppV3() {
     window.addEventListener('mentor:paper-sync-status', onPaperSyncStatus);
     return () => window.removeEventListener('mentor:paper-sync-status', onPaperSyncStatus);
   }, [snapshot, scalpStatus, settings, alertsEnabled]);
-
-  const [operationError, setOperationError] = useState('');
-
-  // A locally displayed quote may look live after an iOS tab resumes.
-  // Enforce bounded staleness on ALL new paper entries, never on display only.
-  const latestSnapshotAt = Date.parse(snapshot?.generatedAt || '');
-  const latestQuoteAt = Date.parse(liveQuote?.at || '');
-  const snapshotFresh = Number.isFinite(latestSnapshotAt) &&
-    marketClock - latestSnapshotAt >= -3000 && marketClock - latestSnapshotAt <= 12000;
-  const quoteFresh = Number.isFinite(latestQuoteAt) && Number(liveQuote?.nifty) > 0 &&
-    marketClock - latestQuoteAt >= -3000 && marketClock - latestQuoteAt <= 5000;
-  const marketDataReady = Boolean(brokerStatus.authenticated && !liveError && snapshotFresh && quoteFresh);
-  const scalpResearch = useScalpResearch({
-    snapshot, liveQuote, brokerAuthenticated: brokerStatus.authenticated,
-    marketDataReady, clock: marketClock
-  });
-  const scalpStatus = scalpResearch.evaluation;
 
   const activePosition = strategyMode === 'scalp' ? scalpPosition : corePosition;
   const positionCount = Number(Boolean(corePosition)) + Number(Boolean(scalpPosition));
