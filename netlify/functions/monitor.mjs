@@ -79,7 +79,7 @@ export default async function handler(request) {
     try { if (!JSON.parse(body) || Array.isArray(JSON.parse(body))) throw Error(); }
     catch { return reply(400, { error: 'INVALID_JSON' }, origin); }
   }
-  const endpoint = '/monitor/' + action;
+  const endpoint = '/monitor/bridge/' + action;
   const timestamp = String(Date.now());
   const nonce = crypto.randomBytes(16).toString('hex');
   const canonical = [timestamp, nonce, request.method, endpoint,
