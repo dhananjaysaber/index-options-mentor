@@ -266,7 +266,8 @@ async function queueJournalEvent({ eventId, type, trade, source }) {
 async function flushJournalQueue({ keepalive = false } = {}) {
   // Sheet/Apps Script failures must never compete with market-data requests.
   // Keep all journal events in IndexedDB/localStorage and retry later.
-  if (!keepalive && Date.now() < nextJournalSyncAt) return;
+  // A pagehide must not bypass the failed journal's retry window.
+  if (Date.now() < nextJournalSyncAt) return;
   if (flushPromise) return flushPromise;
   flushPromise = (async () => {
     const events = await getOutbox();
