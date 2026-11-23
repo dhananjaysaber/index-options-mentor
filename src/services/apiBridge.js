@@ -22,7 +22,7 @@ export function installApiBridge() {
     const apiUrl = `${API_BASE}${normaliseApiPath(originalUrl)}`;
     const headers = new Headers(init.headers || (typeof input !== 'string' ? input?.headers : undefined) || {});
     const session = readSession();
-    if (session && normaliseApiPath(originalUrl).startsWith('/api/fyers/')) {
+    if (session && (normaliseApiPath(originalUrl).startsWith('/api/fyers/') || normaliseApiPath(originalUrl).startsWith('/api/monitor/'))) {
       headers.set('Authorization', `Bearer ${session}`);
     }
 
