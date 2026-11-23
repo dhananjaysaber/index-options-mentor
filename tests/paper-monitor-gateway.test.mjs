@@ -84,26 +84,18 @@ test('paper monitor gateway signs and forwards authenticated status', async () =
   });
 });
 
-test('paper monitor gateway forwards signed reconciliation body', async () => {
+test('paper writes fail closed until server-side account ownership is verified', async () => {
   await withEnv(async () => {
     const previous = globalThis.fetch;
-    globalThis.fetch = async (url, init) => {
-      assert.equal(url, 'https://api.optionsmentor.in/monitor/bridge/reconcile');
-      assert.equal(init.method, 'POST');
-      assert.equal(init.body, '{"strategy":"core"}');
-      const canonical = [
-        init.headers['x-iom-time'], init.headers['x-iom-nonce'],
-        'POST', '/monitor/bridge/reconcile',
-        crypto.createHash('sha256').update(init.body).digest('hex')
-      ].join('\n');
-      const wanted = crypto.createHmac('sha256', PASS).update(canonical).digest('hex');
-      assert.equal(init.headers['x-iom-signature'], wanted);
-      return Response.json({ result: 'PAPER_POSITION_RECONCILED' });
-    };
+    let calls = 0;
+    globalThis.fetch = async () => { calls++; throw Error('MUST_NOT_FORWARD'); };
     try {
-      const res = await monitor(request('reconcile', 'POST', encryptedFyersSession()));
-      assert.equal(res.status, 200);
-      assert.equal((await res.json()).result, 'PAPER_POSITION_RECONCILED');
+      for (const action of ['sync', 'reconcile']) {
+        const res = await monitor(request(action, 'POST', encryptedFyersSession()));
+        assert.equal(res.status, 403);
+        assert.equal((await res.json()).error, 'PAPER_WRITE_OWNER_VERIFICATION_REQUIRED');
+      }
+      assert.equal(calls, 0);
     } finally { globalThis.fetch = previous; }
   });
 });
