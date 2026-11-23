@@ -82,7 +82,17 @@ export async function flushPaperSyncQueue() {
         }
         break;
       }
-      storeQueue(queue.slice(1));
+      // Re-read the queue after awaiting network: a SELL/close may have
+      // been queued while this request was in flight. Never erase it.
+      const latest = readQueue();
+      const index = latest.findIndex(item =>
+        item.id === job.id && item.strategy === job.strategy &&
+        item.action === job.action
+      );
+      if (index >= 0) {
+        latest.splice(index, 1);
+        storeQueue(latest);
+      }
     }
   } finally { busy = false; }
 }
