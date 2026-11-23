@@ -72,6 +72,12 @@ export default async function handler(request) {
       (action === 'status' && request.method !== 'GET'))
     return reply(404, { error: 'UNKNOWN_MONITOR_ROUTE' }, origin);
 
+  // A FYERS login alone does not establish ownership of the one shared
+  // AWS paper-state file. Fail closed until verified account binding is added.
+  // Do not permit any browser session to open/close someone else's position.
+  if (action === 'sync' || action === 'reconcile')
+    return reply(403, { error: 'PAPER_WRITE_OWNER_VERIFICATION_REQUIRED' }, origin);
+
   const body = request.method === 'POST' ? await request.text() : '';
   if (Buffer.byteLength(body, 'utf8') > MAX_BYTES)
     return reply(413, { error: 'PAYLOAD_TOO_LARGE' }, origin);
