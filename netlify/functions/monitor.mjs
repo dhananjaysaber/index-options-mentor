@@ -46,7 +46,14 @@ function hasEncryptedFyersSession(request) {
 export default async function handler(request) {
   const origin = request.headers.get('origin') || '';
   if (request.method === 'OPTIONS')
-    return reply(origin === ORIGIN ? 204 : 403, {}, origin);
+    return origin === ORIGIN
+      ? new Response(null, { status: 204, headers: {
+          'Access-Control-Allow-Origin': ORIGIN,
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+          'Vary': 'Origin'
+        } })
+      : reply(403, { error: 'ORIGIN_NOT_ALLOWED' }, origin);
   if (!['GET', 'POST'].includes(request.method))
     return reply(405, { error: 'METHOD_NOT_ALLOWED' }, origin);
   if (origin && origin !== ORIGIN)
