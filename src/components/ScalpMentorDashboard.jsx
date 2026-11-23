@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { calculateTradeAmountSizing } from '../engine/tradeAmount.js';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import NiftyStrategyChart from './NiftyStrategyChart.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
@@ -29,13 +29,13 @@ export default function ScalpMentorDashboard({
 }) {
   const liveQuote = useLiveQuote();
   const liveSpot = Number(liveQuote?.nifty) > 0 ? Number(liveQuote.nifty) : Number(snapshot?.market?.spot);
-  const [manualLots, setManualLots] = useState(() => clampLots(settings?.defaultLots, settings?.lotCap));
-  useEffect(() => {
-    if (!position) setManualLots(current => clampLots(current || settings?.defaultLots, settings?.lotCap));
-  }, [settings?.defaultLots, settings?.lotCap, position?.id]);
+  const buyPrice = liveQuote?.optionSymbol === snapshot?.option?.symbol
+    ? Number(liveQuote?.optionPrice) || Number(snapshot?.option?.ltp) : Number(snapshot?.option?.ltp);
+  const amountSizing = calculateTradeAmountSizing(settings, buyPrice, Number(snapshot?.option?.lotSize));
+  const manualLots = amountSizing.lots;
 
   function openManualScalp() {
-    if (position || !evaluation?.manualEligible) return;
+    if (position || !evaluation?.manualEligible || manualLots < 1) return;
     const ticket = buildScalpTicket(snapshot, evaluation, settings, 'USER', { lots: manualLots });
     if (ticket) onTakeTrade(ticket);
   }
@@ -141,11 +141,11 @@ export default function ScalpMentorDashboard({
         <button
           type="button"
           className="scalp-quick-buy"
-          disabled={Boolean(position) || !evaluation.manualEligible}
+          disabled={manualLots < 1 || Boolean(position) || !evaluation.manualEligible}
           onClick={openManualScalp}
         >
           <span>BUY</span>
-          <small>{position ? 'Position open' : evaluation.manualEligible ? `${manualLots} ${manualLots === 1 ? 'lot' : 'lots'} · Open ${evaluation.side || 'scalp'}` : 'Waiting'}</small>
+          <small>{position ? 'Position open' : evaluation.manualEligible && manualLots > 0 ? `${manualLots} ${manualLots === 1 ? 'lot' : 'lots'} · Open ${evaluation.side || 'scalp'}` : 'Waiting'}</small>
         </button>
         <button
           type="button"
@@ -175,22 +175,10 @@ export default function ScalpMentorDashboard({
         {!position && (
           <div className="scalp-lot-editor">
             <div className="scalp-lot-copy">
-              <span>MANUAL POSITION SIZE</span>
+              <span>POSITION SIZE</span>
               <strong>{manualLots} {manualLots === 1 ? 'lot' : 'lots'} · {Number(snapshot?.option?.lotSize || 0) * manualLots || '—'} qty</strong>
-              <small>Manual scalp only · maximum {Math.max(1, Number(settings?.lotCap) || 5)} lots</small>
-            </div>
-            <div className="scalp-lot-stepper" role="group" aria-label="Manual scalp lots">
-              <button type="button" onClick={() => setManualLots(value => clampLots(Number(value) - 1, settings?.lotCap))} disabled={manualLots <= 1}>−</button>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="1"
-                max={Math.max(1, Number(settings?.lotCap) || 5)}
-                value={manualLots}
-                onChange={event => setManualLots(clampLots(event.target.value, settings?.lotCap))}
-                aria-label="Manual scalp lots"
-              />
-              <button type="button" onClick={() => setManualLots(value => clampLots(Number(value) + 1, settings?.lotCap))} disabled={manualLots >= Math.max(1, Number(settings?.lotCap) || 5)}>+</button>
+              <small>Buy option price ₹{fmt(buyPrice)} · Premium cost ₹{fmt(amountSizing.premiumCost)}</small>
+              <small>{manualLots > 0 ? `Calculated from ₹${fmt(settings?.tradeAmount)} per trade` : 'Amount cannot cover one lot'}</small>
             </div>
           </div>
         )}
@@ -229,7 +217,7 @@ export default function ScalpMentorDashboard({
               <strong>{evaluation.manualEligible ? 'Manual research available' : 'Manual research waiting'}</strong>
               <span>{evaluation.manualReason}</span>
             </div>
-            <button type="button" className="scalp-open-button" disabled={!evaluation.manualEligible} onClick={openManualScalp}>
+            <button type="button" className="scalp-open-button" disabled={manualLots < 1 || !evaluation.manualEligible} onClick={openManualScalp}>
               {evaluation.manualEligible
                 ? evaluation.eligible
                   ? 'OPEN SCALP MANUALLY'
@@ -254,8 +242,3 @@ function fmt(value) {
     : '—';
 }
 
-function clampLots(value, cap) {
-  const max = Math.max(1, Number(cap) || 5);
-  const parsed = Math.round(Number(value) || 1);
-  return Math.max(1, Math.min(max, parsed));
-}

@@ -45,7 +45,7 @@ const STRATEGY_MODE_KEY = 'index-options-mentor-strategy-mode-v1';
 const DEFAULT_SETTINGS = {
   capital: 50000,
   riskPct: 1,
-  defaultLots: 1,
+  tradeAmount: 30000,
   lotCap: 5,
   mentorAutoOpen: true,
   mentorAutoClose: true,
@@ -348,7 +348,7 @@ export default function AppV3() {
     pruneLedger(ledger);
     localStorage.setItem(AUTO_SETUP_KEY, JSON.stringify(ledger));
     takeTrade({ ...ticket, researchQualificationTier: setupClassification.tier, researchQualificationLabel: setupClassification.label, researchTagAtEntry: `${setupClassification.label} · auto entry` });
-  }, [snapshot?.generatedAt, marketDataReady, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
+  }, [snapshot?.generatedAt, marketDataReady, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.tradeAmount, settings.defaultLots, settings.lotCap]);
 
   // Both Index strategies monitor and simulate entries independently of which
   // view is selected. The Scalp dashboard is now presentation-only; no extra
@@ -369,7 +369,7 @@ export default function AppV3() {
     takeTrade(ticket);
   }, [snapshot?.generatedAt, scalpStatus?.setupId, scalpStatus?.eligible,
       marketDataReady, scalpPosition?.id, settings.scalpAutoOpen,
-      settings.defaultLots, settings.lotCap]);
+      settings.tradeAmount, settings.defaultLots, settings.lotCap]);
 
   useEffect(() => {
     if (!corePosition || !coreMentor || settings.mentorAutoClose === false || coreMentor.alertLevel !== 'exit') {
@@ -730,7 +730,7 @@ export default function AppV3() {
                   <div className="toolbar-live"><span>DATA</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
                   <ToolbarStat label="Capital" value={`₹${Number(settings.capital).toLocaleString('en-IN')}`} />
                   <ToolbarStat label="Risk" value={`${settings.riskPct}%`} />
-                  <ToolbarStat label="Sim lots" value={settings.defaultLots} />
+                  <ToolbarStat label="Amount per trade" value={`₹${Number(settings.tradeAmount).toLocaleString('en-IN')}`} />
                   <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
                 </section>
 
@@ -856,7 +856,7 @@ function DesktopNav({ view, navigate, strategyMode, setStrategyMode, settings, s
       <div className="sidebar-section-label">AUTOMATION</div>
       <div className={`sidebar-auto-card ${settings.mentorAutoOpen ? 'active' : ''}`}><span>13-point auto research</span><strong>{settings.mentorAutoOpen ? 'ON' : 'OFF'}</strong><small>{corePosition ? 'Managing open 13-point' : setup?.eligible ? `${setup.label} ready` : 'Watching setups'}</small></div>
       <div className={`sidebar-auto-card ${settings.scalpAutoOpen !== false ? 'active' : ''}`}><span>Scalp auto research</span><strong>{settings.scalpAutoOpen !== false ? 'ON' : 'OFF'}</strong><small>{scalpPosition ? 'Managing open scalp' : 'Independent slot'}</small></div>
-      <div className="sidebar-mini-grid"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Lots</span><strong>{settings.defaultLots}</strong></div></div>
+      <div className="sidebar-mini-grid"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Per trade</span><strong>₹{Number(settings.tradeAmount).toLocaleString('en-IN')}</strong></div></div>
       <button className="sidebar-settings-link" onClick={() => navigate('settings')}>Adjust research settings</button>
     </aside>
   );
@@ -870,7 +870,7 @@ function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, 
         <div className={`drawer-connection ${authRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}><span /><strong>FYERS {authRequired ? 'Reconnect required' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</strong></div>
         <div className="drawer-nav"><NavButton active={view === 'dashboard'} onClick={() => navigate('dashboard')} icon="⌁" label="Mentor" /><button type="button" className={`sidebar-nav-button drawer-position-link ${view === 'position' ? 'active' : ''} ${positionCount ? 'has-position' : ''}`} onClick={() => navigate('position')}><span>↗</span><span className="drawer-position-copy"><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong><small>{activePosition ? `${activePosition.side || ''} ${activePosition.strike || ''} · OPEN` : 'No simulated position'}</small></span></button><NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" /><NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" /><NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" /></div>
         <div className="drawer-section"><span className="drawer-label">DISPLAY MODE</span><div className="segmented drawer-segmented" role="group" aria-label="Select Basic or Advanced view"><button type="button" className={mode === 'simple' ? 'active' : ''} aria-pressed={mode === 'simple'} onClick={() => { setMode('simple'); onClose(); }}>Basic</button><button type="button" className={mode === 'advanced' ? 'active' : ''} aria-pressed={mode === 'advanced'} onClick={() => { setMode('advanced'); onClose(); }}>Advanced</button></div></div>
-        <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Sim lots</span><strong>{settings.defaultLots}</strong></div></div>
+        <div className="drawer-stats"><div><span>Capital</span><strong>₹{Number(settings.capital).toLocaleString('en-IN')}</strong></div><div><span>Risk</span><strong>{settings.riskPct}%</strong></div><div><span>Per trade</span><strong>₹{Number(settings.tradeAmount).toLocaleString('en-IN')}</strong></div></div>
         <div className="drawer-actions"><button onClick={() => setTheme(current => current === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <SunIcon /> : <MoonIcon />}<span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span></button><button onClick={toggleAlerts}><span className="drawer-action-dot" /><span>{alertsEnabled ? 'Alerts on' : 'Enable alerts'}</span></button><button disabled={refreshing} onClick={() => refreshSnapshot({ manual: true })}><RefreshIcon /><span>{refreshing ? 'Checking…' : 'Refresh market'}</span></button>{brokerStatus.configured && <button className={`drawer-reconnect-btn ${authRequired ? 'required' : ''}`} onClick={onReconnect}><ReconnectIcon /><span>{authRequired ? 'Reconnect FYERS now' : 'Reconnect FYERS'}</span></button>}</div>
         <button className="drawer-settings-cta" onClick={() => navigate('settings')}>Account & automation settings</button>
       </aside>

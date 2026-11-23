@@ -1,3 +1,4 @@
+import { calculateTradeAmountSizing } from './tradeAmount.js';
 const SCALP_TARGET_R = 1;
 const SCALP_MAX_HOLD_MINUTES = 12;
 const MIN_SCORE = 70;
@@ -185,11 +186,12 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     ? underlyingEntry + riskPoints * SCALP_TARGET_R
     : underlyingEntry - riskPoints * SCALP_TARGET_R;
 
-  const maxLots = Math.max(1, Number(settings?.lotCap) || 5);
-  const requestedLots = initiatedBy === 'MENTOR' ? settings?.defaultLots : (overrides?.lots ?? settings?.defaultLots);
-  const lots = clampInt(requestedLots, 1, maxLots);
   const lotSize = Number(snapshot.option.lotSize) || 0;
-  if (!lotSize) return null;
+  const sizingSettings = settings?.tradeAmount === undefined && initiatedBy !== 'MENTOR'
+    ? { ...settings, defaultLots: overrides?.lots ?? settings?.defaultLots } : settings;
+  const sizing = calculateTradeAmountSizing(sizingSettings, optionEntry, lotSize);
+  const lots = sizing.lots;
+  if (lots < 1) return null;
   const openedAt = new Date().toISOString();
 
   return {
@@ -219,7 +221,9 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     expiry: snapshot.option.expiry,
     lotSize,
     lots,
-    quantity: lots * lotSize,
+    quantity: sizing.quantity,
+    tradeAmount: sizing.tradeAmount,
+    premiumCost: sizing.premiumCost,
     entry: optionEntry,
     currentPrice: optionEntry,
     underlyingEntry,
@@ -270,6 +274,7 @@ export function buildScalpTicket(snapshot, evaluation, settings, initiatedBy = '
     riskBudget: Number(settings?.capital || 0) * (Number(settings?.riskPct || 0) / 100),
     liveQuoteAtEntry: quote?.at || null,
     settingsSnapshot: {
+      tradeAmount: sizing.tradeAmount,
       capital: Number(settings?.capital) || 0,
       riskPct: Number(settings?.riskPct) || 0,
       defaultLots: lots,
@@ -367,7 +372,3 @@ function positive(value) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function clampInt(value, min, max) {
-  const n = Math.round(Number(value) || min);
-  return Math.max(min, Math.min(max, n));
-}

@@ -1,16 +1,17 @@
-import { buildManualResearchTicket, classifyManualResearchSetup, classifyResearchSetup } from '../engine/researchStrategy.js';
+import { calculateSimulationSizing, buildManualResearchTicket, classifyManualResearchSetup, classifyResearchSetup } from '../engine/researchStrategy.js';
 
 export default function CoreQuickActions({ snapshot, marketDataReady = true, settings, position, onTakeTrade, onExit }) {
   const automatic = classifyResearchSetup(snapshot);
   const manual = classifyManualResearchSetup(snapshot);
-  const manualReady = Boolean(marketDataReady && !position && manual?.eligible && automatic?.hardSafetyPassed);
+  const sizing = calculateSimulationSizing(snapshot, settings);
+  const manualReady = Boolean(sizing.lots > 0 && marketDataReady && !position && manual?.eligible && automatic?.hardSafetyPassed);
   const qualification = !marketDataReady && !position ? 'Waiting for fresh Mentor data' : position
     ? position.researchQualificationLabel || position.strategyTierLabel || position.strategyTier || 'POSITION OPEN'
     : automatic?.eligible
       ? automatic.label
       : manualReady
         ? 'Manual research ready'
-        : 'Waiting for safe setup';
+        : sizing.lots < 1 ? 'Amount cannot cover one lot' : 'Waiting for safe setup';
 
   function openManual() {
     if (!manualReady) return;

@@ -39,6 +39,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
           <div className="eyebrow">OPEN POSITION · {positionLabel}</div>
           <h2>{position.symbol}</h2>
           <small>{position.side} · {position.lots} lot{Number(position.lots) === 1 ? '' : 's'} · {position.quantity} qty · opened {formatOpened(position.openedAt)} · {formatDuration(position.openedAt)}</small>
+          <small>Buy option price ₹{Number(position.entry).toLocaleString('en-IN')} · Premium cost ₹{(Number(position.entry) * Number(position.quantity)).toLocaleString('en-IN')}</small>
         </div>
         <span className="simulation-pill open">LIVE</span>
       </div>

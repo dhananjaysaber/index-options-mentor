@@ -4,6 +4,7 @@ export default function SettingsPanel({ settings, onSave }) {
   const [draft, setDraft] = useState(settings);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sizingError, setSizingError] = useState('');
 
   useEffect(() => setDraft(settings), [settings]);
 
@@ -14,14 +15,18 @@ export default function SettingsPanel({ settings, onSave }) {
 
   function save() {
     if (saving) return;
+    const amount = Number(draft.tradeAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setSizingError('Enter an amount greater than ₹0.');
+      return;
+    }
+    setSizingError('');
     const clean = {
       ...draft,
       capital: Math.max(10000, Number(draft.capital) || 50000),
       riskPct: Math.max(0.1, Math.min(10, Number(draft.riskPct) || 1)),
-      defaultLots: Math.max(1, Math.min(20, Math.round(Number(draft.defaultLots) || 1))),
-      lotCap: Math.max(1, Math.min(20, Math.round(Number(draft.lotCap) || 5)))
+      tradeAmount: Math.floor(amount * 100) / 100
     };
-    if (clean.defaultLots > clean.lotCap) clean.defaultLots = clean.lotCap;
 
     setSaving(true);
     setSaved(false);
@@ -55,13 +60,11 @@ export default function SettingsPanel({ settings, onSave }) {
           <Field label="Risk %" hint="Used to show whether a simulated setup would fit your intended real-risk budget.">
             <input type="number" min="0.1" max="10" step="0.1" value={draft.riskPct} onChange={e => update('riskPct', e.target.value)} />
           </Field>
-          <Field label="Default lots" hint="Number of option lots used when you or the Mentor opens a research simulation.">
-            <input type="number" min="1" max="20" value={draft.defaultLots} onChange={e => update('defaultLots', e.target.value)} />
+          <Field label="Amount per trade (₹)" hint="Mentor buys the whole lots affordable within this premium budget. Charges are additional.">
+            <input type="number" min="1" step="100" value={draft.tradeAmount} onChange={e => update('tradeAmount', e.target.value)} />
           </Field>
-          <Field label="Maximum lots" hint="Safety ceiling for simulation sizing.">
-            <input type="number" min="1" max="20" value={draft.lotCap} onChange={e => update('lotCap', e.target.value)} />
-          </Field>
-          <div className="settings-note"><strong>Important:</strong> NIFTY contract lot size is exchange-defined and is read from FYERS. “Default lots” means how many contracts the simulation uses; it does not alter the exchange lot size.</div>
+          {sizingError && <p role="alert">{sizingError}</p>}
+          <div className="settings-note">Mentor uses the selected option price and its exchange lot size to calculate quantity. A trade is skipped when the amount cannot cover one lot.</div>
         </SettingsCard>
 
         <SettingsCard title="Mentor automation" copy="These switches control simulated research positions only. They do not place real FYERS orders.">

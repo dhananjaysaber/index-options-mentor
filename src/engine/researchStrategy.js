@@ -1,3 +1,4 @@
+import { calculateTradeAmountSizing } from './tradeAmount.js';
 const HARD_GATE_IDS = new Set(['risk', 'liquidity']);
 const QUALITY_GATE_IDS = new Set(['chop', 'trend', 'vwap']);
 
@@ -92,7 +93,8 @@ export function classifyManualResearchSetup(snapshot) {
 
 export function calculateSimulationSizing(snapshot, settings) {
   const option = snapshot?.option || {};
-  const lots = clampInt(settings?.defaultLots, 1, Math.max(1, Number(settings?.lotCap) || 20));
+  const amountSizing = calculateTradeAmountSizing(settings, option.ltp, option.lotSize);
+  const lots = amountSizing.lots;
   const contractLotSize = Number(option.lotSize) || 0;
   const optionEntry = Number(option.ltp) || 0;
   const optionStop = Number(option.estimatedPremiumStop) || optionEntry;
@@ -105,6 +107,7 @@ export function calculateSimulationSizing(snapshot, settings) {
   const requiredRiskPct = capital > 0 ? (requiredRiskAmount / capital) * 100 : 0;
 
   return {
+    ...amountSizing,
     lots,
     contractLotSize,
     quantity: lots * contractLotSize,
@@ -159,7 +162,7 @@ export function buildManualResearchTicket(snapshot, settings, overrides = {}) {
     autoManaged: true,
     manualResearch: true,
     manualReferenceCapital: referenceCapital,
-    manualRequestedLots: requestedLots,
+    manualRequestedLots: sizing.lots,
     manualReason: manual.reason
   });
 }
@@ -182,6 +185,8 @@ function buildTicket({
   const execution = resolveLiveExecution(option?.symbol, market?.spot, option?.ltp);
   const underlyingEntry = execution.nifty;
   const optionEntry = execution.option;
+  sizing = calculateSimulationSizing({ ...snapshot, option: { ...option, ltp: optionEntry } }, settings);
+  if (sizing.lots < 1) return null;
   const now = new Date().toISOString();
   const failedMandatoryIds = classification?.failedMandatoryIds || [];
   const entryMandatoryPassCount = classification?.mandatoryPassCount ?? 0;
@@ -217,6 +222,8 @@ function buildTicket({
     lotSize: option.lotSize,
     lots: sizing.lots,
     quantity: sizing.quantity,
+    tradeAmount: sizing.tradeAmount,
+    premiumCost: sizing.premiumCost,
     entry: optionEntry,
     currentPrice: optionEntry,
     underlyingEntry,
@@ -238,6 +245,7 @@ function buildTicket({
     riskBudget: sizing.riskBudget,
     liveQuoteAtEntry: execution.at,
     settingsSnapshot: {
+      tradeAmount: sizing.tradeAmount,
       capital: Number(settings?.capital) || 0,
       riskPct: Number(settings?.riskPct) || 0,
       defaultLots: sizing.lots,
