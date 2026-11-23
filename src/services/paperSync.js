@@ -107,6 +107,14 @@ export async function flushPaperSyncQueue() {
   } finally { busy = false; }
 }
 
+export function acknowledgeAwsPaperExit(strategy, id) {
+  // A confirmed AWS paper exit supersedes any outstanding local open/close
+  // reconciliation for that exact position, without disturbing other trades.
+  storeQueue(readQueue().filter(job =>
+    !(job.strategy === strategy && job.id === id)
+  ));
+}
+
 export async function pollPaperMonitor() {
   if (typeof window === 'undefined' || document.visibilityState !== 'visible') return;
   try {
