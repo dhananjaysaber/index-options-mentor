@@ -19,10 +19,10 @@ function encryptedSession(value = 'fake_fyers_token_for_unit_testing_long_enough
   const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64url');
 }
-function request(action, method = 'GET', token = '', body = { strategy: 'core' }) {
+function request(action, method = 'GET', token = '', body = { strategy: 'core' }, origin = 'https://dhananjaysaber.github.io') {
   return new Request(BASE + '/api/monitor/' + action, {
     method, headers: {
-      origin: 'https://dhananjaysaber.github.io',
+      origin,
       ...(token ? { Authorization: 'Bearer ' + token } : {}),
       ...(method === 'POST' ? { 'content-type': 'application/json' } : {})
     },
@@ -109,6 +109,17 @@ test('owner match allows signed paper open and reconcile', async () => {
       assert.equal(m.calls.filter(x => x.url.endsWith('/sync') ||
         x.url.endsWith('/reconcile')).length, 2);
     } finally { m.restore(); }
+  });
+});
+
+test('Netlify preview can sync using its own browser origin', async () => {
+  await withEnv(async () => {
+    const mock = mockFetch();
+    try {
+      const res = await monitor(request('sync', 'POST', encryptedSession(), { strategy: 'core' }, BASE));
+      assert.ok(res.ok);
+      assert.ok(mock.calls.some(call => call.url.endsWith('/sync')));
+    } finally { mock.restore(); }
   });
 });
 
