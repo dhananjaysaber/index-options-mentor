@@ -66,3 +66,11 @@ test('Core automatic and manual tickets recalculate quantity at entry premium', 
     }
   } finally { if(oldWindow===undefined) delete globalThis.window; else globalThis.window=oldWindow; }
 });
+
+test('Core BUY affordability follows live premium across the one-lot threshold', () => {
+  const option={symbol:'NSE:NIFTY26NOV25450PE',ltp:231,lotSize:65};
+  const quote={optionSymbol:option.symbol,optionPrice:230};
+  assert.equal(calculateSimulationSizing({option},{tradeAmount:15000},quote).lots,1);
+  assert.equal(calculateSimulationSizing({option:{...option,ltp:230}},{tradeAmount:15000},{...quote,optionPrice:231}).lots,0);
+  assert.equal(calculateSimulationSizing({option},{tradeAmount:15000},{...quote,optionSymbol:'other'}).lots,0);
+});

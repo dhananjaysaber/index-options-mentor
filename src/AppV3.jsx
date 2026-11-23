@@ -768,7 +768,7 @@ export default function AppV3() {
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
 
-                <CoreQuickActions snapshot={snapshot} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
+                <CoreQuickActions snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
               </>
             )}
           </>

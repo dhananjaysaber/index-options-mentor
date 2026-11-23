@@ -91,12 +91,14 @@ export function classifyManualResearchSetup(snapshot) {
   };
 }
 
-export function calculateSimulationSizing(snapshot, settings) {
+export function calculateSimulationSizing(snapshot, settings, liveQuote = null) {
   const option = snapshot?.option || {};
-  const amountSizing = calculateTradeAmountSizing(settings, option.ltp, option.lotSize);
+  const currentPremium = liveQuote?.optionSymbol === option.symbol
+    ? positiveNumber(liveQuote?.optionPrice) ?? option.ltp : option.ltp;
+  const amountSizing = calculateTradeAmountSizing(settings, currentPremium, option.lotSize);
   const lots = amountSizing.lots;
   const contractLotSize = Number(option.lotSize) || 0;
-  const optionEntry = Number(option.ltp) || 0;
+  const optionEntry = Number(currentPremium) || 0;
   const optionStop = Number(option.estimatedPremiumStop) || optionEntry;
   const optionRiskPerUnit = Math.max(0, optionEntry - optionStop);
   const riskPerLot = optionRiskPerUnit * contractLotSize;

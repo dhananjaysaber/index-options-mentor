@@ -1,9 +1,9 @@
 import { calculateSimulationSizing, buildManualResearchTicket, classifyManualResearchSetup, classifyResearchSetup } from '../engine/researchStrategy.js';
 
-export default function CoreQuickActions({ snapshot, marketDataReady = true, settings, position, onTakeTrade, onExit }) {
+export default function CoreQuickActions({ snapshot, liveQuote, marketDataReady = true, settings, position, onTakeTrade, onExit }) {
   const automatic = classifyResearchSetup(snapshot);
   const manual = classifyManualResearchSetup(snapshot);
-  const sizing = calculateSimulationSizing(snapshot, settings);
+  const sizing = calculateSimulationSizing(snapshot, settings, liveQuote);
   const manualReady = Boolean(sizing.lots > 0 && marketDataReady && !position && manual?.eligible && automatic?.hardSafetyPassed);
   const qualification = !marketDataReady && !position ? 'Waiting for fresh Mentor data' : position
     ? position.researchQualificationLabel || position.strategyTierLabel || position.strategyTier || 'POSITION OPEN'
