@@ -26,7 +26,7 @@ const verifiedProfiles = new Map();
 function decryptedFyersToken(request) {
   const secret = process.env.FYERS_SESSION_SECRET;
   if (!secret) return '';
-  const bearer = (request.headers.get('authorization') || '').match(/^Bearer\\s+(.+)$/i)?.[1];
+  const bearer = (request.headers.get('authorization') || '').match(/^Bearer\s+(.+)$/i)?.[1];
   const cookie = (request.headers.get('cookie') || '').split(';').map(v => v.trim())
     .find(v => v.startsWith(SESSION_COOKIE + '='))?.slice(SESSION_COOKIE.length + 1);
   let value = bearer || '';
@@ -101,7 +101,7 @@ function signedAwsRequest(base, secret, action, method, body = '') {
   const canonical = [
     time, nonce, method, endpoint,
     crypto.createHash('sha256').update(body).digest('hex')
-  ].join('\\n');
+  ].join('\n');
   const signature = crypto.createHmac('sha256', secret)
     .update(canonical).digest('hex');
   return fetch(base + endpoint, {
