@@ -17,6 +17,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/monitor/*"
+  to = "/.netlify/functions/monitor/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
