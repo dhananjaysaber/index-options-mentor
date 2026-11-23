@@ -67,8 +67,8 @@ export default async function handler(request) {
     return reply(503, { error: 'PAPER_SYNC_NOT_CONFIGURED' }, origin);
 
   const route = new URL(request.url).pathname;
-  const action = route.endsWith('/sync') ? 'sync' : route.endsWith('/status') ? 'status' : '';
-  if (!action || (action === 'sync' && request.method !== 'POST') ||
+  const action = route.endsWith('/sync') ? 'sync' : route.endsWith('/reconcile') ? 'reconcile' : route.endsWith('/status') ? 'status' : '';
+  if (!action || (['sync', 'reconcile'].includes(action) && request.method !== 'POST') ||
       (action === 'status' && request.method !== 'GET'))
     return reply(404, { error: 'UNKNOWN_MONITOR_ROUTE' }, origin);
 
