@@ -24,6 +24,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
+import { queuePaperOpen, queuePaperClose } from './services/paperSync.js';
 import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
@@ -143,6 +144,8 @@ export default function AppV3() {
   useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
   useEffect(() => { persistPosition(SCALP_POSITION_KEY, scalpPosition); }, [scalpPosition]);
+  useEffect(() => { if (corePosition?.id) queuePaperOpen('core', corePosition); }, [corePosition?.id]);
+  useEffect(() => { if (scalpPosition?.id) queuePaperOpen('scalp', scalpPosition); }, [scalpPosition?.id]);
   useEffect(() => {
     const journalPosition = activePosition || corePosition || scalpPosition;
     persistPosition(LEGACY_POSITION_KEY, journalPosition);
@@ -570,6 +573,7 @@ export default function AppV3() {
       const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
       setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
+      queuePaperClose(strategy, closed.id, meta.closedBy === 'MENTOR');
       positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'] = null;
       if (strategy === 'scalp') setScalpPosition(existing => existing?.id === closed.id ? null : existing);
       else setCorePosition(existing => existing?.id === closed.id ? null : existing);
