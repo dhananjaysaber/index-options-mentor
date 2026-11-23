@@ -115,6 +115,24 @@ export function acknowledgeAwsPaperExit(strategy, id) {
   ));
 }
 
+// Only an AWS-verified observed-quote exit for the same paper position
+// may close a locally open PWA trade. Never close on an empty AWS slot.
+export function findVerifiedAwsPaperExit(receipts, strategy, id, now = Date.now()) {
+  if (!Array.isArray(receipts) || !['core', 'scalp'].includes(strategy) ||
+      typeof id !== 'string' || !id) return null;
+  return receipts.find(receipt => {
+    const closedAt = Date.parse(receipt?.closedAt || '');
+    return receipt?.id === id &&
+      receipt.strategy === strategy &&
+      receipt.exitPriceSource === 'OBSERVED_OPTION_QUOTE' &&
+      receipt.executionMode === 'PAPER_ONLY' &&
+      receipt.brokerOrderPlaced === false &&
+      typeof receipt.exitPrice === 'number' &&
+      Number.isFinite(receipt.exitPrice) && receipt.exitPrice > 0 &&
+      Number.isFinite(closedAt) && closedAt <= now + 30000;
+  }) || null;
+}
+
 export async function pollPaperMonitor() {
   if (typeof window === 'undefined' || document.visibilityState !== 'visible') return;
   try {
