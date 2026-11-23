@@ -1,3 +1,4 @@
+import { sendJournalWrite } from './journalTransport.js';
 import {
   advanceShadowResearchTrade,
   buildShadowResearchTrade,
@@ -418,13 +419,10 @@ async function flushQueue({ keepalive = false } = {}) {
         attempts++;
         let response;
         try {
-          response = await nativeFetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: batch.action, [batch.field]: payload }),
-            cache: 'no-store',
-            keepalive
-          });
+          response = await sendJournalWrite(
+            { action: batch.action, [batch.field]: payload },
+            { keepalive }
+          );
           if (!response.ok) { fail(); return; }
           const data = await response.json().catch(() => ({}));
           if (!data?.ok) { fail(); return; }
