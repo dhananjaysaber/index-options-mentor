@@ -206,7 +206,7 @@ function buildTicket({
     autoManaged,
     manualResearch,
     manualReferenceCapital,
-    manualRequestedLots,
+    manualRequestedLots: manualResearch ? sizing.lots : manualRequestedLots,
     manualReason,
     approvalState: decision.state,
     mentorDecisionAtEntry: decision.state,

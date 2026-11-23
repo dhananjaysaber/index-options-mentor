@@ -16,8 +16,8 @@ export default function SettingsPanel({ settings, onSave }) {
   function save() {
     if (saving) return;
     const amount = Number(draft.tradeAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setSizingError('Enter an amount greater than ₹0.');
+    if (!Number.isSafeInteger(Math.floor(amount * 100)) || amount < 1) {
+      setSizingError('Enter an amount of at least ₹1.');
       return;
     }
     setSizingError('');

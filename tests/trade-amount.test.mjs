@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateTradeAmountSizing } from '../src/engine/tradeAmount.js';
-import { calculateSimulationSizing } from '../src/engine/researchStrategy.js';
+import { buildSimulatedTicket, buildManualResearchTicket, calculateSimulationSizing } from '../src/engine/researchStrategy.js';
 import { buildScalpTicket } from '../src/engine/scalpStrategy.js';
 
 test('30000 at 230 with 65 units buys two lots for 29900', () => {
@@ -45,4 +45,24 @@ test('automatic and manual Scalp tickets both follow the amount setting', () => 
     assert.equal(ticket.premiumCost,29900);
     assert.equal(buildScalpTicket(snapshot,evaluation,{tradeAmount:100},by),null);
   }
+});
+
+test('Core automatic and manual tickets recalculate quantity at entry premium', () => {
+  const symbol='NSE:NIFTY26NOV25450PE';
+  const snapshot={live:true, option:{symbol,ltp:230,lotSize:65,optionType:'PE'},
+    market:{spot:25000,phase:'LIVE'}, structure:{underlyingStop:25100,riskPoints:100,closeConfirmed:true},
+    setup:{retestStatus:'HELD'},decision:{side:'PE',score:90,rr:1,canSuggestTrade:true,reasons:[]},
+    parameters:Array.from({length:13},(_,i)=>({id:['risk','liquidity','chop','trend','vwap'][i] || `c${i}`,mandatory:i<5,gatePassed:true,status:'green'}))};
+  const oldWindow=globalThis.window;
+  try {
+    for(const premium of [230,231,500]) {
+      globalThis.window={__indexOptionsLiveQuote:{optionSymbol:symbol,optionPrice:premium,nifty:25000}};
+      for(const ticket of [buildSimulatedTicket(snapshot,{tradeAmount:30000}),buildManualResearchTicket(snapshot,{tradeAmount:30000},{lots:10})]) {
+        if(premium===500) { assert.equal(ticket,null); continue; }
+        assert.equal(ticket.lots,premium===230?2:1);
+        assert.equal(ticket.entry,premium);
+        assert.ok(ticket.premiumCost<=30000);
+      }
+    }
+  } finally { if(oldWindow===undefined) delete globalThis.window; else globalThis.window=oldWindow; }
 });
