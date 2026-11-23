@@ -1,3 +1,5 @@
+import { forwardToSqlite, setting } from './lib/journalBridge.mjs';
+
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
 
 function corsOrigin(request) {
@@ -21,6 +23,14 @@ function jsonResponse(body, status = 200, request = null) {
 }
 
 async function forwardToSheet(payload, request) {
+  if (setting('JOURNAL_STORAGE') === 'sqlite') {
+    try {
+      return jsonResponse(await forwardToSqlite(payload), 200, request);
+    } catch {
+      // A failed SQLite commit must remain in the browser retry queue.
+      return jsonResponse({ ok: false, configured: true, error: 'Journal is temporarily unavailable.' }, 503, request);
+    }
+  }
   const webAppUrl = Netlify.env.get('JOURNAL_WEB_APP_URL');
   const sharedSecret = Netlify.env.get('JOURNAL_SHARED_SECRET');
 

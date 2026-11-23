@@ -1,0 +1,27 @@
+name: Verify SQLite journal
+on:
+  pull_request:
+    paths:
+      - 'aws/journal/**'
+      - 'netlify/functions/journal*.mjs'
+      - 'netlify/functions/lib/journalBridge.mjs'
+      - 'tests/sqlite*'
+      - '.github/workflows/sqlite-journal.yml'
+  push:
+    branches: ['feature/sqlite-journal-20261123']
+permissions:
+  contents: read
+jobs:
+  journal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tests -p '*_test.py' -v
+      - run: node --test tests/sqlite-journal-gateway.test.mjs
+      - run: bash -n aws/journal/install.sh
