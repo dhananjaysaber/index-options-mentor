@@ -1099,10 +1099,12 @@ function inferExitReason(position, underlyingExit) {
 
 function initialPosition(kind) {
   const key = kind === 'scalp' ? SCALP_POSITION_KEY : CORE_POSITION_KEY;
+  const closedIds = new Set(readJson(HISTORY_KEY, [])
+    .filter(row => row?.id && row?.closedAt).map(row => row.id));
   const saved = readJson(key, null);
-  if (saved) return saved;
+  if (saved?.id && !closedIds.has(saved.id)) return saved;
   const legacy = readJson(LEGACY_POSITION_KEY, null);
-  if (!legacy) return null;
+  if (!legacy?.id || closedIds.has(legacy.id)) return null;
   const isScalp = legacy.strategyFamily === 'SCALP';
   return kind === 'scalp' ? (isScalp ? legacy : null) : (!isScalp ? legacy : null);
 }
