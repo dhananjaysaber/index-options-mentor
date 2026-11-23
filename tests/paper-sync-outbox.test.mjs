@@ -5,7 +5,8 @@ import {
   queuePaperClose,
   acknowledgeAwsPaperExit,
   flushPaperSyncQueue,
-  pollPaperMonitor
+  pollPaperMonitor,
+  findVerifiedAwsPaperExit
 } from '../src/services/paperSync.js';
 
 const KEY = 'iom-paper-sync-outbox-v1';
@@ -78,4 +79,22 @@ test('AWS monitor receipt emits read-only event', async () => {
     event.type === 'mentor:paper-sync-status' &&
     event.detail.recentlyClosed[0].id === 'paper-id'
   ));
+});
+
+test('AWS receipt requires matching paper-only observed-quote exit', () => {
+  const id = 'a1111111-b222-4333-8444-a55555555555';
+  const valid = {
+    id, strategy: 'core', exitPrice: 108.25,
+    exitPriceSource: 'OBSERVED_OPTION_QUOTE',
+    executionMode: 'PAPER_ONLY', brokerOrderPlaced: false,
+    closedAt: new Date().toISOString()
+  };
+  assert.equal(findVerifiedAwsPaperExit([valid], 'core', id)?.exitPrice, 108.25);
+  assert.equal(findVerifiedAwsPaperExit([valid], 'scalp', id), null);
+  assert.equal(findVerifiedAwsPaperExit([valid], 'core', 'other-id'), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, exitPrice: null }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, executionMode: 'LIVE' }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, brokerOrderPlaced: true }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, exitPriceSource: 'PWA_RECONCILIATION_UNVERIFIED' }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, closedAt: new Date(Date.now() + 3600000).toISOString() }], 'core', id), null);
 });
