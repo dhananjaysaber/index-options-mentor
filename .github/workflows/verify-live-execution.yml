@@ -1,0 +1,21 @@
+name: Verify live execution with simulated broker
+on:
+  pull_request:
+    paths:
+      - 'aws/live/**'
+      - 'aws/journal/store.py'
+      - 'tests/live_*test.py'
+      - '.github/workflows/verify-live-execution.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulated-broker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Entries, owned exits, HTTP authentication, restart, journal and backup
+        run: python3 -m unittest discover -s tests -p 'live_*test.py' -v

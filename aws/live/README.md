@@ -1,28 +1,44 @@
-# Live execution foundation
+# Disabled live execution integration
 
-This branch introduces a durable, disabled-by-default order coordinator. It has no public route, active broker adapter or deployment switch. Tests use a fake broker and a temporary database.
+This is tested server code, not an enabled trading deployment. Importing these modules opens no network listener, reads no credentials and starts no background worker. Nothing here changes production, paper positions, FYERS app credentials or the existing journal database.
 
-Every user action needs a stable UUID. The coordinator commits an order reservation before contacting the broker. Repeating the same request returns its saved state. Reusing the UUID for different parameters fails. A timeout or crash leaves an unresolved order that must be reconciled against the broker's order book. An empty response never automatically resubmits the order.
+## Implemented
 
-Acknowledgements and actual fills are tracked separately. Partial fills remain visible after cancellation. Order IDs, symbols, quantities, sides and tags are checked before broker updates are adopted. A persistent stop control blocks new submissions. It does not cancel existing orders or close positions. It cannot recall an order already being transmitted to FYERS.
+- `fyers_broker.py`: narrow adapter for an injected official synchronous FYERS Python SDK client. Reads account identity, available balance, tagged orders and net intraday quantities. Sending is disabled by default. Broker profile details and raw error responses are not logged or returned by the bridge.
+- `planner.py`: server-owned contract lookup and fresh option ask. Computes whole lots from the amount per trade, rounds limit prices upwards to the exchange tick and checks contract expiry, exchange quantity limits, market-session state and available funds plus a configured charge reserve. The browser cannot submit its own quantity or broker payload.
+- `execution.py`: persisted 15-second entry plans with stable UUIDs. Submission rechecks account, funds, contract and price. A higher ask requires a new plan; it never silently exceeds the approved limit price or quantity. Unresolved entries reserve cash atomically. External/manual changes to net exposure block an exit.
+- `orders.py`: durable entry and owned-exit reservations, confirmed fill tracking, partial-fill handling, restart recovery and audit snapshots. Uncertain outcomes are reconciled instead of resubmitted. Concurrent exits cannot reserve more than the entry's confirmed, settled fills. New-entry stop leaves owned protective exits available. There is no broad account-wide exit operation or market-order fallback.
+- `bridge.py`: a loopback-only HTTP server factory. Every POST requires a verified owner and HMAC over the exact body, path, timestamp and nonce. Nonces survive restarts. No listener is started automatically; no public nginx or Netlify route is added.
+- A durable close outbox delivers broker-confirmed closes to the production `Journal` implementation. The trade ID is the entry intent ID. Replay after a crash leaves one final row. Gross P&L comes from broker-confirmed weighted fill prices; charges are not invented or deducted.
 
-Before any real use, implement and verify all remaining integration work
+The signed internal routes are `/live/prepare` (`intentId`, `symbol`, `amount`, `strategy`), `/live/submit` (`intentId`), `/live/exit` (`intentId`, `entryId`, `price`, `quantity`), `/live/reconcile` and `/live/stop`. Strategy is `CORE` or `SCALP`. Reconciliation and stop take empty JSON objects. These are internal service routes, not public browser APIs.
 
-- A FYERS adapter running on the approved AWS static IP, with current live app credentials and owner verification.
-- A protected API and explicit user confirmation flow with stable intent IDs.
-- Server-owned contract lookup, lot sizes, fresh quotes, available-funds checks, and limits selected by the user.
-- Exit intents limited to confirmed owned quantities, broker protection orders, cancellation and partial-fill handling.
-- Continuous reconciliation and recovery of unresolved orders after a process restart.
-- Durable execution audit records integrated with the production journal and its backups.
-- End-to-end tests for entries, exits, rejection, timeout and restart before enabling any live switch.
+## Storage and backups
 
-FYERS order tags are tracking fields. The application enforces its own retry protection. SDK order responses cannot be treated as evidence of an exchange fill.
+At eventual deployment, initialise `Orders` and `Journal` with the **same existing `journal.sqlite3` path**. The table names do not conflict. The existing SQLite daily backup then captures plans, intents, audit, replay receipts and journal rows together; the Sheets exporter continues exporting the journal's final trades. A test runs the current backup implementation, verifies SQLite integrity and checks that the order ledger and close receipt are included. No separate, unbacked production live database should be used. Tests use disposable databases only.
 
-References
+## Production integration still required
 
-- https://fyers.in/api-docs/v3/getting-started/guides/order-placement-guide/
+This branch is not ready to enable real money. There is no credential-loading host, running reconciliation worker, authenticated browser/Netlify live proxy or active strategy-to-live-order wiring. The actual FYERS SDK connection has not been exercised with this account.
+
+Before enabling, the host must:
+
+1. Run on the approved AWS static IP with a trading-enabled FYERS app/token and verify the expected account. Preserve the current non-trading paper app and its credentials.
+2. Supply server-owned contract/master data, timestamped quote readers and the existing market/calendar and strategy signals. Do not accept a browser's claim that a strategy qualifies. Apply the user's saved amount and explicit server limits. Configure charge reserve and verify broker permissions and margin behaviour.
+3. Authenticate the app user and same-origin request at Netlify, bind to the verified FYERS account and sign only permitted internal bridge requests. Keep the bridge HMAC key server-side. An open plan alone is not authorisation to submit a real trade.
+4. Wire the current Core/Scalp management signals to owned live exits, including confirmed protective broker stops, cancellation of pending entries/protection orders, partial-fill recovery and broker-fill journal reconciliation. Do not run paper exits against live positions.
+5. Install the periodic recovery worker and verify live order/position streams, reconnects, market/expiry handling, existing daily backup/Sheets export, controlled broker rejection and restart recovery before any real-money enablement.
+
+The order book endpoint covers today's orders. Unresolved orders surviving a trading-day boundary require broker trade/history investigation; absence from today's book never permits an automatic resend.
+
+## Validation
+
+Run `python3 -m unittest discover -s tests -p 'live_*test.py' -v` from the repository root. All SDK interactions in the suite use simulated clients. Tests cover HTTP authentication, replay, whole-lot sizing, limit-price moves, account mismatch, cash reservations, simultaneous exits, partial fills, uncertain submissions, stop/restart recovery, immutable journal delivery and the current backup implementation. CI runs the same suite without credentials.
+
+Official protocol references checked on 23 November 2026:
+
+- https://fyers.in/api-docs/v3/api/trading/order-placement/sync/single-order/
 - https://fyers.in/api-docs/v3/api/trading/order-book/get-orders/
 - https://fyers.in/api-docs/v3/api/trading/order-book/get-orders-by-order-tag/
-- https://support.fyers.in/portal/en/kb/articles/what-are-the-new-sebi-rules-for-retail-algo-trading-from-april-01-2026
-
-Run `python3 -m unittest discover -s tests -p 'live_orders_test.py' -v`.
+- https://fyers.in/api-docs/v3/api/account/profile/
+- https://fyers.in/api-docs/v3/api/account/funds/
