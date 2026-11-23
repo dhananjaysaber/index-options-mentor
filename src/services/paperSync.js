@@ -3,6 +3,8 @@
 // This module cannot place or modify broker orders.
 const KEY = 'iom-paper-sync-outbox-v1';
 const MAX = 100;
+const MAX_POSITION_AGE_MS = 24 * 60 * 60 * 1000;
+const MONITOR_POLL_MS = 15000;
 let busy = false;
 
 function readQueue() {
@@ -24,10 +26,18 @@ function enqueue(row) {
   queue.push(row);
   storeQueue(queue);
   void flushPaperSyncQueue();
+  void pollPaperMonitor();
 }
 
 export function queuePaperOpen(strategy, position) {
   if (!position?.id || position.mode !== 'SIMULATION') return;
+  const opened = Date.parse(position.openedAt || '');
+  if (!Number.isFinite(opened) || Date.now() - opened > MAX_POSITION_AGE_MS || opened > Date.now() + 30000) {
+    window.dispatchEvent(new CustomEvent('mentor:paper-sync-warning', {
+      detail: { strategy, status: 'POSITION_TOO_OLD_FOR_AWS_SYNC' }
+    }));
+    return;
+  }
   const {
     id, strategyFamily, mode, openedAt, initiatedBy, side, symbol,
     entry, underlyingEntry, underlyingStop, underlyingTarget,
@@ -97,12 +107,26 @@ export async function flushPaperSyncQueue() {
   } finally { busy = false; }
 }
 
+export async function pollPaperMonitor() {
+  if (typeof window === 'undefined' || document.visibilityState !== 'visible') return;
+  try {
+    const response = await fetch('/api/monitor/status', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data?.bridge !== 'AUTHENTICATED' || !data?.paperSync) return;
+    window.dispatchEvent(new CustomEvent('mentor:paper-sync-status', { detail: data.paperSync }));
+  } catch { /* Keep the PWA trading UI independent from bridge availability. */ }
+}
+
 export function installPaperSyncQueue() {
   if (typeof window === 'undefined') return;
   window.addEventListener('online', flushPaperSyncQueue);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') void flushPaperSyncQueue();
   });
-  window.setInterval(() => { void flushPaperSyncQueue(); }, 15000);
+  window.setInterval(() => {
+    void flushPaperSyncQueue();
+    void pollPaperMonitor();
+  }, MONITOR_POLL_MS);
   void flushPaperSyncQueue();
 }
