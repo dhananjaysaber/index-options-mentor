@@ -1,3 +1,4 @@
+import { sendJournalWrite } from './journalTransport.js';
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
 const CORE_POSITION_KEY = 'index-options-mentor-core-position-v41';
@@ -275,13 +276,7 @@ async function flushJournalQueue({ keepalive = false } = {}) {
 
     for (const event of events) {
       try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'journal_event', event }),
-          cache: 'no-store',
-          keepalive
-        });
+        const response = await sendJournalWrite({ action: 'journal_event', event }, { keepalive });
         if (!response.ok) {
           journalFailureCount = Math.min(5, journalFailureCount + 1);
           nextJournalSyncAt = Date.now() + Math.min(120000, 5000 * (2 ** (journalFailureCount - 1)));
