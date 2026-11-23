@@ -98,3 +98,28 @@ test('AWS receipt requires matching paper-only observed-quote exit', () => {
   assert.equal(findVerifiedAwsPaperExit([{ ...valid, exitPriceSource: 'PWA_RECONCILIATION_UNVERIFIED' }], 'core', id), null);
   assert.equal(findVerifiedAwsPaperExit([{ ...valid, closedAt: new Date(Date.now() + 3600000).toISOString() }], 'core', id), null);
 });
+
+test('SELL queued while open request is pending is not lost', async () => {
+  memory.clear();
+  let finishOpen;
+  const blockedOpen = new Promise(resolve => { finishOpen = resolve; });
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    if (!options?.method) return Response.json({ bridge: 'AUTHENTICATED', paperSync: { recentlyClosed: [] } });
+    const action = String(url).split('/').pop();
+    calls.push(action);
+    if (action === 'sync') await blockedOpen;
+    return Response.json({ accepted: true });
+  };
+
+  const p = make();
+  queuePaperOpen('core', p);
+  queuePaperClose('core', p.id);
+  assert.deepEqual(JSON.parse(memory.get(KEY)).map(x => x.action), ['sync', 'reconcile']);
+  finishOpen();
+  await flushPaperSyncQueue();
+  // A currently-running flush may finish in a later microtask.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ['sync', 'reconcile']);
+  assert.deepEqual(JSON.parse(memory.get(KEY) || '[]'), []);
+});
