@@ -137,7 +137,8 @@ export default async function handler(request) {
       : reply(403, { error: 'ORIGIN_NOT_ALLOWED' }, origin);
   if (!['GET', 'POST'].includes(request.method))
     return reply(405, { error: 'METHOD_NOT_ALLOWED' }, origin);
-  if (origin && origin !== ORIGIN)
+  // Same-origin Netlify POSTs include Origin even though they do not use CORS.
+  if (origin && origin !== ORIGIN && origin !== new URL(request.url).origin)
     return reply(403, { error: 'ORIGIN_NOT_ALLOWED' }, origin);
   const token = decryptedFyersToken(request);
   if (!token) return reply(401, { error: 'FYERS_SESSION_REQUIRED' }, origin);
