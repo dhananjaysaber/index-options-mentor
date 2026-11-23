@@ -579,7 +579,7 @@ export default function AppV3() {
     }
   }
 
-  function exitStrategy(strategy, meta = {}) {
+  async function exitStrategy(strategy, meta = {}) {
     // NEVER call setHistory from inside a setPosition functional updater:
     // React can invoke those updaters during rendering, crashing the PWA.
     // The synchronous ref also prevents double taps / competing auto exits.
@@ -587,9 +587,22 @@ export default function AppV3() {
     if (!current?.id || closingTradeIdsRef.current.has(current.id)) return;
     closingTradeIdsRef.current.add(current.id);
     try {
-      const closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
+      let closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
       if (!Number.isFinite(closed.pnl) || !Number.isFinite(closed.exit)) {
         throw new Error('Cannot record this simulated exit: option price is invalid.');
+      }
+      const usesAwsMonitor = window.location.origin === 'https://deploy-preview-28--optionsmentor.netlify.app';
+      if (usesAwsMonitor && meta.closedBy !== 'AWS_MONITOR') {
+        const receipt = await reconcilePreviewExit(strategy, current.id, meta.closedBy === 'MENTOR');
+        if (receipt) {
+          meta = {
+            closedBy: 'AWS_MONITOR',
+            reasonCode: receipt.exitReason || 'AWS_PAPER_EXIT',
+            reason: 'AWS paper monitor exit at observed option quote.',
+            awsReceipt: receipt
+          };
+          closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
+        }
       }
       // Persist a completed trade before clearing its open-position state.
       // The permanent journal bridge may be temporarily offline.
@@ -597,7 +610,7 @@ export default function AppV3() {
       const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
       setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
-      if (meta.closedBy === 'AWS_MONITOR') {
+      if (usesAwsMonitor || meta.closedBy === 'AWS_MONITOR') {
         acknowledgeAwsPaperExit(strategy, closed.id);
       } else {
         queuePaperClose(strategy, closed.id, meta.closedBy === 'MENTOR');
@@ -882,6 +895,36 @@ function mergeCompletedHistory(local, remote) {
     result.push(trade);
   }
   return result.sort((a, b) => Date.parse(b.closedAt || 0) - Date.parse(a.closedAt || 0)).slice(0, 1000);
+}
+
+async function reconcilePreviewExit(strategy, id, closedByMentor) {
+  const response = await fetch('/api/monitor/reconcile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      strategy,
+      id,
+      reason: closedByMentor ? 'PWA_AUTO_EXIT' : 'USER_EXIT'
+    }),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.ok && data.result === 'PAPER_POSITION_RECONCILED') return null;
+
+  if (response.ok && data.result === 'ALREADY_CLOSED') {
+    const status = await fetch('/api/monitor/status', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000)
+    });
+    if (status.ok) {
+      const monitor = await status.json();
+      const receipt = findVerifiedAwsPaperExit(monitor.paperSync?.recentlyClosed, strategy, id);
+      if (receipt) return receipt;
+    }
+  }
+
+  throw new Error('AWS could not confirm this paper exit. The journal was left unchanged.');
 }
 
 function closeTrade(current, meta, snapshot, scalpStatus, settings) {
