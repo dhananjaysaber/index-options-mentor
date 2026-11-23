@@ -24,7 +24,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
-import { queuePaperOpen, queuePaperClose } from './services/paperSync.js';
+import { queuePaperOpen, queuePaperClose, acknowledgeAwsPaperExit } from './services/paperSync.js';
 import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
@@ -90,6 +90,38 @@ export default function AppV3() {
   const closingTradeIdsRef = useRef(new Set());
   const positionRefs = useRef({ core: null, scalp: null });
   positionRefs.current = { core: corePosition, scalp: scalpPosition };
+  // Process only a verified AWS paper-exit receipt for this exact local trade.
+  // Never treat a missing AWS position as proof of exit.
+  useEffect(() => {
+    const onPaperSyncStatus = event => {
+      const closed = event?.detail?.recentlyClosed;
+      if (!Array.isArray(closed)) return;
+      for (const strategy of ['core', 'scalp']) {
+        const current = positionRefs.current[strategy];
+        if (!current?.id) continue;
+        const receipt = closed.find(item =>
+          item?.strategy === strategy &&
+          item?.id === current.id &&
+          item?.exitPriceSource === 'OBSERVED_OPTION_QUOTE' &&
+          typeof item?.exitPrice === 'number' &&
+          Number.isFinite(item.exitPrice) &&
+          item.exitPrice > 0 &&
+          typeof item?.closedAt === 'string' &&
+          Number.isFinite(Date.parse(item.closedAt))
+        );
+        if (!receipt) continue;
+        exitStrategy(strategy, {
+          closedBy: 'AWS_MONITOR',
+          reasonCode: receipt.exitReason || 'AWS_PAPER_EXIT',
+          reason: 'AWS paper monitor exit at observed option quote.',
+          awsReceipt: receipt
+        });
+      }
+    };
+    window.addEventListener('mentor:paper-sync-status', onPaperSyncStatus);
+    return () => window.removeEventListener('mentor:paper-sync-status', onPaperSyncStatus);
+  }, [snapshot, scalpStatus, settings, alertsEnabled]);
+
   const [operationError, setOperationError] = useState('');
 
   // A locally displayed quote may look live after an iOS tab resumes.
@@ -573,7 +605,11 @@ export default function AppV3() {
       const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
       setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
-      queuePaperClose(strategy, closed.id, meta.closedBy === 'MENTOR');
+      if (meta.closedBy === 'AWS_MONITOR') {
+        acknowledgeAwsPaperExit(strategy, closed.id);
+      } else {
+        queuePaperClose(strategy, closed.id, meta.closedBy === 'MENTOR');
+      }
       positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'] = null;
       if (strategy === 'scalp') setScalpPosition(existing => existing?.id === closed.id ? null : existing);
       else setCorePosition(existing => existing?.id === closed.id ? null : existing);
@@ -857,15 +893,22 @@ function mergeCompletedHistory(local, remote) {
 }
 
 function closeTrade(current, meta, snapshot, scalpStatus, settings) {
-  const underlyingExit = finite(current.underlyingCurrent) ?? finite(snapshot?.market?.spot) ?? finite(current.underlyingEntry) ?? 0;
-  const optionExit = finite(current.currentPrice) ?? finite(current.entry) ?? 0;
+  const aws = meta?.closedBy === 'AWS_MONITOR' &&
+    meta.awsReceipt?.id === current.id &&
+    meta.awsReceipt?.exitPriceSource === 'OBSERVED_OPTION_QUOTE'
+      ? meta.awsReceipt : null;
+  const underlyingExit = aws && Number.isFinite(aws.underlyingExit)
+    ? aws.underlyingExit
+    : finite(current.underlyingCurrent) ?? finite(snapshot?.market?.spot) ?? finite(current.underlyingEntry) ?? 0;
+  const optionExit = aws && Number.isFinite(aws.exitPrice) && aws.exitPrice > 0
+    ? aws.exitPrice : finite(current.currentPrice) ?? finite(current.entry) ?? 0;
   const entry = finite(current.entry) ?? optionExit;
   const quantity = Math.max(0, Number(current.quantity) || 0);
   const pnl = (optionExit - entry) * quantity;
   const riskPoints = Math.max(0.01, Math.abs(Number(current.underlyingEntry) - Number(current.underlyingStop)));
   const movePoints = current.side === 'CE' ? underlyingExit - Number(current.underlyingEntry) : Number(current.underlyingEntry) - underlyingExit;
   const rAchieved = movePoints / riskPoints;
-  const closedAt = new Date().toISOString();
+  const closedAt = aws?.closedAt || new Date().toISOString();
   const heldMs = Math.max(0, Date.now() - new Date(current.openedAt).getTime());
   const heldMinutes = Math.max(0, Math.round(heldMs / 60000));
   const currentPnl = finite(current.currentUnrealizedPnl) ?? pnl;
@@ -882,9 +925,10 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
     heldSeconds: Math.round(heldMs / 1000),
     closedAt,
     closedBy: meta.closedBy || 'USER',
-    exitMethod: (meta.closedBy || 'USER') === 'MENTOR' ? 'AUTO' : 'MANUAL',
+    exitMethod: ['MENTOR', 'AWS_MONITOR'].includes(meta.closedBy) ? 'AUTO' : 'MANUAL',
     exitReasonCode: meta.reasonCode || inferExitReason(current, underlyingExit),
     exitReason: meta.reason || 'Manual simulated exit.',
+    ...(aws ? { executionMode: 'PAPER_ONLY', brokerOrderPlaced: false, exitPriceSource: 'OBSERVED_OPTION_QUOTE', awsPaperExit: true } : {}),
     exitMentorState: meta.mentorState || 'MANUAL EXIT',
     mentorSuggestionAtExit: snapshot?.decision?.headline || '',
     exitMandatoryPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).mandatoryPassCount,
