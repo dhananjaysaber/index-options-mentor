@@ -15,6 +15,9 @@ const MILESTONES = [5, 10, 15, 30];
 let installed = false;
 let flushTimer = null;
 let nativeFetch = null;
+let journalFlushPromise = null;
+let journalFailureCount = 0;
+let nextJournalAttemptAt = 0;
 
 export function installSetupDecisionObserver() {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return;
@@ -373,52 +376,72 @@ function queueShadowEvent({ eventId, type, trade }) {
 }
 
 async function flushQueue({ keepalive = false } = {}) {
+  // One writer per tab; do not bypass a failed Google Sheets backoff even
+  // during pagehide or repeated mentor-snapshot events.
+  if (journalFlushPromise) return journalFlushPromise;
+  if (Date.now() < nextJournalAttemptAt) return;
   if (!nativeFetch) nativeFetch = window.fetch.bind(window);
-  const queue = readJson(QUEUE_KEY, {});
-  for (const [id, payload] of Object.entries(queue)) {
-    try {
-      const response = await nativeFetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'setup_decision', setup: payload }),
-        cache: 'no-store',
-        keepalive
-      });
-      if (!response.ok) break;
-      const data = await response.json().catch(() => ({}));
-      if (!data?.ok) break;
-      const latestQueue = readJson(QUEUE_KEY, {});
-      if (latestQueue[id]?.updatedAt === payload.updatedAt) {
-        delete latestQueue[id];
-        writeJson(QUEUE_KEY, latestQueue);
-      }
-    } catch {
-      break;
-    }
-  }
 
-  const shadowQueue = readJson(SHADOW_EVENT_QUEUE_KEY, {});
-  for (const [eventId, event] of Object.entries(shadowQueue)) {
-    try {
-      const response = await nativeFetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'journal_event', event }),
-        cache: 'no-store',
-        keepalive
-      });
-      if (!response.ok) break;
-      const data = await response.json().catch(() => ({}));
-      if (!data?.ok) break;
-      const latestQueue = readJson(SHADOW_EVENT_QUEUE_KEY, {});
-      if (latestQueue[eventId]?.queuedAt === event.queuedAt) {
-        delete latestQueue[eventId];
-        writeJson(SHADOW_EVENT_QUEUE_KEY, latestQueue);
+  journalFlushPromise = (async () => {
+    const fail = () => {
+      journalFailureCount = Math.min(6, journalFailureCount + 1);
+      nextJournalAttemptAt = Date.now() +
+        Math.min(180000, 10000 * 2 ** (journalFailureCount - 1));
+    };
+    const success = () => {
+      journalFailureCount = 0;
+      nextJournalAttemptAt = 0;
+    };
+
+    // Limit one flush to 4 events so a large offline queue cannot overwhelm
+    // Apps Script. Unacknowledged events remain in localStorage for retry.
+    let attempts = 0;
+    const queues = [
+      {
+        key: QUEUE_KEY,
+        action: 'setup_decision',
+        field: 'setup',
+        identity: 'updatedAt'
+      },
+      {
+        key: SHADOW_EVENT_QUEUE_KEY,
+        action: 'journal_event',
+        field: 'event',
+        identity: 'queuedAt'
       }
-    } catch {
-      break;
+    ];
+
+    for (const batch of queues) {
+      const pending = readJson(batch.key, {});
+      for (const [id, payload] of Object.entries(pending)) {
+        if (attempts >= 4) return;
+        attempts++;
+        let response;
+        try {
+          response = await nativeFetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: batch.action, [batch.field]: payload }),
+            cache: 'no-store',
+            keepalive
+          });
+          if (!response.ok) { fail(); return; }
+          const data = await response.json().catch(() => ({}));
+          if (!data?.ok) { fail(); return; }
+        } catch { fail(); return; }
+
+        const current = readJson(batch.key, {});
+        if (current[id]?.[batch.identity] === payload[batch.identity]) {
+          delete current[id];
+          writeJson(batch.key, current);
+        }
+        success();
+      }
     }
-  }
+  })();
+
+  try { await journalFlushPromise; }
+  finally { journalFlushPromise = null; }
 }
 
 function serialiseTracker(tracker) {
