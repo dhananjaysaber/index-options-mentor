@@ -60,7 +60,12 @@ async function verifiedAccountProof(accessToken, secret) {
   try {
     response = await fetch(PROFILE_URL, {
       method: 'GET',
-      headers: { Authorization: appId + ':' + accessToken },
+      headers: {
+        Authorization: appId + ':' + accessToken,
+        Accept: 'application/json',
+        // FYERS edge may reject generic SDK/urllib user agents before auth.
+        'User-Agent': 'Mozilla/5.0 (compatible; IndexOptionsMentor/1.0)'
+      },
       cache: 'no-store',
       signal: AbortSignal.timeout(6000),
       redirect: 'error'
