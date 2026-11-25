@@ -204,3 +204,65 @@
     color: #f2f7fd !important;
   }
 }
+
+/* Current trade-plan markup needs its own layout, separate from older grids. */
+.desktop-core-layout { display: none; }
+@media (min-width: 821px) {
+  .premium-fintech-shell .mentor-v2-content:has(> .desktop-core-layout) { display: block !important; }
+  .premium-fintech-shell .mentor-v2-content > .premium-feed-status {
+    width: 100%; min-width: 0; margin-bottom: 18px;
+  }
+  .premium-fintech-shell .desktop-core-layout {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+    min-width: 0;
+    width: 100%;
+  }
+  .premium-fintech-shell .desktop-core-layout > .mentor-v2-workspace { display: contents !important; }
+  .premium-fintech-shell .desktop-core-layout > .mentor-v2-workspace > .core-compact-plan,
+  .premium-fintech-shell .desktop-core-layout > .mentor-v2-workspace > .trade-focus-card {
+    grid-column: 1; grid-row: 1;
+    width: 100% !important; min-width: 0; max-width: none !important;
+    height: auto !important; min-height: 0 !important;
+    margin: 0 !important; position: static !important; padding: 20px;
+  }
+  .premium-fintech-shell .desktop-core-layout > .quick-checklist {
+    grid-column: 1; grid-row: 2;
+    display: block !important;
+    width: 100%; min-width: 0;
+    height: auto !important; min-height: 0 !important;
+    margin: 0 !important; padding: 20px !important; align-self: start;
+  }
+  .premium-fintech-shell .desktop-core-layout > .quick-checklist::before {
+    content: '13-POINT CHECKLIST'; display: block; margin-bottom: 14px;
+    color: #8296af; font-size: 11px; font-weight: 800; letter-spacing: .12em;
+  }
+  .premium-fintech-shell .desktop-core-layout .quick-section {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-auto-rows: auto; gap: 10px !important; align-content: start;
+  }
+  .premium-fintech-shell .desktop-core-layout .quick-chip {
+    min-height: 52px !important; height: auto !important;
+    padding: 10px 12px !important; align-self: start;
+  }
+  .premium-fintech-shell .desktop-core-layout > .mentor-v2-workspace > .workspace-left {
+    grid-column: 1 / -1; grid-row: 3; width: 100%; min-width: 0; margin: 0;
+  }
+  .premium-fintech-shell .desktop-core-layout .core-compact-heading strong { overflow-wrap: anywhere; }
+}
+@media (min-width: 1280px) {
+  .premium-fintech-shell .desktop-core-layout:has(> .quick-checklist) {
+    grid-template-columns: minmax(0, 1.2fr) minmax(340px, 1fr);
+  }
+  .premium-fintech-shell .desktop-core-layout > .quick-checklist { grid-column: 2; grid-row: 1; }
+  .premium-fintech-shell .desktop-core-layout > .mentor-v2-workspace > .workspace-left { grid-row: 2; }
+}
+@media (min-width: 821px) {
+  .premium-fintech-shell .strategy-quick-actions { left: 232px !important; }
+}
+@media (min-width: 1440px) {
+  .premium-fintech-shell .strategy-quick-actions { left: 248px !important; }
+}
