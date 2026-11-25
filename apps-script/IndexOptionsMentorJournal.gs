@@ -56,6 +56,7 @@ function doPost(e) {
     if (!expected || payload.secret !== expected) return json_({ ok: false, error: 'Unauthorised journal request.' });
 
     if (payload.action === 'health') return health_();
+    if (payload.action === 'journal_receipt') return journalReceipt_(payload.tradeId, payload.eventId);
     if (payload.action === 'list_trades') return json_({ ok: true, trades: listTrades_(payload.limit || 500) });
     if (payload.action === 'journal_event') return saveJournalEvent_(payload.event);
     if (payload.action === 'setup_decision') return saveSetupDecision_(payload.setup);
@@ -499,4 +500,33 @@ function iso_(value) {
 
 function json_(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
+}
+
+// Authenticated, read-only, complete identifier receipt; no history-page limit.
+function journalReceipt_(tradeId, eventId) {
+  const valid = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/.test(value);
+  if (!valid(tradeId) || !valid(eventId)) return json_({ok:false,error:'Invalid journal receipt identifiers.'});
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = getSpreadsheet_();
+    function rows(name, expected) {
+      const sheet = ss.getSheetByName(name);
+      if (!sheet) return [];
+      const last = sheet.getLastRow();
+      if (last > 100001) throw new Error('Journal receipt scan limit exceeded.');
+      const headers = sheet.getRange(1,1,1,expected.length).getValues()[0];
+      if (!expected.every((header,index)=>headers[index]===header)) throw new Error('Journal receipt headers do not match.');
+      return last < 2 ? [] : sheet.getRange(2,1,last-1,expected.length).getValues();
+    }
+    const trades = rows(TRADES_SHEET,['trade_id','mode','status']);
+    const events = rows(JOURNEY_SHEET,['event_id','trade_id','event_time','event_type']);
+    return json_({ok:true,complete:true,tradeId:tradeId,eventId:eventId,
+      tradeRows:trades.filter(row=>String(row[0])===tradeId).length,
+      closedTradeRows:trades.filter(row=>String(row[0])===tradeId && String(row[2]).toUpperCase()==='CLOSED').length,
+      eventRows:events.filter(row=>String(row[0])===eventId).length,
+      closedExitRowsForTrade:events.filter(row=>String(row[1])===tradeId && String(row[3])==='TRADE_CLOSED').length,
+      matchingEventTradeRows:events.filter(row=>String(row[0])===eventId && String(row[1])===tradeId).length,
+      scannedTradeRows:trades.length,scannedEventRows:events.length});
+  } finally { lock.releaseLock(); }
 }
