@@ -382,3 +382,8 @@ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart
    min-height:24px!important;height:24px!important;padding:3px 10px!important;
  }
 }
+
+/* The sample scalp mockup only puts the chart above the fast-entry checklist.
+   Existing level tiles duplicate its market state and consume the entire screen. */
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-level-strip,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-rule-note{display:none!important}
