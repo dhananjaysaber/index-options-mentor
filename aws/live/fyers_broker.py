@@ -55,3 +55,12 @@ class FyersBroker:
         if self.send_enabled is not True:
             raise ValueError('FYERS_SEND_DISABLED')
         return self.client.place_order(data=dict(payload))
+
+    def cancel_order(self, order_id):
+        if self.send_enabled is not True: raise ValueError('FYERS_SEND_DISABLED')
+        return self.client.cancel_order(data={'id':order_id})
+
+    def modify_stop(self, order_id, stop_price, limit_price, quantity):
+        if self.send_enabled is not True: raise ValueError('FYERS_SEND_DISABLED')
+        return self.client.modify_order(data={'id':order_id,'type':4,'stopPrice':stop_price,
+                                             'limitPrice':limit_price,'qty':quantity})

@@ -10,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 paths=[f'aws/live/{n}' for n in ['orders.py','planner.py','execution.py','bridge.py','fyers_broker.py','README.md']]
 paths += [f'tests/{n}' for n in ['live_orders_test.py','live_execution_test.py','live_bridge_test.py']]
 files={p:(ROOT/p).read_text() for p in paths}
-package={'format':1,'source':'d2859a00d569adb881d10aa52981217a62cd15bd','files':files,
+package={'format':1,'source':'content-addressed-package-v2','files':files,
          'sha256':{p:hashlib.sha256(v.encode()).hexdigest() for p,v in files.items()}}
 raw=json.dumps(package,sort_keys=True,separators=(',',':')).encode()
 code=(ROOT/'scripts/live-stage-template.py').read_text().replace('PAYLOAD_PLACEHOLDER',base64.b64encode(zlib.compress(raw,9)).decode()).replace('PACKAGE_HASH_PLACEHOLDER',hashlib.sha256(raw).hexdigest())

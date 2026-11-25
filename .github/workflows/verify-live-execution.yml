@@ -9,6 +9,12 @@ on:
       - 'public/iom-live-stage.py'
       - 'scripts/build-live-stage.py'
       - 'scripts/live-stage-template.py'
+      - 'scripts/build-execution-connect.py'
+      - 'scripts/execution-connect-template.py'
+      - 'public/iom-execution-connect.py'
+      - 'tests/execution-connection.test.mjs'
+      - 'src/engine/managedPosition.js'
+      - 'netlify/functions/execution.mjs'
       - '.github/workflows/verify-live-execution.yml'
   workflow_dispatch:
 permissions:
@@ -21,6 +27,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Entries, owned exits, HTTP authentication, restart, journal and backup
         run: python3 -m unittest discover -s tests -p 'live_*test.py' -v
       - name: Verify reproducible disabled installer and isolated installation
@@ -29,3 +38,10 @@ jobs:
           python3 scripts/build-live-stage.py
           cmp /tmp/iom-live-stage.expected.py public/iom-live-stage.py
           python3 -m unittest discover -s tests -p 'test_live_stage_installer.py' -v
+      - name: Verify authenticated connection protocol and packaged diagnostic host
+        run: |
+          node --test tests/execution-connection.test.mjs
+          cp public/iom-execution-connect.py /tmp/iom-execution-connect.expected.py
+          python3 scripts/build-execution-connect.py
+          cmp /tmp/iom-execution-connect.expected.py public/iom-execution-connect.py
+          python3 public/iom-execution-connect.py --verify-only --journal-store aws/journal/store.py

@@ -1,6 +1,6 @@
 # Install the disabled modules
 
-`public/iom-live-stage.py` is a self-contained staging installer. Its package contains the live modules and 38 simulated-broker tests from d2859a0. It has no credentials and makes no FYERS requests. It uses the server's installed journal implementation in disposable test databases.
+`public/iom-live-stage.py` is a self-contained staging installer. Its package contains the live modules and 38 simulated-broker tests from its content-addressed source package. It has no credentials and makes no FYERS requests. It uses the server's installed journal implementation in disposable test databases.
 
 Before running, verify the published installer's SHA-256 against the value supplied with the release. Run it with `sudo python3 /tmp/iom-live-stage.py`. It requires Python 3.12+, the mentor account, the installed journal/store.py and both existing app/journal services active.
 

@@ -42,3 +42,14 @@ Official protocol references checked on 23 November 2026:
 - https://fyers.in/api-docs/v3/api/trading/order-book/get-orders-by-order-tag/
 - https://fyers.in/api-docs/v3/api/account/profile/
 - https://fyers.in/api-docs/v3/api/account/funds/
+
+
+## Authenticated execution connection (simulation only)
+
+`diagnostic_host.py` is a loopback host for `/monitor/live/status` and `/monitor/live/check`. It has no real-order routes, SDK credentials or production journal handle. The app's Settings connection button uses `netlify/functions/execution.mjs`: the existing encrypted FYERS session is verified against the FYERS profile, bound to the pinned AWS account using the existing bridge HMAC, then forwarded as an expiring signed request with a durable nonce. The browser never receives the shared key, raw account identity or FYERS token from this gateway. Wrong accounts and attempts to call submit/prepare fail closed.
+
+The check uses persisted fake broker orders and a disposable journal, the same `Orders` and `Execution` coordinators, `Protection` cancellation/modification reconciliation, and `Manager` with the PWA's shared pure position and exit engines. It exercises automatic Core and Scalp profit-trail exits, broker stop tightening, cancellation before replacement sells, replay, restart and one close row per strategy. A filled broker stop prevents a second sell. A cancellation acknowledgement alone cannot release reserved quantity. Stop-limit orders remain subject to actual broker/exchange behaviour; simulated acceptance does not establish real broker readiness.
+
+`public/iom-execution-connect.py` packages and verifies the whole simulation host. On explicit installation it creates a dedicated diagnostic service, separate receipt database and narrowly scoped nginx route; it reuses the existing pinned owner and bridge key without changing paper credentials. Its service permits network traffic only to localhost. A final server-authenticated request goes through the deployed Netlify PR28 function back to AWS, runs the check and validates the results before reporting success. Failures roll back this service/config/route change. Existing app/journal services and daily timer must stay active. The production journal database and open paper/real positions are never opened by this host.
+
+This completes the simulation connection, not real-money activation. The credential-loading trading host, trusted live strategy/data integration, continuous order/feed worker and real broker order/stop verification are still required before any real-money release. No browser switch enables real money in this version.

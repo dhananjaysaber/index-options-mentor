@@ -91,7 +91,14 @@ class Orders:
         payload = json.loads(entry['payload'])
         return self._submit(intent_id, {**payload, 'side': -1, 'qty': quantity, 'limitPrice': price}, entry_id)
 
-    def _submit(self, intent_id, payload, parent_id=None, cash_available=None, fee_reserve=0):
+    def submit_protection(self, intent_id, entry_id, stop_price, limit_price, quantity):
+        entry=self.get(entry_id)
+        if not entry or entry['parent_id']: raise ValueError('UNKNOWN_ENTRY')
+        payload=json.loads(entry['payload'])
+        return self._submit(intent_id,{**payload,'side':-1,'type':4,'stopPrice':stop_price,
+                            'limitPrice':limit_price,'qty':quantity},entry_id,protection=True)
+
+    def _submit(self, intent_id, payload, parent_id=None, cash_available=None, fee_reserve=0, protection=False):
         if str(uuid.UUID(intent_id)) != intent_id:
             raise ValueError('INVALID_INTENT_ID')
         quantity, price = payload.get('qty'), payload.get('limitPrice')
@@ -100,14 +107,16 @@ class Orders:
         if (set(payload) - allowed or
                 not re.fullmatch(r'NSE:NIFTY[A-Z0-9]+(?:CE|PE)', str(payload.get('symbol',''))) or
                 type(payload.get('side')) is not int or payload.get('side') != (-1 if parent_id else 1) or
-                type(payload.get('type')) is not int or payload.get('type') != 1 or payload.get('productType') != 'INTRADAY' or
+                type(payload.get('type')) is not int or payload.get('type') != (4 if protection else 1) or payload.get('productType') != 'INTRADAY' or
                 payload.get('validity') != 'DAY' or payload.get('offlineOrder') is not False or
-                payload.get('stopPrice', 0) != 0 or payload.get('disclosedQty', 0) != 0 or
+                (not protection and payload.get('stopPrice', 0) != 0) or payload.get('disclosedQty', 0) != 0 or
                 payload.get('isSliceOrder', False) is not False or
                 type(quantity) is not int or quantity < 1 or
                 isinstance(price, bool) or not isinstance(price, (int,float)) or
                 not math.isfinite(price) or price <= 0):
             raise ValueError('INVALID_ENTRY_ORDER' if not parent_id else 'INVALID_EXIT_ORDER')
+        if protection and (not parent_id or isinstance(payload.get('stopPrice'),bool) or not isinstance(payload.get('stopPrice'),(int,float)) or not math.isfinite(payload['stopPrice']) or payload['stopPrice'] <= price):
+            raise ValueError('INVALID_PROTECTIVE_STOP')
         if getattr(self.broker,'send_enabled',True) is not True:
             raise ValueError('FYERS_SEND_DISABLED')
         body = encoded(payload)
@@ -194,6 +203,8 @@ class Orders:
             raise ValueError('BROKER_ORDER_MISMATCH')
         if order.get('clientId',self.account_id) != self.account_id:
             raise ValueError('ACCOUNT_MISMATCH')
+        if expected['type']==4 and (order.get('type')!=4 or order.get('productType')!='INTRADAY'):
+            raise ValueError('BROKER_PROTECTION_MISMATCH')
         filled, remaining, price = order.get('filledQty'), order.get('remainingQuantity'), order.get('tradedPrice')
         if type(filled) is not int or type(remaining) is not int or min(filled,remaining) < 0 or filled+remaining != expected['qty']:
             raise ValueError('INVALID_BROKER_FILL')
@@ -238,6 +249,10 @@ class Orders:
                  'openedAt':entry['created_at'],'closedAt':now,'closedBy':'AWS',
                  'exitReason':'BROKER_CONFIRMED_EXIT','brokerOrderPlaced':True,
                  'entryOrderId':entry['broker_id'], 'exitOrderIds':[r['broker_id'] for r in exits if r['filled_qty']]}
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='live_managed_positions'").fetchone():
+            managed=db.execute('SELECT exit_reason FROM live_managed_positions WHERE id=?',(entry_id,)).fetchone()
+            if managed and managed['exit_reason']: trade['exitReason']=managed['exit_reason']
+            elif any(json.loads(r['payload'])['type']==4 and r['filled_qty'] for r in exits): trade['exitReason']='BROKER_PROTECTIVE_STOP'
         event = {'id':entry_id+':BROKER_CLOSED','type':'TRADE_CLOSED','queuedAt':now,'trade':trade}
         db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)',(event['id'],encoded(event)))
 

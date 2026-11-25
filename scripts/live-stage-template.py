@@ -67,7 +67,7 @@ def main():
         for path,content in package['files'].items():
             file=stage/path; file.parent.mkdir(parents=True,exist_ok=True); file.write_text(content)
         copied=stage/'aws/journal/store.py'; copied.parent.mkdir(parents=True); shutil.copyfile(source,copied)
-        manifest={'packageSha256':PACKAGE_HASH,'sourceCommit':package['source'],
+        manifest={'packageSha256':PACKAGE_HASH,'packageSource':package['source'],
                   'journalStoreSha256':hashlib.sha256(copied.read_bytes()).hexdigest(),
                   'tradingEnabled':False,'serviceInstalled':False,'credentialsRead':False}
         (stage/'installed.json').write_text(json.dumps(manifest,indent=2)+'\n')
