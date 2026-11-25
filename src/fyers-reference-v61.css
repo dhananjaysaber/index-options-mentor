@@ -259,3 +259,14 @@ html[data-theme] #root .premium-design-shell :is(.mentor-footer,.scalp-footer){d
  html[data-theme] #root .premium-design-shell .fyers-ref-tag{font-size:8px;padding:3px 4px}
  html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:5px}
 }
+
+/* A simulated Scalp position always exposes its actual SELL action above the bottom rail. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-sell:not(:disabled){display:block!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions:has(.fyers-ref-scalp-sell:not(:disabled)) .fyers-ref-scalp-buy{display:none!important}
+}
+/* Browsing/scrolling on top of the chart must scroll the whole trading page. */
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas-wrap,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{
+ overscroll-behavior:auto!important;
+}
