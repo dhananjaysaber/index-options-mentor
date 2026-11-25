@@ -110,6 +110,8 @@ test('no auto-sell on stale NIFTY, stale option, invalid option or invalid targe
 
 test('integration preserves option-profit trail, stop, Scalp and journal', () => {
   const app = readFileSync(new URL('../src/AppV3.jsx', import.meta.url), 'utf8');
+  const managed = readFileSync(new URL('../src/engine/managedPosition.js', import.meta.url), 'utf8');
+  assert.match(app, /updateLivePosition/);
   const panel = readFileSync(new URL('../src/components/LivePositionPanel.jsx', import.meta.url), 'utf8');
   const history = readFileSync(new URL('../src/components/History.jsx', import.meta.url), 'utf8');
   assert.match(app, /computeCoreTargetIndexTrail/);
@@ -117,7 +119,7 @@ test('integration preserves option-profit trail, stop, Scalp and journal', () =>
   assert.match(app, /CORE_TARGET_INDEX_TRAIL/);
   assert.match(app, /isCoreOptionTrailBreached\(corePosition\)/);
   assert.match(app, /SCALP_OPTION_PROFIT_TRAIL/);
-  assert.match(app, /lastUnderlyingQuoteAt:/);
+  assert.match(managed, /lastUnderlyingQuoteAt:/);
   assert.match(panel, /TARGET-BASED NIFTY TRAIL/);
   assert.match(history, /CORE_TARGET_INDEX_TRAIL/);
 });

@@ -78,12 +78,14 @@ test('never auto-exit an option position using stale, absent or index-only data'
 
 test('integration keeps the index-R trail, stop, target and 12m time limit independent', () => {
   const app = read('src/AppV3.jsx');
-  assert.match(app, /const trail = scalpTrail\(bestR, current.scalpTrailingFloorR\)/);
+  const managed = read('src/engine/managedPosition.js');
+  assert.match(app, /updateLivePosition/);
+  assert.match(managed, /const trail = scalpTrail\(bestR, current.scalpTrailingFloorR\)/);
   assert.match(app, /SCALP_TRAILING_STOP/);
   assert.match(app, /SCALP_OPTION_PROFIT_TRAIL/);
   assert.match(app, /SCALP_TIME_EXIT/);
   assert.match(app, /computeScalpOptionTrail/);
-  assert.match(app, /lastOptionQuoteAt: hasCurrentOptionQuote/);
+  assert.match(managed, /lastOptionQuoteAt: hasCurrentOptionQuote/);
   assert.match(app, /isScalpOptionTrailBreached\(scalpPosition\)/);
   assert.match(app, /scalpPosition\?\.lastOptionQuoteAt/);
   assert.doesNotMatch(app, /StockScanner|StockPaperPosition/);
