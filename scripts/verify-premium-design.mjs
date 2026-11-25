@@ -34,7 +34,7 @@ try {
   await page.locator('.fyers-ref-decision:visible').waitFor();
   await page.waitForFunction(() => {
     const points = document.querySelector('.fyers-ref-core .fyers-ref-price-line')?.getAttribute('points');
-    return Boolean(points && points.trim().split(/\\s+/).length >= 8);
+    return Boolean(points && points.trim().split(/\s+/).length >= 8);
   }, null, { timeout: 10000 });
   assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),4,
     'Reference Core chart has real 1m, 3m, 5m and 15m choices');
@@ -58,7 +58,7 @@ try {
       if(label==='scalp'){
         await page.waitForFunction(() => {
           const points = document.querySelector('.fyers-ref-scalp .fyers-ref-price-line')?.getAttribute('points');
-          return Boolean(points && points.trim().split(/\\s+/).length >= 8);
+          return Boolean(points && points.trim().split(/\s+/).length >= 8);
         }, null, { timeout: 10000 });
         assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),3,
           'Scalp reference chart has real 1m, 3m and 5m choices');
