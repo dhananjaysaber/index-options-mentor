@@ -17,7 +17,7 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(()=>{
     localStorage.setItem('index-options-mentor-settings-v2',JSON.stringify({mentorAutoOpen:false,scalpAutoOpen:false,mentorAutoClose:false,scalpAutoClose:false}));
-    localStorage.setItem('index-options-mentor-history-v05',JSON.stringify([{id:'isolated-design-history',symbol:'NSE:NIFTY26D0126000CE',side:'CE',entry:230,exit:240,quantity:130,lots:2,pnl:1300,rAchieved:.5,strategyFamily:'CORE',strategyTier:'FULL',initiatedBy:'USER',openedAt:'2026-11-25T04:00:00Z',closedAt:'2026-11-25T04:05:00Z'}]));
+    localStorage.setItem('index-options-mentor-history-v05',JSON.stringify([{id:'isolated-design-history',symbol:'NSE:NIFTY26D0126000CE',side:'CE',entry:230,exit:240,quantity:130,lots:2,pnl:228614.75,rAchieved:.5,strategyFamily:'CORE',strategyTier:'FULL',initiatedBy:'USER',openedAt:'2026-11-25T04:00:00Z',closedAt:'2026-11-25T04:05:00Z'}]));
   });
   await page.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
@@ -47,6 +47,18 @@ try {
     const mobile=width<=900;
     const nav=mobile?page.locator('.premium-mobile-bottom-nav'):page.locator('.mentor-sidebar-v2');
     const go=async name=>nav.getByRole('button',{name:new RegExp(name,'i')}).first().click();
+    if (mobile) {
+      const header=page.locator('.fyers-ref-mobile-header');
+      await header.waitFor({state:'visible'});
+      const headerBounds=await header.boundingBox();
+      const menu=header.getByRole('button',{name:'Open menu'});
+      assert.ok(headerBounds && headerBounds.x>=0 && headerBounds.x+headerBounds.width<=width+1,
+        'Mobile market header stays in the viewport');
+      assert.ok(await menu.isVisible(), 'Hamburger is always visible on mobile');
+      await menu.click();
+      await page.locator('.mentor-mobile-drawer:visible').waitFor();
+      await page.getByRole('button',{name:'Close menu'}).click();
+    }
     for(const [view,label] of [['Trade','core'],['Scalp','scalp'],['Positions','positions'],['Journal','journal'],['Settings','settings']]){
       await go(view==='Trade'&&!mobile?'13-Point':view);
       if(label==='settings'){await page.getByRole('button',{name:/Advanced connection and full settings/}).click();await page.getByText('Buying is OFF',{exact:true}).waitFor();}
@@ -73,8 +85,47 @@ try {
         assert.ok(chart && chart.x >= 0 && chart.x + chart.width <= width + 1,
           'The full reference NIFTY SVG scales into the mobile chart instead of clipping the line');
       }
-      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.fyers-ref-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
+      if(label==='core'){
+        const workflow=page.locator('.mentor-workflow:visible').first();
+        if(await workflow.count()){
+          const box=await workflow.boundingBox();
+          console.log('Workflow geometry',JSON.stringify({width,box}));
+          assert.ok(box.height<165,'Seven-stage live path stays compact');
+          const steps=workflow.locator('.workflow-step');
+          assert.equal(await steps.count(),7,'All seven workflow stages render');
+          if(mobile){
+            const cards=await steps.evaluateAll(nodes=>nodes.map(node=>{
+              const r=node.getBoundingClientRect();
+              return {x:r.x,y:r.y,width:r.width,height:r.height};
+            }));
+            assert.ok(cards[0].y===cards[3].y && cards[4].y>cards[3].y,'Mobile workflow uses a four-card first row');
+            assert.ok(cards[6].width >= cards[5].width*1.6,'Seventh stage spans final two columns');
+          }
+        }
+        if(mobile){
+          assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');
+          assert.equal(await page.locator('.fyers-ref-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');
+          const buy=page.locator('.fyers-ref-core .strategy-quick-buy');
+          const sell=page.locator('.fyers-ref-core .strategy-quick-sell');
+          for(const action of [buy,sell]){
+            const button=await action.boundingBox();
+            const text=await action.locator('span').boundingBox();
+            assert.ok(button && text && text.x>=button.x && text.x+text.width<=button.x+button.width+1,
+              'BUY and SELL labels remain centred inside their buttons');
+          }
+        }
+      }
       if(label==='journal'){
+        if(mobile){
+          const metrics=page.locator('.fyers-ref-journal .history-summary-card');
+          assert.equal(await metrics.count(),6);
+          const overflow=await metrics.evaluateAll(nodes=>nodes.some(node=>{
+            const strong=node.querySelector('strong');
+            return strong && (strong.getBoundingClientRect().right>node.getBoundingClientRect().right+1
+              || strong.scrollWidth>strong.clientWidth+1);
+          }));
+          assert.equal(overflow,false,'Journal P&L and other metrics fit their own cards');
+        }
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();
         await row.getByRole('button',{name:'Analyse trade',exact:true}).click();
