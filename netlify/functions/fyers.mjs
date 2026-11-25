@@ -8,6 +8,8 @@ const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
 const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
 const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
+// Only these two owned previews can hand off an encrypted session.
+const PREVIEW_ORIGINS = new Set(['https://deploy-preview-28--optionsmentor.netlify.app', 'https://deploy-preview-30--optionsmentor.netlify.app']);
 const researchHistoryCache = new Map();
 
 function json(data, status = 200, headers = {}) {
@@ -95,6 +97,7 @@ function validateReturnTo(value, backendOrigin) {
   try {
     const url = new URL(value);
     if (url.origin === backendOrigin) return url.toString();
+    if (PREVIEW_ORIGINS.has(backendOrigin) && PREVIEW_ORIGINS.has(url.origin)) return url.toString();
     if (url.origin === GITHUB_PAGES_ORIGIN && GITHUB_PAGES_PATHS.some(path => url.pathname.startsWith(path))) return url.toString();
   } catch {}
   return '';
@@ -377,7 +380,7 @@ async function handleCallback(request) {
     const returnTo = readState(url.searchParams.get('state'), url.origin);
     const destination = new URL(returnTo);
     destination.searchParams.set('fyers', 'connected');
-    if (destination.origin === GITHUB_PAGES_ORIGIN) destination.hash = `fyers_session=${encodeURIComponent(encrypted)}`;
+    if (destination.origin === GITHUB_PAGES_ORIGIN || (PREVIEW_ORIGINS.has(url.origin) && PREVIEW_ORIGINS.has(destination.origin) && destination.origin !== url.origin)) destination.hash = `fyers_session=${encodeURIComponent(encrypted)}`;
 
     return new Response(null, {
       status: 302,
@@ -587,3 +590,4 @@ export default async (request) => {
   }
   return withCors(response, request);
 };
+
