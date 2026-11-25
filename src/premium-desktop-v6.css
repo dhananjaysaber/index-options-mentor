@@ -210,7 +210,7 @@
 @media (min-width: 821px) {
   .premium-fintech-shell .mentor-v2-content:has(> .desktop-core-layout) { display: block !important; }
   .premium-fintech-shell .mentor-v2-content > .premium-feed-status {
-    width: 100%; min-width: 0; margin-bottom: 18px;
+    width: 100%; max-width: none !important; min-width: 0; margin-bottom: 18px;
   }
   .premium-fintech-shell .desktop-core-layout {
     display: grid !important;

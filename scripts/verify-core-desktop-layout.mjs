@@ -28,6 +28,7 @@ try{
     await page.setViewportSize({width,height:1152});
     const feed=await page.locator('.premium-feed-status').boundingBox(),outer=await layout.boundingBox(),left=await plan.boundingBox(),right=await checklist.boundingBox();
     assert.ok(feed&&outer&&left&&right);
+    console.log('Core geometry',JSON.stringify({width,feed,outer,left,right}));
     assert.ok(feed.width>=outer.width-4,'Data banner must span available content width');
     assert.ok(left.width>=300,'Trade plan must not collapse into a narrow column');
     assert.ok(right.width>=300,'Checklist must stay readable');
