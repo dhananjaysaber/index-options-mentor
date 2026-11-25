@@ -387,3 +387,17 @@ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart
    Existing level tiles duplicate its market state and consume the entire screen. */
 html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-level-strip,
 html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-rule-note{display:none!important}
+
+/* Mobile SVG must scale to the 390px handoff chart width, not the legacy 700px
+   horizontally clipped canvas. The line was otherwise off-screen. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{
+   display:block!important;width:100%!important;max-width:100%!important;min-width:0!important;
+   height:130px!important;min-height:0!important;max-height:130px!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas-wrap,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{
+   width:100%!important;overflow:hidden!important;
+ }
+}
