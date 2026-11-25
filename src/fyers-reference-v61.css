@@ -306,3 +306,49 @@ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .fyers-ref-p
   html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas,
   html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{height:130px!important;min-height:0!important;max-height:130px!important;}
 }
+
+/* Reference Settings first-screen: compact grouped controls from supplied design,
+   with full real-money safeguards and the old detailed settings preserved underneath. */
+html[data-theme] #root .premium-design-shell .fyers-ref-settings{max-width:760px}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-group{margin:0 0 8px}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-group>h2{
+  color:#8C97A8!important;font-size:10px!important;letter-spacing:.09em!important;
+  font-weight:700!important;padding:2px 2px 5px!important;margin:0!important;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-group>h2+.fyers-ref-settings-row{border-top:1px solid #1F2733!important;border-radius:9px 9px 0 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row{
+  min-height:36px;display:flex;align-items:center;justify-content:space-between;width:100%;
+  gap:10px;margin:0;padding:7px 12px;background:#121823!important;border:0!important;
+  border-left:1px solid #1F2733!important;border-right:1px solid #1F2733!important;
+  border-bottom:1px solid #1F2733!important;color:#DCE4F0!important;
+  border-radius:0;box-shadow:none!important;text-align:left;font-size:12px;font-weight:500;line-height:1.2;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row:last-child{border-radius:0 0 9px 9px}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{font-size:11px;font-weight:650;color:#9AA3B2;white-space:nowrap;text-align:right}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong.positive{color:#2ECC8F!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row{justify-content:flex-start;cursor:pointer}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row>span{flex:1}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row input{position:absolute;opacity:0;width:1px;height:1px}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row i{
+  display:block;width:36px;height:20px;background:#414b59;border-radius:16px;position:relative;flex:none;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row i::before{
+  content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#F5F6F8;border-radius:50%;transition:transform .15s;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row input:checked+i{background:#2ECC8F}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row input:checked+i::before{transform:translateX(16px)}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row input:focus-visible+i{outline:2px solid #5B8CFF;outline-offset:2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-expand-settings{
+  width:100%;min-height:42px;margin:6px 0;background:#1E2A44!important;border:1px solid #31466C!important;
+  border-radius:8px;color:#9FB9FF!important;font-weight:650;font-size:12px;
+  display:flex;align-items:center;justify-content:space-between;padding:10px 12px;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-full-settings.collapsed{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-full-settings.open{display:block!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-full-settings.open .settings-hero{display:none!important}
+@media(max-width:900px){
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-group{margin-bottom:7px}
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-row{min-height:33px;padding:6px 10px;font-size:11px}
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-group>h2{font-size:9px!important;padding-bottom:4px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{font-size:10px}
+}
