@@ -5,7 +5,12 @@ function fmt(value) {
 }
 
 export default function TraderMarketPanel({ snapshot }) {
-  if (!snapshot) return null;
+  if (!snapshot) return <section className="panel trader-market-panel premium-market-empty" aria-label="Market connection needed">
+    <div className="eyebrow">MARKET VIEW</div><h2>Waiting for your live connection</h2>
+    <p>Connect FYERS above or from the menu to load the chart, current prices and Mentor's trade plan.</p>
+    <div className="premium-empty-chart" aria-hidden="true"><span>Live chart appears here</span></div>
+    <small>No prices or trade suggestions are shown until market data is available.</small>
+  </section>;
   const { market, decision, parameters = [] } = snapshot;
 
   const metrics = [

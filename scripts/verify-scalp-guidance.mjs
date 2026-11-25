@@ -73,7 +73,7 @@ try {
 
   const trailText = await trail.innerText();
   assert.match(trailText, /OPTION PROFIT TRAIL/);
-  assert.match(trailText, /ARMED/);
+  assert.match(trailText, /ACTIVE · exit threshold/);
   assert.match(trailText, /4,000/);
   assert.match(trailText, /8,000/);
 
@@ -92,10 +92,15 @@ try {
       secondary: small.color
     };
   });
-  assert.equal(colors.background, 'rgb(57, 45, 27)',
-    'Caution card must have high-contrast dark-amber background');
-  assert.equal(colors.foreground, 'rgb(255, 243, 216)',
-    'Guidance main message must be legible on dark amber');
+  const luminance = color => {
+    const channels = color.match(/[\d.]+/g).slice(0,3).map(Number).map(v => {
+      const x=v/255; return x<=.04045 ? x/12.92 : ((x+.055)/1.055)**2.4;
+    });
+    return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722;
+  };
+  const contrast = (a,b) => (Math.max(luminance(a),luminance(b))+.05)/(Math.min(luminance(a),luminance(b))+.05);
+  assert.ok(contrast(colors.background,colors.foreground)>=4.5,'Guidance message retains readable contrast');
+  assert.ok(contrast(colors.background,colors.secondary)>=4.5,'Guidance detail retains readable contrast');
 
   await guidance.evaluate(el => window.scrollTo({
     top: window.scrollY + el.getBoundingClientRect().top - 160
@@ -117,3 +122,4 @@ try {
   if (browser) await browser.close();
   server.kill('SIGTERM');
 }
+
