@@ -43,7 +43,7 @@ try{
   const nav=page.locator('.mentor-sidebar-v2 .sidebar-nav-button').filter({hasText:'Positions'}).first();
   await nav.hover();
   const contrast=await nav.evaluate(button=>{
-    const rgb=text=>text.match(/[\\d.]+/g).slice(0,3).map(Number);
+    const rgb=text=>text.match(/[0-9.]+/g).slice(0,3).map(Number);
     const luminance=rgb=>rgb.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
     const fg=luminance(rgb(getComputedStyle(button.querySelector('strong')).color));
     const bg=luminance(rgb(getComputedStyle(button).backgroundColor));
