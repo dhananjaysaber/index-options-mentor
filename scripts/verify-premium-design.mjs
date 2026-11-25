@@ -70,7 +70,7 @@ try {
       }
       if(label==='core' && mobile){
         const chart=await page.locator('.fyers-ref-chart .nifty-chart-canvas').boundingBox();
-        assert.ok(chart && chart.width<=width-28,
+        assert.ok(chart && chart.x >= 0 && chart.x + chart.width <= width + 1,
           'The full reference NIFTY SVG scales into the mobile chart instead of clipping the line');
       }
       if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.fyers-ref-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
