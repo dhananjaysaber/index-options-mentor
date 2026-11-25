@@ -32,6 +32,12 @@ try {
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.fyers-ref-decision:visible').waitFor();
+  await page.waitForFunction(() => {
+    const points = document.querySelector('.fyers-ref-core .fyers-ref-price-line')?.getAttribute('points');
+    return Boolean(points && points.trim().split(/\\s+/).length >= 8);
+  }, null, { timeout: 10000 });
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),4,
+    'Reference Core chart has real 1m, 3m, 5m and 15m choices');
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
@@ -50,6 +56,12 @@ try {
         assert.ok(boxes.every(b=>b.width>=44&&b.height>=44),'Navigation tap targets');
       }
       if(label==='scalp'){
+        await page.waitForFunction(() => {
+          const points = document.querySelector('.fyers-ref-scalp .fyers-ref-price-line')?.getAttribute('points');
+          return Boolean(points && points.trim().split(/\\s+/).length >= 8);
+        }, null, { timeout: 10000 });
+        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),3,
+          'Scalp reference chart has real 1m, 3m and 5m choices');
         const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
