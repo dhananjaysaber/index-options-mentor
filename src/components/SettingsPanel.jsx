@@ -7,6 +7,7 @@ export default function SettingsPanel({ settings, onSave }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sizingError, setSizingError] = useState('');
+  const dirty = Object.keys({ ...settings, ...draft }).some(key => draft[key] !== settings[key]);
 
   useEffect(() => setDraft(settings), [settings]);
 
@@ -50,7 +51,7 @@ export default function SettingsPanel({ settings, onSave }) {
           <p>Set your trade amount, check the real-money connection and manage your paper-trading settings.</p>
         </div>
         <span className={`settings-save-state ${saving ? 'saving' : saved ? 'success' : ''}`} aria-live="polite">
-          {saving ? 'Saving settings…' : saved ? 'Settings saved successfully' : 'Changes not saved'}
+          {saving ? 'Saving settings…' : saved ? 'Settings saved successfully' : dirty ? 'Changes not saved' : 'Settings ready'}
         </span>
       </div>
 
@@ -81,12 +82,12 @@ export default function SettingsPanel({ settings, onSave }) {
           <Toggle checked={draft.experimentalResearch} onChange={value => update('experimentalResearch', value)} title="3/5 experimental research" copy="Track 3/5 mandatory + at least 6/8 confirmation setups when hard safety gates still pass. Research only." />
         </SettingsCard>
 
-        <SettingsCard title="FYERS live handoff" copy="Prepare the Mentor's current order plan for manual review in FYERS. No broker order is submitted from this PWA.">
+        <SettingsCard title="Copy a plan to FYERS" copy="Optional: copy Mentor’s plan and open FYERS to place the trade there yourself.">
           <Toggle checked={draft.liveHandoffEnabled !== false} onChange={value => update('liveHandoffEnabled', value)} title="Show live handoff" copy="Show the current symbol, lots, quantity, reference price, NIFTY stop and target with Copy Plan and Open FYERS actions." />
-          <div className="settings-note"><strong>Execution boundary:</strong> the Mentor can prepare and validate the order plan, but placing, modifying and cancelling a real FYERS order remains a separate confirmation inside FYERS.</div>
+          <div className="settings-note">When using this manual handoff, you place and manage the order in FYERS. The real-money connection above is a separate way to submit a reviewed plan.</div>
         </SettingsCard>
 
-        <SettingsCard title="What stays non-negotiable" copy="Automation does not override these protections.">
+        <SettingsCard title="Rules Mentor always checks" copy="Switching on automation does not bypass these trading rules.">
           <div className="locked-rules">
             <span>Live regular-session data</span>
             <span>Completed 5-minute confirmation</span>

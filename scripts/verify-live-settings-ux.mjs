@@ -25,7 +25,7 @@ try{
     return route.fulfill({status:401,contentType:'application/json',body:'{"error":"Offline UI test"}'});
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
-  await page.locator('.mentor-sidebar-v2').getByRole('button',{name:'Settings',exact:true}).click();
+  await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
   const card=page.getByRole('region',{name:'Real-money trading setup'});
   await card.waitFor({state:'visible'});
   assert.match(await card.innerText(),/Connection not checked/);

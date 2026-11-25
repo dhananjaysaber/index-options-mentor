@@ -38,8 +38,10 @@ export default function LiveOrderPanel({ tradeAmount }) {
         FYERS_ACCOUNT_NOT_VERIFIED: 'Your FYERS login could not be checked. Reconnect FYERS and try again.',
         ACCOUNT_DOES_NOT_MATCH_AWS: 'This FYERS login does not match the trading account saved on your server.'
       };
-      const fallback = ['prepare', 'settings'].includes(action)
+      const fallback = action === 'prepare'
         ? 'A trade plan could not be prepared. No buy request was sent. Check the connection and try again when Mentor has a current setup.'
+        : action === 'settings' ? 'The setting change could not be confirmed. Refresh the connection to check your current settings.'
+        : action === 'stop' ? 'New entries could not be confirmed as paused. Refresh the connection before continuing.'
         : action === 'submit' || action === 'exit'
           ? 'The trade status is unclear. Check your FYERS orders before trying again.'
           : 'The trading connection could not be checked. Try again shortly.';
