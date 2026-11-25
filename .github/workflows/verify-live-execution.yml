@@ -5,6 +5,10 @@ on:
       - 'aws/live/**'
       - 'aws/journal/store.py'
       - 'tests/live_*test.py'
+      - 'tests/test_live_stage_installer.py'
+      - 'public/iom-live-stage.py'
+      - 'scripts/build-live-stage.py'
+      - 'scripts/live-stage-template.py'
       - '.github/workflows/verify-live-execution.yml'
   workflow_dispatch:
 permissions:
@@ -19,3 +23,9 @@ jobs:
           python-version: '3.12'
       - name: Entries, owned exits, HTTP authentication, restart, journal and backup
         run: python3 -m unittest discover -s tests -p 'live_*test.py' -v
+      - name: Verify reproducible disabled installer and isolated installation
+        run: |
+          cp public/iom-live-stage.py /tmp/iom-live-stage.expected.py
+          python3 scripts/build-live-stage.py
+          cmp /tmp/iom-live-stage.expected.py public/iom-live-stage.py
+          python3 -m unittest discover -s tests -p 'test_live_stage_installer.py' -v
