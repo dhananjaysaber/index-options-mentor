@@ -270,3 +270,39 @@ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canva
 html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{
  overscroll-behavior:auto!important;
 }
+
+/* Source screenshot correction: the inherited market panel forced an empty
+   296px minimum even when the reference chart only occupies ~130px. */
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .trader-market-panel,
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-strategy-chart,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-strategy-chart{
+  display:block!important;height:auto!important;min-height:0!important;max-height:none!important;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{display:block!important;}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .fyers-ref-price-line,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .fyers-ref-price-line{filter:drop-shadow(0 1px 3px rgba(46,204,143,.18));}
+@media(max-width:900px){
+  html[data-theme] #root .premium-design-shell .fyers-ref-data-warning{
+    display:flex!important;flex-wrap:nowrap!important;min-height:32px!important;
+    padding:5px 9px!important;margin-bottom:8px!important;gap:6px!important;align-items:center!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-data-warning strong{font-size:10px!important;line-height:1.2!important;flex:1}
+  html[data-theme] #root .premium-design-shell .fyers-ref-data-warning span{display:none!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-data-warning button{flex:none;padding:4px 8px!important;font-size:10px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .trader-market-panel,
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-strategy-chart,
+  html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-strategy-chart{
+    height:auto!important;min-height:0!important;max-height:none!important;
+  }
+  html[data-theme] #root .premium-design-shell .premium-market-context{
+    position:absolute!important;display:flex!important;left:81px!important;right:auto!important;top:21px!important;
+    gap:6px!important;font-size:9px!important;white-space:nowrap!important;max-width:235px!important;overflow:hidden!important;
+  }
+  html[data-theme] #root .premium-design-shell .premium-market-context b{font-size:9px!important}
+  html[data-theme] #root .premium-design-shell .premium-market-symbol>span{font-size:9px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas-wrap,
+  html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{height:130px!important;max-height:130px!important;min-height:0!important;}
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas,
+  html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{height:130px!important;min-height:0!important;max-height:130px!important;}
+}
