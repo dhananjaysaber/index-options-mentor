@@ -175,7 +175,7 @@ html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{flex
   /* Paper BUY / SELL: readable single-line text centred inside tap-sized controls. */
   html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions,
   html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions{
-    padding:9px 16px calc(9px + env(safe-area-inset-bottom,0px) * 0)!important;
+    padding:9px 16px!important;
     gap:7px!important;min-height:0!important;
   }
   html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions{
@@ -229,4 +229,16 @@ html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{flex
   html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol>span{max-width:115px}
   html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-track{column-gap:5px!important;row-gap:5px!important}
   html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step{padding:5px 2px!important}
+}
+
+/* Menu drawer always overlays the mobile market header when opened. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .mentor-drawer-backdrop{
+   position:fixed!important;inset:0!important;z-index:1400!important;
+ }
+ html[data-theme] #root .premium-design-shell .mentor-mobile-drawer{
+   position:absolute!important;top:0!important;right:0!important;
+   height:100%!important;max-height:100%!important;overflow-y:auto!important;
+   width:min(90vw,370px)!important;background:#111925!important;
+ }
 }
