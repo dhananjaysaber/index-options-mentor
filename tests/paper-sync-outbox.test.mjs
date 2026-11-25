@@ -1,0 +1,125 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  queuePaperOpen,
+  queuePaperClose,
+  acknowledgeAwsPaperExit,
+  flushPaperSyncQueue,
+  pollPaperMonitor,
+  findVerifiedAwsPaperExit
+} from '../src/services/paperSync.js';
+
+const KEY = 'iom-paper-sync-outbox-v1';
+const memory = new Map();
+const events = [];
+globalThis.localStorage = {
+  getItem: key => memory.get(key) ?? null,
+  setItem: (key, value) => memory.set(key, value),
+  removeItem: key => memory.delete(key)
+};
+globalThis.document = { visibilityState: 'visible' };
+globalThis.window = {
+  dispatchEvent(event) { events.push(event); }
+};
+globalThis.CustomEvent = class {
+  constructor(type, options) { this.type = type; this.detail = options?.detail; }
+};
+
+const make = () => ({
+  id: crypto.randomUUID(),
+  mode: 'SIMULATION',
+  strategyFamily: 'CORE',
+  openedAt: new Date().toISOString(),
+  side: 'CE', symbol: 'NSE:NIFTY26NOV25650CE',
+  entry: 100, underlyingEntry: 25650, underlyingStop: 25550,
+  underlyingTarget: 25850, lotSize: 65, lots: 1, quantity: 65
+});
+
+test('stale browser positions do not enter AWS sync queue', () => {
+  memory.clear();
+  const old = make();
+  old.openedAt = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+  queuePaperOpen('core', old);
+  assert.equal(JSON.parse(memory.get(KEY) || '[]').length, 0);
+  assert.ok(events.some(e => e.detail?.status === 'POSITION_TOO_OLD_FOR_AWS_SYNC'));
+});
+
+test('queued open then close are both retained if network is offline', async () => {
+  memory.clear();
+  const position = make();
+  globalThis.fetch = async () => { throw Error('offline'); };
+  queuePaperOpen('core', position);
+  queuePaperClose('core', position.id);
+  await flushPaperSyncQueue();
+  assert.deepEqual(JSON.parse(memory.get(KEY)).map(x => x.action), ['sync', 'reconcile']);
+});
+
+test('acknowledging AWS paper exit clears only matching position jobs', async () => {
+  memory.clear();
+  globalThis.fetch = async () => { throw Error('offline'); };
+  const a = make();
+  const b = { ...make(), strategyFamily: 'SCALP' };
+  queuePaperOpen('core', a);
+  queuePaperClose('core', a.id);
+  queuePaperOpen('scalp', b);
+  acknowledgeAwsPaperExit('core', a.id);
+  await flushPaperSyncQueue();
+  assert.equal(JSON.parse(memory.get(KEY)).length, 1);
+  assert.equal(JSON.parse(memory.get(KEY))[0].strategy, 'scalp');
+});
+
+test('AWS monitor receipt emits read-only event', async () => {
+  events.length = 0;
+  globalThis.fetch = async () => Response.json({
+    bridge: 'AUTHENTICATED',
+    paperSync: { recentlyClosed: [{ id: 'paper-id', strategy: 'core', exitPrice: 120 }] }
+  });
+  await pollPaperMonitor();
+  assert.ok(events.some(event =>
+    event.type === 'mentor:paper-sync-status' &&
+    event.detail.recentlyClosed[0].id === 'paper-id'
+  ));
+});
+
+test('AWS receipt requires matching paper-only observed-quote exit', () => {
+  const id = 'a1111111-b222-4333-8444-a55555555555';
+  const valid = {
+    id, strategy: 'core', exitPrice: 108.25,
+    exitPriceSource: 'OBSERVED_OPTION_QUOTE',
+    executionMode: 'PAPER_ONLY', brokerOrderPlaced: false,
+    closedAt: new Date().toISOString()
+  };
+  assert.equal(findVerifiedAwsPaperExit([valid], 'core', id)?.exitPrice, 108.25);
+  assert.equal(findVerifiedAwsPaperExit([valid], 'scalp', id), null);
+  assert.equal(findVerifiedAwsPaperExit([valid], 'core', 'other-id'), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, exitPrice: null }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, executionMode: 'LIVE' }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, brokerOrderPlaced: true }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, exitPriceSource: 'PWA_RECONCILIATION_UNVERIFIED' }], 'core', id), null);
+  assert.equal(findVerifiedAwsPaperExit([{ ...valid, closedAt: new Date(Date.now() + 3600000).toISOString() }], 'core', id), null);
+});
+
+test('SELL queued while open request is pending is not lost', async () => {
+  memory.clear();
+  let finishOpen;
+  const blockedOpen = new Promise(resolve => { finishOpen = resolve; });
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    if (!options?.method) return Response.json({ bridge: 'AUTHENTICATED', paperSync: { recentlyClosed: [] } });
+    const action = String(url).split('/').pop();
+    calls.push(action);
+    if (action === 'sync') await blockedOpen;
+    return Response.json({ accepted: true });
+  };
+
+  const p = make();
+  queuePaperOpen('core', p);
+  queuePaperClose('core', p.id);
+  assert.deepEqual(JSON.parse(memory.get(KEY)).map(x => x.action), ['sync', 'reconcile']);
+  finishOpen();
+  await flushPaperSyncQueue();
+  // A currently-running flush may finish in a later microtask.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(calls, ['sync', 'reconcile']);
+  assert.deepEqual(JSON.parse(memory.get(KEY) || '[]'), []);
+});

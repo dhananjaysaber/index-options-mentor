@@ -12,6 +12,7 @@ import { installShadowResearchEngine } from './services/shadowResearch.js';
 import { installApiBridge } from './services/apiBridge.js';
 import { installFyersRequestGuard } from './services/fyersRequestGuard.js';
 import { installLiveQuoteFeed } from './services/liveQuoteFeed.js';
+import { installPaperSyncQueue } from './services/paperSync.js';
 import './styles.css';
 import './pwa.css';
 import './mobile-fixes.css';
@@ -57,6 +58,7 @@ installFyersRequestGuard();
 // A single shared quote loop keeps NIFTY and the current candidate/open option
 // near-live across the visible Mentor UI without each component polling FYERS.
 installLiveQuoteFeed();
+installPaperSyncQueue();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

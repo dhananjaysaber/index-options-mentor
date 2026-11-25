@@ -54,16 +54,7 @@ export function startTradeJournalBridge() {
   const existingPositions = readActivePositions();
   currentPositionIds = new Set(existingPositions.map(position => position.id));
 
-  // Migrate any browser-only completed trades into the permanent journal.
-  for (const trade of history) {
-    if (!trade?.id || !trade?.closedAt) continue;
-    void queueJournalEvent({
-      eventId: `close:${trade.id}`,
-      type: 'TRADE_CLOSED',
-      trade: withStoredMetrics(trade),
-      source: journalSource(trade, 'browser_migration')
-    });
-  }
+  void migrateLocalCloses(history);
 
   for (const existingPosition of existingPositions) {
     const tracked = updateMetrics(existingPosition);
@@ -89,6 +80,25 @@ export function startTradeJournalBridge() {
   void flushJournalQueue();
 
   return stopTradeJournalBridge;
+}
+
+async function migrateLocalCloses(history) {
+  const completed = history.filter(trade => trade?.id && trade?.closedAt);
+  if (!completed.length) return;
+
+  const remote = await loadRemoteTrades(1000).catch(() => []);
+  const recorded = new Set(remote.map(trade => `${trade.id}:${trade.closedAt}`));
+
+  // Preserve offline closes, but avoid replaying completed trades already in Sheets.
+  for (const trade of completed) {
+    if (recorded.has(`${trade.id}:${trade.closedAt}`)) continue;
+    void queueJournalEvent({
+      eventId: `close:${trade.id}`,
+      type: 'TRADE_CLOSED',
+      trade: withStoredMetrics(trade),
+      source: journalSource(trade, 'browser_migration')
+    });
+  }
 }
 
 export function stopTradeJournalBridge() {

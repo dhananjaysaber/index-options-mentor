@@ -24,6 +24,7 @@ import { derivePositionMentor, deriveScalpPositionMentor } from './engine/positi
 import { buildSimulatedTicket, classifyManualResearchSetup, classifyResearchSetup, tierEnabled } from './engine/researchStrategy.js';
 import { syncJournalHistory } from './services/tradeJournal.js';
 import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
+import { queuePaperOpen, queuePaperClose, acknowledgeAwsPaperExit, findVerifiedAwsPaperExit } from './services/paperSync.js';
 import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
@@ -89,6 +90,8 @@ export default function AppV3() {
   const closingTradeIdsRef = useRef(new Set());
   const positionRefs = useRef({ core: null, scalp: null });
   positionRefs.current = { core: corePosition, scalp: scalpPosition };
+
+
   const [operationError, setOperationError] = useState('');
 
   // A locally displayed quote may look live after an iOS tab resumes.
@@ -105,6 +108,28 @@ export default function AppV3() {
     marketDataReady, clock: marketClock
   });
   const scalpStatus = scalpResearch.evaluation;
+  // Process only a verified AWS paper-exit receipt for this exact local trade.
+  // Never treat a missing AWS position as proof of exit.
+  useEffect(() => {
+    const onPaperSyncStatus = event => {
+      const closed = event?.detail?.recentlyClosed;
+      if (!Array.isArray(closed)) return;
+      for (const strategy of ['core', 'scalp']) {
+        const current = positionRefs.current[strategy];
+        if (!current?.id) continue;
+        const receipt = findVerifiedAwsPaperExit(closed, strategy, current.id);
+        if (!receipt) continue;
+        exitStrategy(strategy, {
+          closedBy: 'AWS_MONITOR',
+          reasonCode: receipt.exitReason || 'AWS_PAPER_EXIT',
+          reason: 'AWS paper monitor exit at observed option quote.',
+          awsReceipt: receipt
+        });
+      }
+    };
+    window.addEventListener('mentor:paper-sync-status', onPaperSyncStatus);
+    return () => window.removeEventListener('mentor:paper-sync-status', onPaperSyncStatus);
+  }, [snapshot, scalpStatus, settings, alertsEnabled]);
 
   const activePosition = strategyMode === 'scalp' ? scalpPosition : corePosition;
   const positionCount = Number(Boolean(corePosition)) + Number(Boolean(scalpPosition));
@@ -143,6 +168,8 @@ export default function AppV3() {
   useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
   useEffect(() => { persistPosition(SCALP_POSITION_KEY, scalpPosition); }, [scalpPosition]);
+  useEffect(() => { if (corePosition?.id) queuePaperOpen('core', corePosition); }, [corePosition?.id]);
+  useEffect(() => { if (scalpPosition?.id) queuePaperOpen('scalp', scalpPosition); }, [scalpPosition?.id]);
   useEffect(() => {
     const journalPosition = activePosition || corePosition || scalpPosition;
     persistPosition(LEGACY_POSITION_KEY, journalPosition);
@@ -552,7 +579,7 @@ export default function AppV3() {
     }
   }
 
-  function exitStrategy(strategy, meta = {}) {
+  async function exitStrategy(strategy, meta = {}) {
     // NEVER call setHistory from inside a setPosition functional updater:
     // React can invoke those updaters during rendering, crashing the PWA.
     // The synchronous ref also prevents double taps / competing auto exits.
@@ -560,9 +587,22 @@ export default function AppV3() {
     if (!current?.id || closingTradeIdsRef.current.has(current.id)) return;
     closingTradeIdsRef.current.add(current.id);
     try {
-      const closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
+      let closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
       if (!Number.isFinite(closed.pnl) || !Number.isFinite(closed.exit)) {
         throw new Error('Cannot record this simulated exit: option price is invalid.');
+      }
+      const usesAwsMonitor = window.location.origin === 'https://deploy-preview-28--optionsmentor.netlify.app';
+      if (usesAwsMonitor && meta.closedBy !== 'AWS_MONITOR') {
+        const receipt = await reconcilePreviewExit(strategy, current.id, meta.closedBy === 'MENTOR');
+        if (receipt) {
+          meta = {
+            closedBy: 'AWS_MONITOR',
+            reasonCode: receipt.exitReason || 'AWS_PAPER_EXIT',
+            reason: 'AWS paper monitor exit at observed option quote.',
+            awsReceipt: receipt
+          };
+          closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
+        }
       }
       // Persist a completed trade before clearing its open-position state.
       // The permanent journal bridge may be temporarily offline.
@@ -570,6 +610,11 @@ export default function AppV3() {
       const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
       localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
       setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
+      if (usesAwsMonitor || meta.closedBy === 'AWS_MONITOR') {
+        acknowledgeAwsPaperExit(strategy, closed.id);
+      } else {
+        queuePaperClose(strategy, closed.id, meta.closedBy === 'MENTOR');
+      }
       positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'] = null;
       if (strategy === 'scalp') setScalpPosition(existing => existing?.id === closed.id ? null : existing);
       else setCorePosition(existing => existing?.id === closed.id ? null : existing);
@@ -852,19 +897,56 @@ function mergeCompletedHistory(local, remote) {
   return result.sort((a, b) => Date.parse(b.closedAt || 0) - Date.parse(a.closedAt || 0)).slice(0, 1000);
 }
 
+async function reconcilePreviewExit(strategy, id, closedByMentor) {
+  const response = await fetch('/api/monitor/reconcile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      strategy,
+      id,
+      reason: closedByMentor ? 'PWA_AUTO_EXIT' : 'USER_EXIT'
+    }),
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10000)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (response.ok && data.result === 'PAPER_POSITION_RECONCILED') return null;
+
+  if (response.ok && data.result === 'ALREADY_CLOSED') {
+    const status = await fetch('/api/monitor/status', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000)
+    });
+    if (status.ok) {
+      const monitor = await status.json();
+      const receipt = findVerifiedAwsPaperExit(monitor.paperSync?.recentlyClosed, strategy, id);
+      if (receipt) return receipt;
+    }
+  }
+
+  throw new Error('AWS could not confirm this paper exit. The journal was left unchanged.');
+}
+
 function closeTrade(current, meta, snapshot, scalpStatus, settings) {
-  const underlyingExit = finite(current.underlyingCurrent) ?? finite(snapshot?.market?.spot) ?? finite(current.underlyingEntry) ?? 0;
-  const optionExit = finite(current.currentPrice) ?? finite(current.entry) ?? 0;
+  const aws = meta?.closedBy === 'AWS_MONITOR' &&
+    meta.awsReceipt?.id === current.id &&
+    meta.awsReceipt?.exitPriceSource === 'OBSERVED_OPTION_QUOTE'
+      ? meta.awsReceipt : null;
+  const underlyingExit = aws && Number.isFinite(aws.underlyingExit)
+    ? aws.underlyingExit
+    : finite(current.underlyingCurrent) ?? finite(snapshot?.market?.spot) ?? finite(current.underlyingEntry) ?? 0;
+  const optionExit = aws && Number.isFinite(aws.exitPrice) && aws.exitPrice > 0
+    ? aws.exitPrice : finite(current.currentPrice) ?? finite(current.entry) ?? 0;
   const entry = finite(current.entry) ?? optionExit;
   const quantity = Math.max(0, Number(current.quantity) || 0);
   const pnl = (optionExit - entry) * quantity;
   const riskPoints = Math.max(0.01, Math.abs(Number(current.underlyingEntry) - Number(current.underlyingStop)));
   const movePoints = current.side === 'CE' ? underlyingExit - Number(current.underlyingEntry) : Number(current.underlyingEntry) - underlyingExit;
   const rAchieved = movePoints / riskPoints;
-  const closedAt = new Date().toISOString();
+  const closedAt = aws?.closedAt || new Date().toISOString();
   const heldMs = Math.max(0, Date.now() - new Date(current.openedAt).getTime());
   const heldMinutes = Math.max(0, Math.round(heldMs / 60000));
-  const currentPnl = finite(current.currentUnrealizedPnl) ?? pnl;
+  const currentPnl = aws ? pnl : finite(current.currentUnrealizedPnl) ?? pnl;
   const peakPnl = finite(current.peakUnrealizedPnl) ?? Math.max(0, currentPnl);
   const maxGivebackPnl = Math.max(0, peakPnl - currentPnl);
 
@@ -878,9 +960,10 @@ function closeTrade(current, meta, snapshot, scalpStatus, settings) {
     heldSeconds: Math.round(heldMs / 1000),
     closedAt,
     closedBy: meta.closedBy || 'USER',
-    exitMethod: (meta.closedBy || 'USER') === 'MENTOR' ? 'AUTO' : 'MANUAL',
+    exitMethod: ['MENTOR', 'AWS_MONITOR'].includes(meta.closedBy) ? 'AUTO' : 'MANUAL',
     exitReasonCode: meta.reasonCode || inferExitReason(current, underlyingExit),
     exitReason: meta.reason || 'Manual simulated exit.',
+    ...(aws ? { executionMode: 'PAPER_ONLY', brokerOrderPlaced: false, exitPriceSource: 'OBSERVED_OPTION_QUOTE', awsPaperExit: true } : {}),
     exitMentorState: meta.mentorState || 'MANUAL EXIT',
     mentorSuggestionAtExit: snapshot?.decision?.headline || '',
     exitMandatoryPassCount: current.strategyFamily === 'SCALP' ? null : classifyResearchSetup(snapshot).mandatoryPassCount,
@@ -1051,10 +1134,12 @@ function inferExitReason(position, underlyingExit) {
 
 function initialPosition(kind) {
   const key = kind === 'scalp' ? SCALP_POSITION_KEY : CORE_POSITION_KEY;
+  const closedIds = new Set(readJson(HISTORY_KEY, [])
+    .filter(row => row?.id && row?.closedAt).map(row => row.id));
   const saved = readJson(key, null);
-  if (saved) return saved;
+  if (saved?.id && !closedIds.has(saved.id)) return saved;
   const legacy = readJson(LEGACY_POSITION_KEY, null);
-  if (!legacy) return null;
+  if (!legacy?.id || closedIds.has(legacy.id)) return null;
   const isScalp = legacy.strategyFamily === 'SCALP';
   return kind === 'scalp' ? (isScalp ? legacy : null) : (!isScalp ? legacy : null);
 }

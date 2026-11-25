@@ -1,3 +1,4 @@
+import ExecutionConnectionPanel from './ExecutionConnectionPanel.jsx';
 import { useEffect, useState } from 'react';
 
 export default function SettingsPanel({ settings, onSave }) {
@@ -46,6 +47,8 @@ export default function SettingsPanel({ settings, onSave }) {
           {saving ? 'Saving settings…' : saved ? 'Settings saved successfully' : 'Changes not saved'}
         </span>
       </div>
+
+      <ExecutionConnectionPanel />
 
       <div className="settings-grid">
         <SettingsCard title="Account & sizing" copy="Used for risk analysis and research sizing. The exchange contract lot size still comes directly from FYERS.">

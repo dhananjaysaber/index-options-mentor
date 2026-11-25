@@ -75,7 +75,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
     check('impulse', '3m impulse', impulseOk, 20, impulseOk ? `Latest completed 3m candle has ${Math.round(bodyRatio * 100)}% body` : 'Need a directional 3m impulse candle'),
     check('trigger', '3m trigger', triggerBroken, 15, triggerBroken ? 'Live NIFTY has crossed the 3m trigger' : 'Waiting for live price to cross the 3m trigger'),
     check('liquidity', 'Option liquidity', liquidityOk, 10, liquidityOk ? 'Candidate option liquidity gate passed' : 'Option liquidity is not acceptable'),
-    check('time', 'Scalp window', timeOk, 5, timeOk ? 'Inside the scalp research window' : 'Outside the 09:30–14:45 scalp window')
+    check('time', 'Scalp window', timeOk, 5, timeOk ? 'Inside the scalp research window' : 'Outside the 09:30–15:15 scalp window')
   ];
 
   const score = checks.reduce((sum, item) => sum + (item.pass ? item.weight : 0), 0);
@@ -102,7 +102,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
               : !extensionOk
                 ? 'Price has moved too far beyond the 3-minute trigger; do not chase.'
                 : !timeOk
-                  ? 'Scalp research is paused outside 09:30–14:45.'
+                  ? 'Scalp research is paused outside 09:30–15:15.'
                   : !trendOk
                     ? 'The 5-minute trend context is not strong enough.'
                     : !vwapOk
@@ -134,7 +134,7 @@ export function evaluateScalpSetup(snapshot, candles = [], liveSpot = null, nowM
             : !liquidityOk
               ? 'Option liquidity is a hard safety requirement for manual scalp research.'
               : !timeOk
-                ? 'Manual scalp research is paused outside 09:30–14:45.'
+                ? 'Manual scalp research is paused outside 09:30–15:15.'
                 : 'A measurable 3-minute stop is required before manual scalp research.';
 
   return {
@@ -351,7 +351,7 @@ function isScalpWindow(nowMs) {
     const hour = Number(parts.find(part => part.type === 'hour')?.value);
     const minute = Number(parts.find(part => part.type === 'minute')?.value);
     const total = hour * 60 + minute;
-    return total >= 570 && total <= 885;
+    return total >= 570 && total <= 15 * 60 + 15;
   } catch {
     return false;
   }
