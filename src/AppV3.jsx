@@ -707,7 +707,7 @@ export default function AppV3() {
         {view === 'dashboard' && (
           <>
             {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
-            {!marketDataReady && <div className="fyers-ref-data-warning" role="status">
+            {!marketDataReady && <div className="fyers-ref-data-warning" role="status" aria-label="NIFTY data connection status">
               <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated ? 'WAITING FOR FRESH MARKET DATA' : 'FYERS CONNECTION REQUIRED'}</strong>
               <span>{brokerStatus.authenticated ? 'New entries remain disabled until quotes and Mentor analysis are fresh.' : 'Connect FYERS to load actual market prices and research.'}</span>
               <button type="button" disabled={!brokerStatus.authenticated || refreshing} onClick={() => refreshSnapshot({ manual:true })}>{refreshing ? 'Checking…' : 'Retry data'}</button>
@@ -718,7 +718,7 @@ export default function AppV3() {
                 settings={settings} setSettings={setSettings} liveQuote={liveQuote} history={history}
                 alertsEnabled={alertsEnabled} onTakeTrade={takeTrade} onExit={exitStrategy} onNavigate={navigate} />
             ) : (
-              <FyersCoreTrade snapshot={snapshot} liveQuote={liveQuote} settings={settings}
+              <FyersCoreTrade snapshot={snapshot} liveQuote={liveQuote} settings={settings} mode={mode}
                 setSettings={setSettings} marketDataReady={marketDataReady}
                 corePosition={corePosition} scalpPosition={scalpPosition} coreMentor={coreMentor}
                 history={history} onTakeTrade={takeTrade} onExit={exitStrategy}
