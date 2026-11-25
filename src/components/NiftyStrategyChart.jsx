@@ -7,7 +7,7 @@ const TIMEFRAMES = {
   '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 }
 };
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '' }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', lineMode = false }) {
   const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [candles, setCandles] = useState([]);
@@ -153,7 +153,12 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
                 </g>
               ))}
 
-              {chart.candles.map(candle => (
+              {lineMode ? (
+                <polyline className="fyers-ref-price-line"
+                  points={chart.candles.map(candle => `${candle.x},${candle.close >= candle.open ? candle.bodyY : candle.bodyY + candle.bodyHeight}`).join(' ')}
+                  fill="none" stroke="#2ECC8F" strokeWidth="2.8" strokeLinejoin="round" strokeLinecap="round"
+                />
+              ) : chart.candles.map(candle => (
                 <g key={candle.key} className={candle.close >= candle.open ? 'nifty-candle bullish' : 'nifty-candle bearish'}>
                   <line x1={candle.x} x2={candle.x} y1={candle.highY} y2={candle.lowY} className="nifty-candle-wick" />
                   <rect x={candle.x - candle.bodyWidth / 2} y={candle.bodyY} width={candle.bodyWidth} height={candle.bodyHeight} rx="1" className="nifty-candle-body" />
