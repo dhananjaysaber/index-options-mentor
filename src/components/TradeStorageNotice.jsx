@@ -18,5 +18,5 @@ export function TradeRecoveryPanel(){
       setMessage('Recovery export created. It includes saved trades and pending trade events, without your FYERS login. Unrecorded exits are not assigned invented profits.');
     }catch{setMessage('Recovery export could not finish. Keep the app data and try again.');}finally{setBusy(false);}
   }
-  return <details className="panel"><summary>Trade recovery</summary><p>Export this device’s saved positions, journal and pending events. This does not place, close or change a trade.</p><button type="button" disabled={busy} onClick={download}>{busy?'Preparing recovery export…':'Export saved recovery data'}</button>{message&&<p role="status">{message}</p>}</details>;
+  return <details className="panel" style={{ marginBlock: 20 }}><summary>Trade recovery</summary><p>Export this device’s saved positions, journal and pending events. This does not place, close or change a trade.</p><button type="button" disabled={busy} onClick={download}>{busy?'Preparing recovery export…':'Export saved recovery data'}</button>{message&&<p role="status">{message}</p>}</details>;
 }
