@@ -40,8 +40,8 @@ try {
     historyRequests: performance.getEntriesByType('resource').filter(x => x.name.includes('/history')).map(x => x.name).slice(-3)
   }))));
 
-  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),4,
-    'Reference Core chart has real 1m, 3m, 5m and 15m choices');
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),3,
+    'Reference Core chart keeps 3m, 5m and 15m without a 1m tab');
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
@@ -62,8 +62,8 @@ try {
       if(label==='scalp'){
         console.log('Scalp line point count', await page.locator('.fyers-ref-scalp .fyers-ref-price-line').getAttribute('points').then(points => points?.split(/\s+/).length || 0));
 
-        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),3,
-          'Scalp reference chart has real 1m, 3m and 5m choices');
+        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
+          'Scalp reference chart keeps 3m and 5m without a 1m tab');
         const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
