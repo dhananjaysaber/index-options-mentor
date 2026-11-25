@@ -52,14 +52,10 @@ export default function CoreResearchPanel({ snapshot, settings }) {
         <span>NEXT CHECKPOINT</span>
         <strong>{checkpoint}</strong>
       </div>
-      <div className="core-checkpoint-card" aria-live="polite">
-        <span>13-POINT GATE AUDIT · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
-        <strong>{classification.eligible ? 'Research setup qualified.' : blockers.length ? blockers.slice(0, 3).join(' · ') : classification.reason}</strong>
-        <small>Paper plan only. Entry still requires the existing safety and confirmation rules.</small>
-      </div>
+
 
       <div className="core-compact-grid">
-        {cards.map(card => <Metric key={card.label} {...card} />)}
+        {cards.filter(card => !['Action', 'Contract', 'NIFTY'].includes(card.label)).map(card => <Metric key={card.label} {...card} />)}
       </div>
 
       <div className="core-evidence-strip" aria-label="Current qualification evidence">
@@ -69,6 +65,13 @@ export default function CoreResearchPanel({ snapshot, settings }) {
         <Evidence label="Mandatory" value={`${classification.mandatoryPassCount}/5`} pass={classification.mandatoryPassCount >= 3} />
         <Evidence label="Confirmations" value={`${classification.confirmationPassCount}/8`} pass={classification.confirmationPassCount >= 6} />
       </div>
+      <details className="core-gate-audit"><summary>Qualification details</summary>
+      <div className="core-checkpoint-card" aria-live="polite">
+        <span>13-POINT GATE AUDIT · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
+        <strong>{classification.eligible ? 'Research setup qualified.' : blockers.length ? blockers.slice(0, 3).join(' · ') : classification.reason}</strong>
+        <small>Paper plan only. Entry still requires the existing safety and confirmation rules.</small>
+      </div>
+      </details>
     </section>
   );
 }

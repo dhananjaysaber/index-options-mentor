@@ -54,7 +54,7 @@ try {
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
       }
-      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile)assert.equal(await page.locator('.decision-banner:visible').count(),1,'Only one mobile decision card');}
+      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.premium-core-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
       if(label==='journal'){
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();

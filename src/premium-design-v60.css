@@ -421,3 +421,26 @@ html[data-theme] #root .premium-design-shell .desktop-core-layout .position-pnl-
  html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .position-pnl-hero{grid-column:1 / -1;}
  html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .position-essential-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
 }
+
+html[data-theme] #root .premium-design-shell .core-gate-audit{border-top:1px solid var(--ui-line);padding-top:6px;}
+html[data-theme] #root .premium-design-shell .core-gate-audit>summary{min-height:40px;display:flex;align-items:center;cursor:pointer;color:var(--ui-blue);font-size:12px;}
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .nifty-live-toolbar{display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;min-height:52px!important;}
+ html[data-theme] #root .premium-design-shell .nifty-live-title{min-width:0!important;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-timeframe-tabs{width:auto!important;flex:none!important;}
+ html[data-theme] #root .premium-design-shell .nifty-live-context-row{display:flex!important;flex-wrap:nowrap!important;justify-content:space-between!important;gap:4px!important;min-height:32px!important;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-badges{display:flex!important;gap:4px!important;min-width:0;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-badges>span{font-size:8px!important;padding:4px 5px!important;letter-spacing:0!important;white-space:nowrap;}
+ html[data-theme] #root .premium-design-shell .nifty-live-countdown{font-size:8px!important;white-space:nowrap;flex:none;}
+ html[data-theme] #root .premium-design-shell .nifty-ohlc-strip{display:flex!important;flex-wrap:nowrap!important;gap:6px!important;padding:6px 10px!important;}
+ html[data-theme] #root .premium-design-shell .nifty-ohlc-strip :is(span,strong){font-size:9px!important;white-space:nowrap;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-canvas-wrap{height:auto!important;min-height:0!important;max-height:180px!important;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-canvas{min-height:110px!important;max-height:180px!important;}
+ html[data-theme] #root .premium-design-shell .nifty-chart-rule-note{display:none!important;}
+ html[data-theme] #root .premium-design-shell .core-checkpoint-card{padding:5px 0!important;}
+ html[data-theme] #root .premium-design-shell .core-checkpoint-card>span{font-size:9px!important;}
+ html[data-theme] #root .premium-design-shell .core-evidence-strip{gap:4px!important;}
+ html[data-theme] #root .premium-design-shell .core-evidence-strip>div{flex:1 1 48px!important;min-width:0!important;}
+ html[data-theme] #root .premium-design-shell .core-evidence-strip span{font-size:8px!important;}
+ html[data-theme] #root .premium-design-shell .core-evidence-strip strong{font-size:10px!important;}
+}

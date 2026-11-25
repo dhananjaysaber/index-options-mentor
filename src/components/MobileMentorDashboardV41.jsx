@@ -31,9 +31,9 @@ export default function MobileMentorDashboardV41({
     <div className={`mobile-mentor-flow mode-${mode}`}>
       {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onRetry={onRetry} onReconnect={onReconnect} />}
 
-      <div className="mobile-flow-block mobile-decision-block">
+      {(!snapshot || position) && <div className="mobile-flow-block mobile-decision-block">
         <TraderDecisionBanner snapshot={snapshot} loading={loading} />
-      </div>
+      </div>}
 
       <section id="mobile-position-section" className="mobile-flow-block mobile-trade-block" aria-label="Trade plan and position">
         {position && <div className="position-lock-bar mobile-position-lock">13-POINT POSITION ACTIVE · {position.strategyTierLabel || position.strategyTier || 'RESEARCH'}</div>}
