@@ -1,7 +1,5 @@
 export default function MentorWorkflow({ snapshot }) {
-  if (!snapshot) return null;
-
-  const { setup = {}, decision = {}, market = {} } = snapshot;
+  const { setup = {}, decision = {}, market = {} } = snapshot || {};
   const state = market.phase === 'CLOSED' ? decision.reviewState : decision.state;
 
   const steps = [
@@ -53,7 +51,7 @@ export default function MentorWorkflow({ snapshot }) {
     <section className="mentor-workflow" aria-label="Live mentor workflow">
       <div className="workflow-label">
         <span>{market.phase === 'CLOSED' ? 'SESSION REVIEW' : 'LIVE PATH'}</span>
-        <strong>{stageLabel(state)}</strong>
+        <strong>{stageLabel(state || 'DATA_PENDING')}</strong>
       </div>
 
       <div className="workflow-track">
