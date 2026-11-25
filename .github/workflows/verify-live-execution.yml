@@ -10,6 +10,8 @@ on:
       - 'tests/test_release_check.py'
       - 'scripts/build-release-check.py'
       - 'public/iom-release-check.py'
+      - 'public/iom-live-readiness.py'
+      - 'tests/test_live_readiness.py'
       - 'scripts/build-fyers-readiness.py'
       - 'public/iom-fyers-readiness.py'
       - 'aws/journal/store.py'
@@ -52,6 +54,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Verify installed-host read-only readiness checker
+        run: python3 -m unittest discover -s tests -p 'test_live_readiness.py' -v
       - name: Entries, owned exits, HTTP authentication, restart, journal and backup
         run: python3 -m unittest discover -s tests -p 'live_*test.py' -v
       - name: Verify reproducible disabled installer and isolated installation
