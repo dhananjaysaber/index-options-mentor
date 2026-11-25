@@ -697,6 +697,14 @@ export default function AppV3() {
         <button className="mentor-v2-menu-button" onClick={() => setMobileMenuOpen(true)} aria-label="Open menu"><MenuIcon /></button>
       </header>
 
+      <div className="fyers-ref-mobile-header" role="banner" aria-label="Mobile trading header">
+        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} />
+        <span className={`fyers-ref-mobile-broker ${brokerStatus.authenticated ? 'connected' : 'disconnected'}`} aria-label={brokerStatus.authenticated ? 'FYERS connected' : 'FYERS reconnect required'} />
+        <button type="button" className="fyers-ref-mobile-menu" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}>
+          <MenuIcon />
+        </button>
+      </div>
+
       <DesktopNav view={view} navigate={navigate} strategyMode={strategyMode} setStrategyMode={setStrategyMode} settings={settings} setup={setupClassification} positionCount={positionCount} corePosition={corePosition} scalpPosition={scalpPosition} />
 
       {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
