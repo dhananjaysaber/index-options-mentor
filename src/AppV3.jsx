@@ -731,11 +731,11 @@ export default function AppV3() {
         {view === 'position' && <FyersPositions defaultSlot={strategyMode} corePosition={corePosition} scalpPosition={scalpPosition}
           history={history} snapshot={snapshot} coreMentor={coreMentor} scalpMentor={scalpMentor}
           alertsEnabled={alertsEnabled} onExit={exitStrategy}/>}
-        {view === 'history' && <><TradeRecoveryPanel/><FyersJournal history={history} onNavigate={navigate}/></>}
+        {view === 'history' && <><FyersJournal history={history} onNavigate={navigate}/><TradeRecoveryPanel/></>}
         {view === 'analysis' && <div className="fyers-ref-page fyers-ref-analysis">
           <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus}/></Suspense>
         </div>}
-        {view === 'settings' && <FyersSettings settings={settings} onSave={setSettings}/>}
+        {view === 'settings' && <FyersSettings settings={settings} onSave={setSettings} brokerStatus={brokerStatus} mode={mode}/>}
       </main>
 
       <nav className="premium-mobile-bottom-nav" aria-label="Primary trading navigation">
