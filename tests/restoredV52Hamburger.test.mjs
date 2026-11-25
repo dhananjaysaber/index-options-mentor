@@ -37,7 +37,9 @@ test('Advanced is default and Basic/Advanced selector exists only in hamburger d
   assert.match(app, /setMode\('simple'\); onClose\(\); \}\}>Basic/);
   assert.match(app, /setMode\('advanced'\); onClose\(\); \}\}>Advanced/);
   assert.doesNotMatch(app, /<div className="segmented"><button className=\{mode === 'simple'/);
-  assert.match(app, /mode === 'advanced' && <QuickChecklist/);
+  const reference = read('src/components/FyersReferenceViews.jsx');
+  assert.match(app, /<FyersCoreTrade snapshot=\{snapshot\}/);
+  assert.match(reference, /mode === 'advanced' &&/);
   assert.match(app, /mode=\{mode\}/);
 });
 
