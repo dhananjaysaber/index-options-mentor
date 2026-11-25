@@ -39,7 +39,7 @@ try {
     const go=async name=>nav.getByRole('button',{name:new RegExp(name,'i')}).first().click();
     for(const [view,label] of [['Trade','core'],['Scalp','scalp'],['Positions','positions'],['Journal','journal'],['Settings','settings']]){
       await go(view==='Trade'&&!mobile?'13-Point':view);
-      if(label==='settings')await page.getByText('Buying is OFF',{exact:true}).waitFor();
+      if(label==='settings'){await page.getByRole('button',{name:/Advanced connection and full settings/}).click();await page.getByText('Buying is OFF',{exact:true}).waitFor();}
       await page.screenshot({path:`test-artifacts/premium-design/${width}-${label}.png`,fullPage:true});
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),`${width} ${label}: no horizontal page overflow`);
       const bounds=await nav.boundingBox();
