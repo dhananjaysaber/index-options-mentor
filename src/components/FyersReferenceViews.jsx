@@ -115,7 +115,7 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mod
   return <div className="fyers-ref-page fyers-ref-core">
     <div className="fyers-ref-trade-grid">
       <div className="fyers-ref-chart-column">
-        <div className="fyers-ref-chart"><TraderMarketPanel snapshot={snapshot} lineMode availableTimeframes={['1','3','5','15']} /></div>
+        <div className="fyers-ref-chart"><TraderMarketPanel snapshot={snapshot} lineMode availableTimeframes={['3','5','15']} /></div>
         <div className="fyers-ref-livepath"><MentorWorkflow snapshot={snapshot}/></div>
         <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={scalpPosition} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
       </div>
@@ -147,7 +147,7 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
   return <div className="fyers-ref-page fyers-ref-scalp">
     <div className="fyers-ref-scalp-grid">
       <div className="fyers-ref-chart-column">
-        <section className="fyers-ref-card fyers-ref-scalp-chart"><NiftyStrategyChart snapshot={snapshot} position={position} defaultTimeframe="3" strategyNote="5m context · 3m execution" lineMode availableTimeframes={['1','3','5']} /></section>
+        <section className="fyers-ref-card fyers-ref-scalp-chart"><NiftyStrategyChart snapshot={snapshot} position={position} defaultTimeframe="3" strategyNote="5m context · 3m execution" lineMode availableTimeframes={['3','5']} /></section>
         <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={position} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
       </div>
       <div className="fyers-ref-decision-column">
