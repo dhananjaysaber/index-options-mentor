@@ -728,7 +728,7 @@ export default function AppV3() {
         )}
         {view === 'detail' && <FyersDetail snapshot={snapshot} onBack={() => navigate('dashboard')}/>}
         {view === 'ticket' && <FyersTicket snapshot={snapshot} settings={settings} liveQuote={liveQuote} onBack={() => navigate('dashboard')}/>}
-        {view === 'position' && <FyersPositions corePosition={corePosition} scalpPosition={scalpPosition}
+        {view === 'position' && <FyersPositions defaultSlot={strategyMode} corePosition={corePosition} scalpPosition={scalpPosition}
           history={history} snapshot={snapshot} coreMentor={coreMentor} scalpMentor={scalpMentor}
           alertsEnabled={alertsEnabled} onExit={exitStrategy}/>}
         {view === 'history' && <><TradeRecoveryPanel/><FyersJournal history={history} onNavigate={navigate}/></>}
