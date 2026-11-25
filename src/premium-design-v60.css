@@ -407,3 +407,17 @@ html[data-theme] #root .premium-design-shell .scalp-dashboard>.position-exit-ale
  html[data-theme] #root .premium-design-shell .position-exit-alert{width:100%;}
  html[data-theme] #root .premium-design-shell .exit-alert-button{width:100%;}
 }
+
+html[data-theme] #root .premium-design-shell .premium-feed-status{width:auto!important;max-width:none!important;}
+html[data-theme] #root .premium-design-shell .desktop-core-layout .position-live-hero{grid-template-columns:1fr 1fr!important;}
+html[data-theme] #root .premium-design-shell .desktop-core-layout .position-pnl-hero{grid-column:1 / -1;}
+@media(min-width:1200px){
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .scalp-chart-panel{grid-column:1!important;grid-row:1 / span 3!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card)>.position-exit-alert{grid-column:2!important;grid-row:2!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card)>.position-essential-card{grid-column:2!important;grid-row:3!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .scalp-evidence-panel{grid-column:1!important;grid-row:4!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .scalp-plan-panel{grid-column:2!important;grid-row:4!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .position-live-hero{grid-template-columns:1fr 1fr!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .position-pnl-hero{grid-column:1 / -1;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard:has(>.position-essential-card) .position-essential-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
