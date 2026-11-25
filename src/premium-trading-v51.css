@@ -741,3 +741,26 @@ html[data-theme='dark'] body {
   .premium-fintech-shell *::before,
   .premium-fintech-shell *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
 }
+
+/* Sidebar feedback stays legible against the dark navigation surface. */
+.premium-fintech-shell .sidebar-nav-button:not(.active):hover {
+  background: #15314a !important;
+  border-color: #315b7c !important;
+  color: #ecf5ff !important;
+}
+.premium-fintech-shell .sidebar-nav-button.active:hover {
+  background: #163b59 !important;
+  border-color: #4199d2 !important;
+  color: #b4e1ff !important;
+}
+.premium-fintech-shell .sidebar-nav-button:hover > span {
+  background: #224b6a !important;
+  color: #eef8ff !important;
+}
+.premium-fintech-shell .sidebar-nav-button:hover strong {
+  color: inherit !important;
+}
+.premium-fintech-shell .sidebar-nav-button:focus-visible {
+  outline: 2px solid #62cbff !important;
+  outline-offset: 2px;
+}

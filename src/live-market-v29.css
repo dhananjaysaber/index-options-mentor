@@ -6,8 +6,9 @@ body,
 }
 
 .nifty-chart-canvas-wrap {
-  overflow: hidden !important;
-  overscroll-behavior: contain;
+  overflow: clip !important;
+  overscroll-behavior: auto;
+  touch-action: pan-y pinch-zoom;
 }
 
 .nifty-chart-canvas {
@@ -43,7 +44,7 @@ body,
 @media (max-width: 820px) {
   .nifty-chart-canvas-wrap {
     width: 100%;
-    overflow: hidden !important;
+    overflow: clip !important;
   }
 
   .nifty-chart-canvas {
