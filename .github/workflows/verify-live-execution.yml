@@ -4,6 +4,8 @@ on:
     paths:
       - 'aws/live/**'
       - 'aws/readiness/**'
+      - 'apps-script/**'
+      - 'tests/apps-script-setup-export.test.mjs'
       - 'tests/test_fyers_readiness.py'
       - 'tests/test_release_check.py'
       - 'scripts/build-release-check.py'
@@ -64,3 +66,5 @@ jobs:
           python3 scripts/build-release-check.py
           cmp /tmp/iom-release-check.expected.py public/iom-release-check.py
           python3 -m unittest discover -s tests -p 'test_release_check.py' -v
+      - name: Verify setup-decision export authentication and replay without production Sheets
+        run: node --test tests/apps-script-setup-export.test.mjs
