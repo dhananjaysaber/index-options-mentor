@@ -138,11 +138,13 @@ class ReadinessTests(unittest.TestCase):
             (app/'fyersAuthRoutes.mjs').write_text("if (url.pathname === '/auth/fyers/login') {}; const secret='"+SECRET+"';")
             result = r.local_login_hints('header.'+middle+'.signature', app)
             self.assertTrue(result['storedTokenExpiryTimePassed'])
-            self.assertEqual(result['configuredAwsLoginUrl'], 'https://api.optionsmentor.in/auth/fyers/login')
+            self.assertEqual(result['internalAwsLoginRoute'], '/auth/fyers/login')
+            self.assertFalse(result['publicAwsLoginUrlVerified'])
+            self.assertNotIn('configuredAwsLoginUrl', result)
             self.assertNotIn(TOKEN, json.dumps(result))
             self.assertNotIn(SECRET, json.dumps(result))
             (app/'fyersAuthRoutes.mjs').write_text("['/fyers/login','/fyers/auth','/fyers/callback']")
-            self.assertNotIn('configuredAwsLoginUrl', r.local_login_hints('invalid', app))
+            self.assertNotIn('internalAwsLoginRoute', r.local_login_hints('invalid', app))
 
     def test_ambiguous_token_and_app_mismatch_fail_closed(self):
         for stored in ({'token': TOKEN, 'data': {'access_token': 'other-token'}}, {'refresh_token': TOKEN}):

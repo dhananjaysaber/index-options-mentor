@@ -259,7 +259,8 @@ def local_login_hints(token, app=Path('/opt/index-options-mentor/app')):
                         and path.rstrip('/').rsplit('/', 1)[-1].lower() in ('login', 'connect', 'auth')
                         and not any(word in path.lower() for word in ('callback', '..'))})
         if len(paths) == 1:
-            hints['configuredAwsLoginUrl'] = 'https://api.optionsmentor.in' + paths[0]
+            hints['internalAwsLoginRoute'] = paths[0]
+            hints['publicAwsLoginUrlVerified'] = False
     except OSError:
         pass
     return hints
