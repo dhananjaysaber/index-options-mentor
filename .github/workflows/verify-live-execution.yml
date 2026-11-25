@@ -14,6 +14,11 @@ on:
       - 'public/iom-fyers-readiness.py'
       - 'aws/journal/store.py'
       - 'tests/live_*test.py'
+      - 'tests/live-feed-publisher.test.mjs'
+      - 'tests/test_live_connect_installer.py'
+      - 'scripts/build-live-connect.py'
+      - 'scripts/live-connect-template.py'
+      - 'public/iom-live-connect.py'
       - 'tests/test_live_stage_installer.py'
       - 'public/iom-live-stage.py'
       - 'scripts/build-live-stage.py'
@@ -54,6 +59,14 @@ jobs:
           python3 scripts/build-execution-connect.py
           cmp /tmp/iom-execution-connect.expected.py public/iom-execution-connect.py
           python3 public/iom-execution-connect.py --verify-only --journal-store aws/journal/store.py
+      - name: Verify shared socket and separate trading login package
+        run: |
+          node --test tests/live-feed-publisher.test.mjs
+          cp public/iom-live-connect.py /tmp/iom-live-connect.expected.py
+          python3 scripts/build-live-connect.py
+          cmp /tmp/iom-live-connect.expected.py public/iom-live-connect.py
+          python3 -m unittest discover -s tests -p 'test_live_connect_installer.py' -v
+          python3 public/iom-live-connect.py --verify-only --journal-store aws/journal/store.py
       - name: Verify read-only FYERS checker and published checksum source
         run: |
           cp public/iom-fyers-readiness.py /tmp/iom-fyers-readiness.expected.py
@@ -68,3 +81,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_release_check.py' -v
       - name: Verify setup-decision export authentication and replay without production Sheets
         run: node --test tests/apps-script-setup-export.test.mjs
+
