@@ -1,3 +1,5 @@
+import { readTradingJson, writeTradingJson, commitPaperOpen, commitPaperClose } from './services/tradingStorage.js';
+import TradeStorageNotice, { TradeRecoveryPanel } from './components/TradeStorageNotice.jsx';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import TraderDecisionBanner from './components/TraderDecisionBanner.jsx';
 import MentorWorkflow from './components/MentorWorkflow.jsx';
@@ -87,6 +89,7 @@ export default function AppV3() {
   const audioRef = useRef(null);
   const autoExitRef = useRef({ core: '', scalp: '', trail: '', option: '', coreOption: '', coreTarget: '', time: '' });
   const closingTradeIdsRef = useRef(new Set());
+  const openingStrategiesRef = useRef(new Set());
   const positionRefs = useRef({ core: null, scalp: null });
   positionRefs.current = { core: corePosition, scalp: scalpPosition };
   const [operationError, setOperationError] = useState('');
@@ -120,13 +123,13 @@ export default function AppV3() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_KEY, theme);
-    localStorage.setItem('iom-premium-theme-v1', '1');
+    writeTradingJson(THEME_KEY, theme);
+    writeTradingJson('iom-premium-theme-v1', '1');
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#ffffff');
   }, [theme]);
 
-  useEffect(() => { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { writeTradingJson(SETTINGS_KEY, settings); }, [settings]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') setMarketClock(Date.now());
@@ -140,25 +143,35 @@ export default function AppV3() {
     document.addEventListener('visibilitychange', resumed);
     return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', resumed); };
   }, [brokerStatus.authenticated]);
-  useEffect(() => { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }, [history]);
+  useEffect(() => { writeTradingJson(HISTORY_KEY, history); }, [history]);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
   useEffect(() => { persistPosition(SCALP_POSITION_KEY, scalpPosition); }, [scalpPosition]);
   useEffect(() => {
     const journalPosition = activePosition || corePosition || scalpPosition;
     persistPosition(LEGACY_POSITION_KEY, journalPosition);
   }, [activePosition?.id, corePosition?.id, scalpPosition?.id, strategyMode]);
-  useEffect(() => { localStorage.setItem(ALERTS_KEY, alertsEnabled ? '1' : '0'); }, [alertsEnabled]);
-  useEffect(() => { localStorage.setItem(STRATEGY_MODE_KEY, strategyMode); }, [strategyMode]);
+  useEffect(() => { writeTradingJson(ALERTS_KEY, alertsEnabled ? '1' : '0'); }, [alertsEnabled]);
+  useEffect(() => { writeTradingJson(STRATEGY_MODE_KEY, strategyMode); }, [strategyMode]);
 
   useEffect(() => {
     let cancelled = false;
     const applyHistory = event => {
       const rows = event?.detail?.history;
-      if (!cancelled && Array.isArray(rows)) setHistory(previous => mergeCompletedHistory(previous, rows));
+      if (!cancelled && Array.isArray(rows)) {
+        setHistory(previous => mergeCompletedHistory(previous, rows));
+        const closedIds=new Set(rows.filter(t=>t?.closedAt).map(t=>t.id));
+        setCorePosition(current=>closedIds.has(current?.id)?null:current);
+        setScalpPosition(current=>closedIds.has(current?.id)?null:current);
+      }
     };
     window.addEventListener('mentor:journal-history', applyHistory);
     syncJournalHistory().then(rows => {
-      if (!cancelled && Array.isArray(rows)) setHistory(previous => mergeCompletedHistory(previous, rows));
+      if (!cancelled && Array.isArray(rows)) {
+        setHistory(previous => mergeCompletedHistory(previous, rows));
+        const closedIds=new Set(rows.filter(t=>t?.closedAt).map(t=>t.id));
+        setCorePosition(current=>closedIds.has(current?.id)?null:current);
+        setScalpPosition(current=>closedIds.has(current?.id)?null:current);
+      }
     }).catch(() => {});
     return () => {
       cancelled = true;
@@ -319,7 +332,7 @@ export default function AppV3() {
     if (!ticket) return;
     ledger[key] = { openedAt: ticket.openedAt, tier: ticket.strategyTier };
     pruneLedger(ledger);
-    localStorage.setItem(AUTO_SETUP_KEY, JSON.stringify(ledger));
+    writeTradingJson(AUTO_SETUP_KEY, ledger);
     takeTrade({ ...ticket, researchQualificationTier: setupClassification.tier, researchQualificationLabel: setupClassification.label, researchTagAtEntry: `${setupClassification.label} · auto entry` });
   }, [snapshot?.generatedAt, marketDataReady, corePosition?.id, settings.mentorAutoOpen, settings.controlledResearch, settings.experimentalResearch, settings.defaultLots, settings.lotCap]);
 
@@ -338,7 +351,7 @@ export default function AppV3() {
       openedAt: ticket.openedAt, side: ticket.side, score: ticket.score
     };
     pruneLedger(ledger);
-    localStorage.setItem(SCALP_LEDGER_KEY, JSON.stringify(ledger));
+    writeTradingJson(SCALP_LEDGER_KEY, ledger);
     takeTrade(ticket);
   }, [snapshot?.generatedAt, scalpStatus?.setupId, scalpStatus?.eligible,
       marketDataReady, scalpPosition?.id, settings.scalpAutoOpen,
@@ -535,7 +548,7 @@ export default function AppV3() {
     setAlertsEnabled(true);
   }
 
-  function takeTrade(ticket) {
+  async function takeTrade(ticket) {
     // Old 5m/3m structure may remain visible when the calculation endpoint
     // fails. It must not open NEW positions until a fresh snapshot succeeds.
     if (!ticket?.quantity || !marketDataReady) return;
@@ -545,14 +558,20 @@ export default function AppV3() {
       initiatedBy,
       openedByMentor: ticket.openedByMentor === true || initiatedBy === 'MENTOR'
     };
-    if (ticket.strategyFamily === 'SCALP') {
-      setScalpPosition(current => current ? current : enriched);
-    } else {
-      setCorePosition(current => current ? current : enriched);
-    }
+    const strategy=ticket.strategyFamily==='SCALP'?'scalp':'core';
+    if(positionRefs.current[strategy]||openingStrategiesRef.current.has(strategy))return;
+    openingStrategiesRef.current.add(strategy);
+    try {
+      await commitPaperOpen(strategy==='scalp'?SCALP_POSITION_KEY:CORE_POSITION_KEY,enriched);
+      positionRefs.current[strategy]=enriched;
+      if(strategy==='scalp')setScalpPosition(current=>current||enriched);
+      else setCorePosition(current=>current||enriched);
+      setOperationError('');
+    } catch(error) {setOperationError(error?.message||'The paper position could not be saved and was not opened.');}
+    finally {openingStrategiesRef.current.delete(strategy);}
   }
 
-  function exitStrategy(strategy, meta = {}) {
+  async function exitStrategy(strategy, meta = {}) {
     // NEVER call setHistory from inside a setPosition functional updater:
     // React can invoke those updaters during rendering, crashing the PWA.
     // The synchronous ref also prevents double taps / competing auto exits.
@@ -560,15 +579,13 @@ export default function AppV3() {
     if (!current?.id || closingTradeIdsRef.current.has(current.id)) return;
     closingTradeIdsRef.current.add(current.id);
     try {
-      const closed = closeTrade(current, meta, snapshot, scalpStatus, settings);
-      if (!Number.isFinite(closed.pnl) || !Number.isFinite(closed.exit)) {
+      const proposed = closeTrade(current, meta, snapshot, scalpStatus, settings);
+      if (!Number.isFinite(proposed.pnl) || !Number.isFinite(proposed.exit)) {
         throw new Error('Cannot record this simulated exit: option price is invalid.');
       }
-      // Persist a completed trade before clearing its open-position state.
-      // The permanent journal bridge may be temporarily offline.
-      const saved = readJson(HISTORY_KEY, []);
-      const updated = [closed, ...saved.filter(row => row?.id !== closed.id)].slice(0, 1000);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      // Commit one exit and its recovery/outbox record before clearing the position.
+      // A full localStorage history cache cannot veto a durable paper SELL.
+      const closed=await commitPaperClose(strategy==='scalp'?SCALP_POSITION_KEY:CORE_POSITION_KEY,proposed);
       setHistory(previous => [closed, ...previous.filter(row => row?.id !== closed.id)].slice(0, 1000));
       positionRefs.current[strategy === 'scalp' ? 'scalp' : 'core'] = null;
       if (strategy === 'scalp') setScalpPosition(existing => existing?.id === closed.id ? null : existing);
@@ -585,6 +602,7 @@ export default function AppV3() {
       }
     } catch (error) {
       closingTradeIdsRef.current.delete(current.id);
+      autoExitRef.current={core:'',scalp:'',trail:'',option:'',coreOption:'',coreTarget:'',time:''};
       setOperationError(error?.message || 'Exit could not be recorded. Position remains open; retry SELL.');
       console.error('Simulated SELL/exit failed:', error);
     }
@@ -636,7 +654,8 @@ export default function AppV3() {
 
       {mobileMenuOpen && <MobileDrawer view={view} navigate={navigate} positionCount={positionCount} activePosition={activePosition || corePosition || scalpPosition} onClose={() => setMobileMenuOpen(false)} brokerStatus={brokerStatus} mode={mode} setMode={setMode} settings={settings} theme={theme} setTheme={setTheme} alertsEnabled={alertsEnabled} toggleAlerts={toggleAlerts} refreshing={refreshing} refreshSnapshot={refreshSnapshot} liveError={liveError} authRequired={authRequired} onReconnect={reconnectFyers} />}
 
-      {operationError && <div className="alert-bar" role="alert">{operationError}</div>}
+      <TradeStorageNotice />
+        {operationError && <div className="alert-bar" role="alert">{operationError}</div>}
       <main className="mentor-v2-content">
         {view === 'dashboard' && (
           <>
@@ -746,7 +765,7 @@ export default function AppV3() {
           </div>
         )}
 
-        {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>13-point and Scalp trades remain independently tagged so Auto, Manual, qualification, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><History history={history} /></div>}
+        {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>13-point and Scalp trades remain independently tagged so Auto, Manual, qualification, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><TradeRecoveryPanel /><History history={history} /></div>}
         {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus} /></Suspense>}
         {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
       </main>
@@ -1059,12 +1078,7 @@ function initialPosition(kind) {
   return kind === 'scalp' ? (isScalp ? legacy : null) : (!isScalp ? legacy : null);
 }
 
-function persistPosition(key, position) {
-  try {
-    if (position) localStorage.setItem(key, JSON.stringify(position));
-    else localStorage.removeItem(key);
-  } catch {}
-}
+function persistPosition(key, position) { writeTradingJson(key, position); }
 
 function finite(value) {
   const n = Number(value);
@@ -1077,8 +1091,8 @@ function pruneLedger(ledger) {
   keys.sort((a, b) => String(ledger[a]?.openedAt || '').localeCompare(String(ledger[b]?.openedAt || ''))).slice(0, keys.length - 120).forEach(key => delete ledger[key]);
 }
 
-function readJson(key, fallback) { try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : fallback; } catch { return fallback; } }
-function readString(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } }
+function readJson(key, fallback) { return readTradingJson(key, fallback); }
+function readString(key, fallback) { const value=readTradingJson(key,undefined); if(value!==undefined)return String(value); try{return localStorage.getItem(key)||fallback;}catch{return fallback;} }
 function formatTime(value) { if (!value) return '—'; const date = new Date(value); return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 function formatR(value) { const n = Number(value); return Number.isFinite(n) ? `${n >= 0 ? '+' : ''}${n.toFixed(2)}R` : '—'; }
 
@@ -1120,3 +1134,4 @@ function isFyersTokenError(detail) {
   const text = typeof detail === 'string' ? detail.trim() : '';
   return /\b(?:invalid access token|access token (?:has )?expired|token is invalid|token has expired|authentication token expired)\b/i.test(text);
 }
+
