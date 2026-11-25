@@ -28,8 +28,8 @@ function fixture() {
     };
     sheets.set(name, sheet); return sheet;
   }
-  addSheet('Trades').rows.push(['trade_id', 'status'], ['existing-trade', 'CLOSED']);
-  addSheet('TradeJourney').rows.push(['event_id'], ['existing-close']);
+  addSheet('Trades').rows.push(['trade_id', 'mode', 'status'], ['existing-trade', 'SIMULATION', 'CLOSED']);
+  addSheet('TradeJourney').rows.push(['event_id','trade_id','event_time','event_type'], ['existing-close','existing-trade','2026-11-25T03:00:00Z','TRADE_CLOSED']);
   let acquired = 0;
   const context = vm.createContext({
     PropertiesService: { getScriptProperties: () => ({ getProperty: key => key === 'JOURNAL_SHARED_SECRET' ? 'fixture-key' : 'fixture-spreadsheet' }) },
@@ -74,4 +74,36 @@ test('setup updates preserve zero scores and explicit false flags', () => {
   assert.equal(rows.length, 2);
   assert.equal(rows[1][rows[0].indexOf('latest_score')], 0);
   assert.equal(rows[1][rows[0].indexOf('approved_at_capture')], false);
+});
+
+
+test('identifier receipt scans open and closed rows without changing any sheet', () => {
+  const { sheets, post, locks } = fixture();
+  sheets.get('Trades').rows.push(['other-open','SIMULATION','OPEN']);
+  const before = JSON.stringify([...sheets].map(([name,sheet]) => [name,sheet.rows]));
+  const result = post({action:'journal_receipt',secret:'fixture-key',tradeId:'existing-trade',eventId:'existing-close'});
+  assert.equal(result.ok,true); assert.equal(result.complete,true);
+  assert.equal(result.tradeRows,1); assert.equal(result.closedTradeRows,1);
+  assert.equal(result.eventRows,1); assert.equal(result.matchingEventTradeRows,1);
+  assert.equal(result.closedExitRowsForTrade,1);
+  assert.equal(result.scannedTradeRows,2); assert.equal(result.scannedEventRows,1);
+  assert.equal(JSON.stringify([...sheets].map(([name,sheet]) => [name,sheet.rows])),before);
+  assert.equal(locks(),0);
+});
+
+test('identifier receipt exposes duplicate trade and differently named final exit rows', () => {
+  const { sheets, post } = fixture();
+  sheets.get('Trades').rows.push(['existing-trade','SIMULATION','OPEN']);
+  sheets.get('TradeJourney').rows.push(['another-close','existing-trade','2026-11-25T03:01:00Z','TRADE_CLOSED']);
+  const result=post({action:'journal_receipt',secret:'fixture-key',tradeId:'existing-trade',eventId:'existing-close'});
+  assert.equal(result.tradeRows,2); assert.equal(result.closedTradeRows,1);
+  assert.equal(result.eventRows,1); assert.equal(result.closedExitRowsForTrade,2);
+});
+
+test('identifier receipt rejects wrong credentials, invalid IDs and unexpected headers', () => {
+  const { sheets, post } = fixture();
+  assert.equal(post({action:'journal_receipt',secret:'wrong',tradeId:'existing-trade',eventId:'existing-close'}).ok,false);
+  assert.equal(post({action:'journal_receipt',secret:'fixture-key',tradeId:'../invalid',eventId:'existing-close'}).ok,false);
+  sheets.get('Trades').rows[0][0]='unexpected';
+  assert.equal(post({action:'journal_receipt',secret:'fixture-key',tradeId:'existing-trade',eventId:'existing-close'}).ok,false);
 });

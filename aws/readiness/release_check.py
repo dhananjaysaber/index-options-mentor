@@ -86,7 +86,7 @@ def audit_journal(journal, root, sheet_call, pause=time.sleep):
     root = Path(root)
     before = journal.health()
     report = {'storage': 'sqlite', 'trades': before['trades'], 'events': before['events'],
-              'exportedExistingRecords': 0, 'replayVerified': False}
+              'exportedExistingRecords': 0, 'replayVerified': False, 'exportPassed': False}
     dbfile = root/'journal.sqlite3'
     with sqlite3.connect('file:'+str(dbfile)+'?mode=ro', uri=True) as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
@@ -105,8 +105,8 @@ def audit_journal(journal, root, sheet_call, pause=time.sleep):
     report['backupSha256'] = digest
     try:
         health = sheet_call({'action': 'health'})
-        if type(health.get('trades')) is not int or not 0 <= health['trades'] <= 1000:
-            raise ExportFailure('SHEETS_HISTORY_CANNOT_BE_FULLY_VERIFIED')
+        # The history endpoint filters closed trades and is capped; use a full
+        # identifier receipt instead of comparing its length with total rows.
         shipped = 0
         while shipped < 1000:
             jobs = journal.pending_exports()
@@ -119,6 +119,9 @@ def audit_journal(journal, root, sheet_call, pause=time.sleep):
                 report['exportedExistingRecords'] = shipped
                 pause(3)
         if journal.pending_exports(): raise ExportFailure('EXPORT_BACKLOG_REMAINS')
+        report['exportPassed'] = True
+        journal.mark('last_export_at', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
+        journal.mark('last_export_error', '')
         # Replay one existing closed record, never create a fake production trade.
         with sqlite3.connect('file:'+str(dbfile)+'?mode=ro', uri=True) as db:
             db.row_factory = sqlite3.Row
@@ -128,27 +131,50 @@ def audit_journal(journal, root, sheet_call, pause=time.sleep):
         payload = {'action': 'journal_event', 'event': {
             'id': f"sqlite:{row['id']}:{row['version']}", 'type': 'TRADE_CLOSED',
             'trade': trade, 'queuedAt': trade.get('closedAt'), 'source': 'sqlite_daily_export'}}
-        def count_target():
-            current_health = sheet_call({'action': 'health'})
-            rows = sheet_call({'action': 'list_trades', 'limit': 1000}).get('trades')
-            total = current_health.get('trades')
-            if (type(total) is not int or total > 1000 or not isinstance(rows, list)
-                    or len(rows) != total or any(not isinstance(r, dict) for r in rows)):
-                raise ExportFailure('SHEETS_HISTORY_CANNOT_BE_FULLY_VERIFIED')
-            return sum(r.get('id') == row['id'] for r in rows)
-        if count_target() != 1: raise ExportFailure('SHEETS_EXISTING_TRADE_NOT_UNIQUE')
+        receipt_payload = {'action': 'journal_receipt', 'tradeId': row['id'],
+                           'eventId': payload['event']['id']}
+        def receipt():
+            value = sheet_call(receipt_payload)
+            counts = ('tradeRows', 'closedTradeRows', 'eventRows', 'matchingEventTradeRows', 'closedExitRowsForTrade',
+                      'scannedTradeRows', 'scannedEventRows')
+            if (value.get('complete') is not True or value.get('tradeId') != row['id']
+                    or value.get('eventId') != payload['event']['id']
+                    or any(type(value.get(k)) is not int or value[k] < 0 for k in counts)
+                    or value['closedTradeRows'] > value['tradeRows']
+                    or value['matchingEventTradeRows'] > value['eventRows']
+                    or value['tradeRows'] > value['scannedTradeRows']
+                    or value['eventRows'] > value['scannedEventRows']
+                    or value['closedExitRowsForTrade'] > value['scannedEventRows']):
+                raise ExportFailure('SHEETS_FULL_RECEIPT_NOT_VERIFIED')
+            return value
+        initial = receipt()
+        if (initial['tradeRows'] != 1 or initial['closedTradeRows'] != 1
+                or initial['eventRows'] > 1
+                or initial['matchingEventTradeRows'] != initial['eventRows']
+                or initial['closedExitRowsForTrade'] != initial['eventRows']):
+            raise ExportFailure('SHEETS_EXISTING_TRADE_OR_EVENT_NOT_UNIQUE')
         for delivery in range(2):
             pause(3)
             sheet_call(payload)
-        if count_target() != 1: raise ExportFailure('SHEETS_REPLAY_CREATED_DUPLICATE')
+        final = receipt()
+        if any(final[k] != 1 for k in ('tradeRows', 'closedTradeRows', 'eventRows', 'matchingEventTradeRows', 'closedExitRowsForTrade')):
+            raise ExportFailure('SHEETS_REPLAY_CREATED_DUPLICATE_OR_INVALID_EXIT')
+        report['receiptSource'] = 'COMPLETE_SHEET_IDENTIFIER_SCAN'
+        report['scannedSheetTradeRows'] = final['scannedTradeRows']
+        report['matchingSheetExitEventsAfterReplay'] = 1
         report['replayVerified'] = True
         report['replayedExistingTradeHash'] = hashlib.sha256(row['id'].encode()).hexdigest()[:16]
         report['matchingSheetRowsAfterReplay'] = 1
         journal.mark('last_export_at', time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()))
         journal.mark('last_export_error', '')
+        journal.mark('last_verification_error', '')
     except ExportFailure as error:
-        journal.mark('last_export_error', 'Export verification: '+str(error))
-        report['exportBlocker'] = str(error)
+        if report['exportPassed']:
+            journal.mark('last_verification_error', str(error))
+            report['verificationBlocker'] = str(error)
+        else:
+            journal.mark('last_export_error', str(error))
+            report['exportBlocker'] = str(error)
     after = journal.health()
     report['pendingExportRecords'] = len(journal.pending_exports())
     report['productionTradeCountUnchanged'] = after['trades'] == before['trades']

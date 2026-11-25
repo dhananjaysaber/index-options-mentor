@@ -8,8 +8,13 @@ export default async function handler(request) {
   let payload;
   try { payload = JSON.parse(body); }
   catch { return Response.json({ ok: false }, { status: 400 }); }
-  if (!['health', 'list_trades', 'journal_event', 'setup_decision'].includes(payload?.action)) {
+  if (!['health', 'list_trades', 'journal_event', 'setup_decision', 'journal_receipt'].includes(payload?.action)) {
     return Response.json({ ok: false }, { status: 400 });
+  }
+  if (payload.action === 'journal_receipt') {
+    const valid = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/.test(value);
+    if (Object.keys(payload).some(key => !['action', 'tradeId', 'eventId'].includes(key)) ||
+        !valid(payload.tradeId) || !valid(payload.eventId)) return Response.json({ ok: false }, { status: 400 });
   }
   try {
     return Response.json(await forwardToSheet(payload), { headers: { 'cache-control': 'no-store' } });

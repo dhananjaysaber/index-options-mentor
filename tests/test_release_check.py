@@ -16,14 +16,23 @@ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 
 class FakeSheet:
-    def __init__(self): self.rows={};self.deliveries=[]
+    def __init__(self): self.rows={};self.deliveries=[];self.events={}
     def __call__(self,payload):
         action=payload['action']
         if action=='health': return {'ok':True,'trades':len(self.rows)}
         if action=='list_trades': return {'ok':True,'trades':list(self.rows.values())}
+        if action=='journal_receipt':
+            trade_id,event_id=payload['tradeId'],payload['eventId']
+            return {'ok':True,'complete':True,'tradeId':trade_id,'eventId':event_id,
+                'tradeRows':int(trade_id in self.rows),'closedTradeRows':int(trade_id in self.rows),
+                'eventRows':int(event_id in self.events),
+                'matchingEventTradeRows':int(self.events.get(event_id)==trade_id),
+                'closedExitRowsForTrade':sum(v==trade_id for v in self.events.values()),
+                'scannedTradeRows':len(self.rows),'scannedEventRows':len(self.events)}
         if action=='journal_event':
             trade=payload['event']['trade'];self.rows[trade['id']]=dict(trade)
             self.deliveries.append(payload['event']['id'])
+            self.events[payload['event']['id']]=trade['id']
             return {'ok':True}
         raise AssertionError(action)
 
@@ -62,27 +71,49 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertEqual(result['pendingExportRecords'],1)
         self.assertEqual(self.journal.health()['events'],1)
 
-    def test_truncated_sheet_history_never_proves_uniqueness(self):
-        self.sheet.rows['existing-paper-close']=self.trade
+    def test_large_or_filtered_history_does_not_override_complete_id_receipt(self):
         original=self.sheet
-        def truncated(payload):
-            if payload['action']=='health': return {'ok':True,'trades':1001}
+        def filtered(payload):
+            if payload['action']=='health':return {'ok':True,'trades':9000}
+            if payload['action']=='list_trades':raise AssertionError('History listing must not be used as complete proof')
             return original(payload)
-        result=check.audit_journal(self.journal,self.root,truncated,pause=lambda _:None)
+        result=check.audit_journal(self.journal,self.root,filtered,pause=lambda _:None)
+        self.assertTrue(result['passed'])
+        self.assertEqual(result['receiptSource'],'COMPLETE_SHEET_IDENTIFIER_SCAN')
+
+    def test_incomplete_or_wrong_identifier_receipt_never_proves_uniqueness(self):
+        original=self.sheet
+        def incomplete(payload):
+            result=original(payload)
+            if payload['action']=='journal_receipt':result['complete']=False
+            return result
+        result=check.audit_journal(self.journal,self.root,incomplete,pause=lambda _:None)
         self.assertFalse(result['passed'])
         self.assertFalse(result['replayVerified'])
-        self.assertEqual(result['pendingExportRecords'],1)
+        self.assertEqual(result['verificationBlocker'],'SHEETS_FULL_RECEIPT_NOT_VERIFIED')
+        self.assertTrue(result['exportPassed'])
+        self.assertEqual(self.journal.health()['maintenance']['last_export_error'],'')
+        self.assertNotEqual(self.journal.health()['maintenance']['last_verification_error'],'')
 
     def test_duplicate_sheet_rows_fail_replay_check_without_deleting_data(self):
         original=self.sheet
         def duplicate(payload):
             if payload['action']=='health':return {'ok':True,'trades':2}
-            if payload['action']=='list_trades':return {'ok':True,'trades':[self.trade,self.trade]}
+            if payload['action']=='journal_receipt':
+                result=original(payload);result.update(tradeRows=2,closedTradeRows=2,scannedTradeRows=2);return result
             return original(payload)
         result=check.audit_journal(self.journal,self.root,duplicate,pause=lambda _:None)
         self.assertFalse(result['passed'])
-        self.assertEqual(result['exportBlocker'],'SHEETS_EXISTING_TRADE_NOT_UNIQUE')
+        self.assertEqual(result['verificationBlocker'],'SHEETS_EXISTING_TRADE_OR_EVENT_NOT_UNIQUE')
         self.assertEqual(self.journal.health()['trades'],1)
+
+    def test_another_final_exit_id_is_not_ignored_or_deleted(self):
+        self.sheet.rows[self.trade['id']]=self.trade
+        self.sheet.events['other-final-exit']=self.trade['id']
+        result=check.audit_journal(self.journal,self.root,self.sheet,pause=lambda _:None)
+        self.assertFalse(result['passed'])
+        self.assertEqual(result['verificationBlocker'],'SHEETS_EXISTING_TRADE_OR_EVENT_NOT_UNIQUE')
+        self.assertIn('other-final-exit',self.sheet.events)
 
     def test_deployed_simulation_requires_explicit_no_real_orders_claims(self):
         valid = {'mode':'SIMULATED_EXECUTION_CHECK','realMoneyEnabled':False,
