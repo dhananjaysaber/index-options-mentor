@@ -2,6 +2,7 @@
 from datetime import datetime,timedelta
 from decimal import Decimal
 import json
+import codecs
 from pathlib import Path
 import re
 import subprocess
@@ -12,6 +13,70 @@ import urllib.request
 from account_connect import NoRedirect
 
 TZ=ZoneInfo('Asia/Kolkata')
+
+
+def read_nifty_master(stream, *, max_bytes=256*1024*1024, chunk_size=65536, max_record=1024*1024):
+    """Stream FYERS' full F&O object and retain only NIFTY option records.
+
+    Memory is bounded by one input chunk, one record and the retained contracts;
+    the many stock-option records are discarded immediately after decoding.
+    """
+    decoder=json.JSONDecoder();utf8=codecs.getincrementaldecoder('utf-8')()
+    buffer='';pos=0;total=0;eof=False;result={}
+    def more():
+        nonlocal buffer,pos,total,eof
+        if eof:return False
+        buffer=buffer[pos:];pos=0
+        if len(buffer)>max_record:raise ValueError('CONTRACT_MASTER_RECORD_TOO_LARGE')
+        raw=stream.read(chunk_size);total+=len(raw)
+        if total>max_bytes:raise ValueError('CONTRACT_MASTER_TOO_LARGE')
+        eof=not raw
+        try:buffer+=utf8.decode(raw,final=eof)
+        except UnicodeDecodeError:raise ValueError('CONTRACT_MASTER_INVALID_ENCODING') from None
+        return bool(raw)
+    def space():
+        nonlocal pos
+        while True:
+            while pos<len(buffer) and buffer[pos].isspace():pos+=1
+            if pos<len(buffer) or eof:return
+            more()
+    def token(expected):
+        nonlocal pos
+        space()
+        if pos>=len(buffer) or buffer[pos]!=expected:raise ValueError('CONTRACT_MASTER_INVALID')
+        pos+=1
+    def value():
+        nonlocal pos
+        space()
+        while True:
+            try:
+                item,end=decoder.raw_decode(buffer,pos)
+                # Numeric values may end at a chunk boundary; read the delimiter
+                # before accepting so a split number cannot be parsed partially.
+                if end==len(buffer) and not eof:
+                    if not more():continue
+                    continue
+                pos=end
+                return item
+            except json.JSONDecodeError:
+                if eof:raise ValueError('CONTRACT_MASTER_INVALID') from None
+                more()
+    token('{');first=True
+    while True:
+        space()
+        if pos<len(buffer) and buffer[pos]=='}':pos+=1;break
+        if not first:token(',')
+        symbol=value()
+        if not isinstance(symbol,str):raise ValueError('CONTRACT_MASTER_INVALID')
+        token(':');record=value()
+        if re.fullmatch(r'NSE:NIFTY[A-Z0-9]+(?:CE|PE)',symbol):
+            if not isinstance(record,dict) or symbol in result:raise ValueError('CONTRACT_MASTER_INVALID_NIFTY_RECORD')
+            result[symbol]=record
+        first=False
+    space()
+    if pos<len(buffer):raise ValueError('CONTRACT_MASTER_TRAILING_DATA')
+    if not result:raise ValueError('NO_NIFTY_CONTRACTS')
+    return result
 
 class Market:
     def __init__(self,client,settings,clock=time.time):
@@ -27,12 +92,7 @@ class Market:
         if self.clock()-self.master_at<21600 and self.master:return
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
         with opener.open('https://public.fyers.in/sym_details/NSE_FO_sym_master.json',timeout=12) as response:
-            raw=response.read(40_000_001)
-            if len(raw)>40_000_000:raise ValueError('CONTRACT_MASTER_TOO_LARGE')
-            value=json.loads(raw)
-        if not isinstance(value,dict):raise ValueError('CONTRACT_MASTER_INVALID')
-        result={s:r for s,r in value.items() if re.fullmatch(r'NSE:NIFTY[A-Z0-9]+(?:CE|PE)',s) and isinstance(r,dict)}
-        if not result:raise ValueError('NO_NIFTY_CONTRACTS')
+            result=read_nifty_master(response)
         self.master,self.master_at=result,self.clock()
     def contract(self,symbol):
         with self.lock:

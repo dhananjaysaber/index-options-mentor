@@ -65,3 +65,19 @@ simulated lifecycle behaviour. It does not prove actual broker stop acceptance,
 fill latency, exchange execution or slippage. The user must perform the final
 controlled real-order acceptance test. No automatic merge or real-money activation
 is part of this installer; PR28 and PR30 remain unmerged.
+
+## Contract-stream startup correction
+
+The first AWS installation passed its isolated tests but rolled back at startup.
+The real FYERS F&O JSON was 90,878,119 bytes, exceeding the original 40 MB cap.
+The loader now decodes 64 KiB chunks, discards stock-option records as it goes,
+and retains only matching NIFTY option contracts, with bounded per-record and
+total input limits. A direct read of the actual official file loaded 7,534
+matching contracts using about 53.5 MiB peak process memory. Tests cover chunk
+boundaries, split UTF-8, malformed/truncated data and a generated master over
+40 MB without constructing that whole file in memory.
+
+The installer now runs a disabled account/master/journal preflight before any
+service or nginx changes. Startup failures expose only a fixed stage and safe
+constant reason. Rollback disables new units while their files still exist,
+then restores/removes configuration, avoiding dangling enablement links.

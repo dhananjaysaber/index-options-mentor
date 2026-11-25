@@ -32,6 +32,16 @@ CONFIG=Path('/etc/index-options-order-host.json')
 ACCOUNT=Path('/etc/index-options-live-account.json')
 DATA=Path('/var/lib/index-options-mentor/order-host')
 
+class StartupError(Exception):
+    def __init__(self,stage,error):
+        reason=str(error)
+        self.stage=stage
+        self.reason=reason if re.fullmatch(r'[A-Z_]{3,100}',reason) else type(error).__name__
+
+def startup(stage,task):
+    try:return task()
+    except Exception as error:raise StartupError(stage,error) from None
+
 class JournalBridge:
     def __init__(self,secret):self.secret=secret
     def request(self,payload):
@@ -88,17 +98,18 @@ def build(config,account,secret):
     # Activation is a separate operator action, never an installer/env/browser toggle.
     if enabled and config.get('operatorApprovedAppId')!=account['appId']:raise ValueError('SEPARATE_OPERATOR_APPROVAL_REQUIRED')
     client=FyersRest(account['appId'],account['accessToken'],send_enabled=enabled)
-    profile=client.get_profile();owner=verify_owner(profile,account['ownerProof'],secret)
+    profile=startup('TRADING_ACCOUNT_READ',client.get_profile)
+    owner=startup('TRADING_ACCOUNT_OWNER',lambda:verify_owner(profile,account['ownerProof'],secret))
     broker=FyersBroker(client,send_enabled=enabled);feed=Feed('/var/lib/index-options-mentor/live-feed')
     market=Market(client,lambda:runtime.settings())
     # A real contract master is required even when the host is disabled.
-    market.refresh_master()
+    startup('CONTRACT_MASTER',market.refresh_master)
     maximum=max(int(row.get('qtyFreeze',0)) for row in market.master.values() if str(row.get('qtyFreeze','')).isdigit())
     orders=Orders(DATA/'orders.sqlite3',broker,owner,max_quantity=maximum,enabled=enabled)
     planner=EntryPlanner(market.contract,feed.quote,market.session_open,max_amount=config['maxTradeAmount'],fee_reserve=config['feeReserve'])
     execution=Execution(orders,planner);journal=JournalBridge(secret)
     runtime=Runtime(execution,Manager(execution,journal),feed,market,max_amount=config['maxTradeAmount'])
-    journal.health() # Read-only; no fake event is written to the production journal.
+    startup('JOURNAL_CONNECTION',journal.health) # No fake event is written.
     return runtime
 
 
@@ -118,8 +129,15 @@ def backup():
 def main():
     import sys
     if sys.argv[1:]==['backup']:print(encoded(backup()));return
-    config=secure_json(CONFIG);account=secure_json(ACCOUNT);secret=secure_json('/etc/index-options-journal.json')['secret']
-    runtime=build(config,account,secret);http=server(runtime,secret,account['ownerProof'],9078)
+    preflight=sys.argv[1:]==['preflight']
+    if sys.argv[1:] and not preflight:raise ValueError('INVALID_HOST_COMMAND')
+    config={'version':1,'realMoneyEnabled':False,'maxTradeAmount':30000,'feeReserve':100} if preflight else startup('HOST_CONFIGURATION',lambda:secure_json(CONFIG))
+    account=startup('ACCOUNT_CONFIGURATION',lambda:secure_json(ACCOUNT))
+    secret=startup('JOURNAL_CONFIGURATION',lambda:secure_json('/etc/index-options-journal.json'))['secret']
+    runtime=build(config,account,secret)
+    if preflight:
+        print(encoded({'ok':True,'stage':'DISABLED_HOST_PREFLIGHT','niftyContracts':len(runtime.market.master),'readOnlyAccountPassed':True,'journalReadPassed':True,'ordersSent':0,'realMoneyEnabled':False}));return
+    http=startup('LOCAL_HTTP_LISTENER',lambda:server(runtime,secret,account['ownerProof'],9078))
     stopped=threading.Event();initial=hashlib.sha256(ACCOUNT.read_bytes()).digest()
     def market_worker():
         while not stopped.is_set():
@@ -142,7 +160,8 @@ def main():
 
 if __name__=='__main__':
     try:main()
-    except Exception:
-        # Never emit broker responses, tokens, config contents or signed requests.
+    except Exception as error:
+        # Only a fixed stage and a bounded constant reason may leave this process.
         import sys
-        print('ORDER_HOST_STARTUP_FAILED_NO_NEW_ORDERS',file=sys.stderr);sys.exit(1)
+        result={'ok':False,'stage':error.stage if isinstance(error,StartupError) else 'ORDER_HOST_STARTUP','reason':error.reason if isinstance(error,StartupError) else type(error).__name__,'ordersSent':0}
+        print(encoded(result),file=sys.stderr);sys.exit(1)

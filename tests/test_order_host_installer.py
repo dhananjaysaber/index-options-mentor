@@ -20,7 +20,7 @@ class HostInstallerTests(unittest.TestCase):
         spec=importlib.util.spec_from_file_location('order_host_installer_test',ROOT/'public/iom-order-host.py');self.mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.mod)
         self.mod.BASE=self.base;self.mod.DATA=self.root/'data';self.mod.UNIT_DIR=self.units;self.mod.NGINX_DIRS=(str(self.nginx),);self.mod.HOST_CONFIG=self.root/'config.json';self.calls=[]
     def tearDown(self):self.temp.cleanup()
-    def install(self,fail=False):
+    def install(self,fail=False,fail_preflight=False):
         def secure(path):
             path=str(path)
             if path.endswith('live-account.json'):return {'appId':'TRADINGAPP-200','accessToken':'x'*40,'ownerProof':'a'*64}
@@ -29,6 +29,7 @@ class HostInstallerTests(unittest.TestCase):
             return json.loads(Path(path).read_text())
         def run(cmd,**kwargs):
             self.calls.append(cmd)
+            if fail_preflight and cmd[-1:] == ['preflight']:raise RuntimeError('simulated preflight failure')
             if fail and cmd[:2]==['systemctl','restart'] and kwargs.get('check'):raise RuntimeError('simulated restart failed')
             return subprocess.CompletedProcess(cmd,1 if 'is-enabled' in cmd else 0)
         with ExitStack() as stack:
@@ -45,6 +46,11 @@ class HostInstallerTests(unittest.TestCase):
     def test_restart_failure_restores_route_and_removes_new_units(self):
         with self.assertRaisesRegex(RuntimeError,'restored'):self.install(fail=True)
         self.assertEqual(self.site.read_text(),self.source);self.assertFalse(self.mod.HOST_CONFIG.exists());self.assertFalse((self.units/self.mod.SERVICE).exists())
+    def test_preflight_failure_changes_no_units_or_routes(self):
+        with self.assertRaisesRegex(RuntimeError,'preflight'):self.install(fail_preflight=True)
+        self.assertEqual(self.site.read_text(),self.source);self.assertFalse(self.mod.HOST_CONFIG.exists())
+        self.assertEqual(list(self.units.iterdir()),[])
+        self.assertFalse(any(c[:2] in (['systemctl','enable'],['systemctl','restart']) for c in self.calls))
     def test_enabled_existing_host_is_not_overwritten(self):
         self.mod.HOST_CONFIG.write_text(json.dumps({'realMoneyEnabled':True}))
         with self.assertRaisesRegex(RuntimeError,'enabled order host'):self.install()

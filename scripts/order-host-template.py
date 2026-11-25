@@ -90,6 +90,8 @@ def main():
         unit_dir=UNIT_DIR;unit=unit_dir/SERVICE;backup_unit=unit_dir/'index-options-order-backup.service';timer=unit_dir/TIMER
         for p in (unit,backup_unit,timer):no_links(p)
         code=release/'aws/live/order_host.py'
+        print('Preflight: checking the actual trading login, full FYERS contract stream and journal before service changes...',flush=True)
+        run(['sudo','-u','mentor','--',sys.executable,str(code),'preflight'],cwd=Path('/tmp'),env=env,timeout=90)
         hardening=f'''User=mentor
 Group=mentor
 WorkingDirectory={release}
@@ -155,13 +157,17 @@ WantedBy=multi-user.target
             print('Actual order service connected and daily ledger backup enabled. Real-money sending remains OFF. Actual broker buy/stop/exit proof requires a user-executed live acceptance test.')
         except Exception:
             subprocess.run(['systemctl','stop',SERVICE,TIMER],check=False)
+            # Disable while the unit files still exist, removing enablement links
+            # before restoring/removing configuration files.
+            if not old_enabled:subprocess.run(['systemctl','disable',SERVICE],check=False)
+            if not old_timer_enabled:subprocess.run(['systemctl','disable',TIMER],check=False)
             for p,value in previous.items():
                 if value is None:
                     if p.exists():p.unlink()
                 else:p.write_bytes(value)
             run(['systemctl','daemon-reload'])
-            subprocess.run(['systemctl','enable' if old_enabled else 'disable',SERVICE],check=False)
-            subprocess.run(['systemctl','enable' if old_timer_enabled else 'disable',TIMER],check=False)
+            if old_enabled:subprocess.run(['systemctl','enable',SERVICE],check=False)
+            if old_timer_enabled:subprocess.run(['systemctl','enable',TIMER],check=False)
             if old_active:subprocess.run(['systemctl','start',SERVICE],check=False)
             if old_timer:subprocess.run(['systemctl','start',TIMER],check=False)
             subprocess.run(['nginx','-t'],check=False);subprocess.run(['systemctl','reload','nginx'],check=False)
