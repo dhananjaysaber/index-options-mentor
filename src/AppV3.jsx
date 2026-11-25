@@ -730,6 +730,7 @@ export default function AppV3() {
                 <TraderDecisionBanner snapshot={snapshot} loading={loading} />
                 <ResearchStatus classification={setupClassification} position={corePosition} settings={settings} manualReady={coreManualReady} />
                 <MentorWorkflow snapshot={snapshot} />
+                <div className="desktop-core-layout">
                 {mode === 'advanced' && <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />}
 
                 <section className={`trader-workspace ${mode === 'simple' ? 'simple-workspace' : 'advanced-workspace'} mentor-v2-workspace compact-v41-workspace`}>
@@ -741,6 +742,8 @@ export default function AppV3() {
                     ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky />
                     : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
                 </section>
+
+                </div>
 
                 <CoreQuickActions snapshot={snapshot} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
               </>

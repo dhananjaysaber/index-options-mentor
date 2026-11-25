@@ -48,3 +48,7 @@ jobs:
         run: node scripts/verify-quota-exits.mjs
         env:
           GITHUB_ACTIONS: 'true'
+      - name: Desktop 13-point layout and mobile isolation
+        run: node scripts/verify-core-desktop-layout.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
