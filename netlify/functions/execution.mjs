@@ -48,7 +48,7 @@ export default async function execution(request){
     if(origin)return reply(403,{error:'SERVER_AUTHENTICATION_REQUIRED'});
     owner=request.headers.get('x-iom-owner')||'';time=request.headers.get('x-iom-time')||'';nonce=request.headers.get('x-iom-nonce')||'';
     const supplied=request.headers.get('x-iom-signature')||'';
-    const expected=signed(secret,time,nonce,owner,url.pathname,body);
+    const expected=signed(secret,time,nonce,owner,'/api/execution/maintenance',body);
     if(!/^[a-f0-9]{64}$/.test(owner)||!/^\d{10}$/.test(time)||Math.abs(Date.now()/1000-Number(time))>30||!/^[a-f0-9]{32}$/.test(nonce)||!/^[a-f0-9]{64}$/.test(supplied)||supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return reply(403,{error:'SERVER_AUTHENTICATION_FAILED'});
   }else{
     const access=token(request);if(!access)return reply(401,{error:'FYERS_SESSION_REQUIRED'},origin);
