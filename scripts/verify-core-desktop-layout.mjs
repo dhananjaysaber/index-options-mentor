@@ -40,9 +40,29 @@ try{
     assert.ok(dock.x>=side.x+side.width-1,'Action bar must not hide under the sidebar');
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'No horizontal page overflow');
   }
+  const nav=page.locator('.mentor-sidebar-v2 .sidebar-nav-button').filter({hasText:'Positions'}).first();
+  await nav.hover();
+  const contrast=await nav.evaluate(button=>{
+    const rgb=text=>text.match(/[\\d.]+/g).slice(0,3).map(Number);
+    const luminance=rgb=>rgb.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[.2126,.7152,.0722][i],0);
+    const fg=luminance(rgb(getComputedStyle(button.querySelector('strong')).color));
+    const bg=luminance(rgb(getComputedStyle(button).backgroundColor));
+    return (Math.max(fg,bg)+.05)/(Math.min(fg,bg)+.05);
+  });
+  assert.ok(contrast>=4.5,'Sidebar hover text must remain readable');
+  const canvas=page.locator('.desktop-core-layout .nifty-chart-canvas').first();
+  await canvas.scrollIntoViewIfNeeded();
+  const box=await canvas.boundingBox();
+  assert.ok(box,'Chart is rendered for wheel interaction');
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  const beforeScroll=await page.evaluate(()=>scrollY);
+  await page.mouse.wheel(0,260);
+  await page.waitForFunction(before=>scrollY>before+40,beforeScroll);
+  const chain=await canvas.evaluate(svg=>getComputedStyle(svg.parentElement).overscrollBehaviorY);
+  assert.equal(chain,'auto','Chart must allow scrolling to continue into the page');
   await page.setViewportSize({width:390,height:844});
   assert.equal(await layout.isVisible(),false,'Desktop wrapper must stay hidden on mobile');
   assert.equal(await page.locator('.mobile-mentor-flow').isVisible(),true,'Existing mobile dashboard remains visible');
   assert.deepEqual(errors,[]);
-  console.log('PASS 13-point desktop geometry at 2048/1440/1024; banner, readable panels, compact tiles, sidebar-safe actions and mobile isolation');
+  console.log('PASS 13-point desktop geometry at 2048/1440/1024; banner, readable panels, compact tiles, sidebar-safe actions, legible navigation hover, wheel scrolling over chart and mobile isolation');
 }finally{if(browser)await browser.close();server.kill('SIGTERM');}
