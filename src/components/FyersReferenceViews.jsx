@@ -198,8 +198,8 @@ export function FyersTicket({ snapshot, settings, liveQuote, onBack }) {
     <div className="fyers-ref-disabled">Submit real buy · unavailable on this review screen</div>
   </div>;
 }
-export function FyersPositions({ corePosition, scalpPosition, history, snapshot, coreMentor, scalpMentor, alertsEnabled, onExit }) {
-  const [slot,setSlot] = useState('core');
+export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPosition, history, snapshot, coreMentor, scalpMentor, alertsEnabled, onExit }) {
+  const [slot,setSlot] = useState(defaultSlot);
   const completed = Array.isArray(history) ? history.filter(x=>x?.closedAt) : [];
   const today = completed.filter(x=>new Date(x.closedAt).toDateString()===new Date().toDateString());
   const total = today.reduce((sum,x)=>sum+Number(x.pnl||0),0);
