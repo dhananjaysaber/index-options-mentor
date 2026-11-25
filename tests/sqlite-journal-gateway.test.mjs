@@ -132,3 +132,33 @@ test('maintenance reports private-safe export failure categories', async () => {
     }
   }
 });
+
+
+test('only a signed, valid read-only identifier receipt is forwarded to Sheets', async () => {
+  const savedFetch=globalThis.fetch, env={...process.env};
+  process.env.AWS_PAPER_SYNC_SECRET='receipt-key-'.repeat(5);
+  process.env.JOURNAL_WEB_APP_URL='https://script.google.com/macros/s/fixture/exec';
+  process.env.JOURNAL_SHARED_SECRET='receipt-sheet-key';
+  let forwarded=0;
+  globalThis.fetch=async (url,init)=>{
+    const body=JSON.parse(init.body);forwarded++;
+    assert.equal(body.action,'journal_receipt');assert.equal(body.tradeId,'trade-id');
+    assert.equal(body.eventId,'sqlite:trade-id:1');
+    return Response.json({ok:true,complete:true,tradeId:body.tradeId,eventId:body.eventId});
+  };
+  const payload={action:'journal_receipt',tradeId:'trade-id',eventId:'sqlite:trade-id:1'};
+  async function send(value,signed=true){const body=JSON.stringify(value);return maintenance(new Request('https://optionsmentor.netlify.app/api/journal-maintenance',
+    {method:'POST',body,headers:signed?signedHeaders('/api/journal-maintenance',body):{}}));}
+  try {
+    assert.equal((await send(payload,false)).status,401);
+    assert.equal((await send({...payload,tradeId:'../invalid'})).status,400);
+    assert.equal((await send({...payload,extra:'not-allowed'})).status,400);
+    assert.equal((await send(payload)).status,200);
+    assert.equal(forwarded,1);
+  }finally{
+    globalThis.fetch=savedFetch;
+    for(const name of ['AWS_PAPER_SYNC_SECRET','JOURNAL_WEB_APP_URL','JOURNAL_SHARED_SECRET']){
+      if(env[name]===undefined)delete process.env[name];else process.env[name]=env[name];
+    }
+  }
+});

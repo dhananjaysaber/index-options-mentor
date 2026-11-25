@@ -1,0 +1,24 @@
+name: Verify complete journal receipts
+on:
+  pull_request:
+    paths:
+      - 'apps-script/**'
+      - 'netlify/functions/journal-maintenance.mjs'
+      - 'netlify/functions/lib/journalBridge.mjs'
+      - 'tests/apps-script-setup-export.test.mjs'
+      - 'tests/sqlite-journal-gateway.test.mjs'
+      - '.github/workflows/verify-journal-receipts.yml'
+permissions:
+  contents: read
+jobs:
+  receipts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node --test tests/apps-script-setup-export.test.mjs tests/sqlite-journal-gateway.test.mjs tests/sqlite-journal-http.test.mjs
