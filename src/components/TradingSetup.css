@@ -1,0 +1,65 @@
+.premium-fintech-shell .live-setup-card {
+  margin: 18px 0;
+  padding: 24px;
+  border: 1px solid #2d4861;
+  border-radius: 20px;
+  background: linear-gradient(140deg, #12273b, #0c1d2e);
+  color: #edf5ff;
+  min-width: 0;
+}
+.live-setup-header, .live-setup-plan-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.premium-fintech-shell .live-setup-header h2 { margin: 6px 0 0; font-size: 25px; line-height: 1.25; color: #f2f7ff; }
+.live-setup-eyebrow { color: #8bbbdc; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.live-setup-badge { display: inline-flex; align-items: center; padding: 8px 12px; border: 1px solid #3c566d; border-radius: 999px; background: #1a3044; color: #dceaff; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.live-setup-badge.is-off { border-color: #9e783d; background: #392f20; color: #ffdf9c; }
+.live-setup-badge.is-on { border-color: #21876b; background: #0c3b30; color: #89f4ca; }
+.premium-fintech-shell .live-setup-card p { margin: 10px 0; color: #aec3d7; font-size: 14px; line-height: 1.65; }
+.premium-fintech-shell .live-setup-card .live-setup-lead { margin: 16px 0 20px; font-size: 16px; }
+.live-setup-status-grid, .live-setup-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.live-setup-stat { min-width: 0; padding: 16px; border: 1px solid #304a62; border-radius: 13px; background: #102236; }
+.live-setup-stat > span { display: block; color: #9eb7cc; font-size: 12px; line-height: 1.4; }
+.live-setup-stat > strong { display: block; margin-top: 7px; color: #f1f7ff; font-size: 19px; line-height: 1.4; overflow-wrap: anywhere; }
+.premium-fintech-shell .live-setup-card .live-setup-note { padding: 12px 15px; border-left: 3px solid #d7a950; background: #29291e; color: #f2dcae; border-radius: 8px; }
+.live-setup-step { margin-top: 22px; padding-top: 22px; border-top: 1px solid #2c455d; }
+.live-setup-step-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.live-setup-step-heading > span { display: grid; place-items: center; flex: 0 0 32px; height: 32px; border-radius: 10px; background: #173f60; color: #bce6ff; font-size: 15px; font-weight: 800; }
+.premium-fintech-shell .live-setup-card h3 { margin: 0; font-size: 18px; line-height: 1.4; color: #edf6ff; }
+.premium-fintech-shell .live-setup-step-heading p { margin: 5px 0 0; }
+.live-setup-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 0 0; }
+.premium-fintech-shell .live-setup-card .live-setup-button { min-height: 46px; padding: 12px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid #3b91ce; border-radius: 11px; background: #166ca8; color: #fff; font: inherit; font-size: 14px; font-weight: 750; line-height: 1.4; cursor: pointer; white-space: normal; }
+.premium-fintech-shell .live-setup-card .live-setup-button:hover:not(:disabled) { background: #2080be; }
+.premium-fintech-shell .live-setup-card .live-setup-button:disabled { cursor: not-allowed; background: #243d52; border-color: #3c5265; color: #a7bbcd; }
+.live-setup-budget { display: grid; gap: 5px; padding: 16px; border: 1px solid #31516d; border-radius: 13px; background: #10273c; }
+.live-setup-budget > span { color: #afc8dc; font-size: 12px; }
+.live-setup-budget > strong { color: #e9f5ff; font-size: 26px; }
+.live-setup-budget > small { color: #a0b8cd; font-size: 12px; line-height: 1.6; }
+.premium-fintech-shell .live-setup-card .live-setup-error { margin-top: 18px; padding: 14px 16px; border: 1px solid #9b5863; border-radius: 12px; background: #3a202e; color: #ffe0e5; }
+.premium-fintech-shell .live-setup-error p { color: #ffe0e5; margin-bottom: 0; }
+.live-setup-plan { margin-top: 22px; padding: 20px; border: 1px solid #287e6a; border-radius: 15px; background: #0d2c2a; }
+.live-setup-plan-heading h3 { overflow-wrap: anywhere; }
+.live-setup-plan-heading > span { color: #bddacb; font-size: 12px; }
+.live-setup-plan-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.premium-fintech-shell .live-setup-card .live-setup-buy { background: #08765c; border-color: #26aa83; }
+.premium-fintech-shell .live-setup-card .live-setup-exit { background: #84374a; border-color: #b85c70; }
+.live-setup-position { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; padding: 16px; background: #102236; border-radius: 12px; overflow-wrap: anywhere; }
+.live-setup-details { margin-top: 22px; padding: 16px; border: 1px solid #304a62; border-radius: 13px; }
+.live-setup-details summary, .live-paper-check summary { cursor: pointer; color: #e8f3ff; font-size: 15px; font-weight: 750; }
+.live-setup-toggle { display: flex; justify-content: space-between; align-items: center; gap: 18px; min-height: 52px; border-top: 1px solid #2c455d; font-size: 14px; }
+.live-setup-toggle input { width: 21px; height: 21px; flex: 0 0 21px; accent-color: #20c898; }
+.live-paper-check summary > span:first-child { display: inline-block; margin-right: 16px; vertical-align: middle; }
+.live-paper-check summary strong, .live-paper-check summary small { display: block; }
+.live-paper-check summary small { margin-top: 6px; color: #9fb6ca; font-size: 12px; font-weight: 400; }
+.premium-fintech-shell .live-setup-card .live-setup-success { color: #96edcd; padding-top: 10px; }
+@media (max-width: 680px) {
+  .premium-fintech-shell .live-setup-card { padding: 18px; margin: 14px 0; border-radius: 16px; }
+  .premium-fintech-shell .live-setup-header h2 { font-size: 22px; }
+  .live-setup-status-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+  .live-setup-stat { padding: 13px; }
+  .live-setup-actions { flex-direction: column; }
+  .live-setup-actions > button { width: 100%; }
+  .live-setup-plan { padding: 15px; }
+  .live-setup-plan-grid { grid-template-columns: minmax(0, 1fr); }
+  .live-setup-header, .live-setup-plan-heading { gap: 12px; }
+  .live-setup-position > button { width: 100%; }
+  .live-paper-check summary .live-setup-badge { margin-top: 12px; }
+}

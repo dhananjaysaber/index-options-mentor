@@ -11,12 +11,12 @@ export default function ExecutionConnectionPanel(){
       setResult(data);
     }catch(e){setError(e.message||'The execution check could not finish.');}finally{setBusy(false);}
   }
-  return <section className="settings-card" aria-label="AWS execution connection">
-    <h2>AWS execution connection</h2>
-    <p>This check uses simulated broker orders.</p>
-    <p>Check Core and Scalp exits, stop handling and duplicate protection with fake orders. Your positions and trade history are not changed.</p>
-    <button type="button" className="settings-save-btn" disabled={busy} onClick={check}>{busy?'Checking AWS…':'Check AWS connection and exits'}</button>
-    <div aria-live="polite">{result&&<p>AWS connected. Core and Scalp checks passed; each exit was recorded once. The check did not send real orders.</p>}</div>
-    {error&&<p role="alert">{error}</p>}
-  </section>;
+  return <details className="settings-card live-setup-card live-paper-check">
+    <summary><span><strong>Practice-mode system check</strong><small>Optional · tests paper trades only</small></span><span className="live-setup-badge">{result ? 'Passed' : 'Not checked'}</span></summary>
+    <p>Checks the practice-trade exit rules using dummy orders. It does not place real trades or change your trade history.</p>
+    <button type="button" className="live-setup-button" disabled={busy} onClick={check}>{busy ? 'Checking…' : 'Run practice check'}</button>
+    <div aria-live="polite">{result && <p className="live-setup-success">Practice checks passed for 13-point and Scalp. Each exit was recorded once. No real orders were sent.</p>}</div>
+    {error && <p className="live-setup-error" role="alert">{error}</p>}
+  </details>;
 }
+

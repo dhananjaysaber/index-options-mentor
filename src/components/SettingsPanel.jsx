@@ -47,18 +47,18 @@ export default function SettingsPanel({ settings, onSave }) {
         <div>
           <div className="eyebrow">MENTOR CONTROL</div>
           <h1>Settings</h1>
-          <p>Account sizing and simulation automation live here. Strategy thresholds remain locked in the Mentor engine so normal settings changes cannot quietly weaken the 13-step model.</p>
+          <p>Set your trade amount, check the real-money connection and manage your paper-trading settings.</p>
         </div>
         <span className={`settings-save-state ${saving ? 'saving' : saved ? 'success' : ''}`} aria-live="polite">
           {saving ? 'Saving settings…' : saved ? 'Settings saved successfully' : 'Changes not saved'}
         </span>
       </div>
 
-      <ExecutionConnectionPanel />
       <LiveOrderPanel tradeAmount={draft.tradeAmount} />
+      <ExecutionConnectionPanel />
 
       <div className="settings-grid">
-        <SettingsCard title="Account & sizing" copy="Used for risk analysis and research sizing. The exchange contract lot size still comes directly from FYERS.">
+        <SettingsCard title="Trade amount and account settings" copy="Enter your amount per trade. Mentor calculates whole lots using the selected option price.">
           <Field label="Capital" hint="Your working capital for risk calculations.">
             <input type="number" min="10000" step="5000" value={draft.capital} onChange={e => update('capital', e.target.value)} />
           </Field>
@@ -72,7 +72,7 @@ export default function SettingsPanel({ settings, onSave }) {
           <div className="settings-note">Mentor uses the selected option price and its exchange lot size to calculate quantity. A trade is skipped when the amount cannot cover one lot.</div>
         </SettingsCard>
 
-        <SettingsCard title="Mentor automation" copy="These switches control simulated research positions only. They do not place real FYERS orders.">
+        <SettingsCard title="Paper-trading automation" copy="These switches control practice trades. Real-money automatic buying is controlled separately above.">
           <Toggle checked={draft.mentorAutoOpen} onChange={value => update('mentorAutoOpen', value)} title="Mentor auto-open" copy="Open an eligible simulated setup automatically so missed screen taps do not create missing research data." />
           <Toggle checked={draft.mentorAutoClose} onChange={value => update('mentorAutoClose', value)} title="Mentor auto-close" copy="Close the 13-point simulated position automatically when the position Mentor reaches a genuine EXIT condition." />
           <Toggle checked={draft.scalpAutoOpen !== false} onChange={value => update('scalpAutoOpen', value)} title="Scalp auto-open" copy="Open a scalp simulation automatically only when the strict 5m-context / 3m-execution scalp rules qualify." />
@@ -138,3 +138,4 @@ function Toggle({ checked, onChange, title, copy }) {
     </label>
   );
 }
+

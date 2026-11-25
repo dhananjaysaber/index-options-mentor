@@ -53,3 +53,8 @@ jobs:
         env:
           GITHUB_ACTIONS: 'true'
 
+      - name: Plain-English live settings and plan-only review
+        run: node scripts/verify-live-settings-ux.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+
