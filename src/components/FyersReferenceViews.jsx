@@ -54,7 +54,7 @@ export function FyersMarketContext({ snapshot }) {
     <div className="fyers-ref-context-grid bottom">{levels.map(([label,value])=><Value key={label} label={label} value={fmt(value)}/>)}</div>
   </section>;
 }
-function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, marketDataReady }) {
+function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, marketDataReady, mode }) {
   const s = snapshot || {};
   const classification = classifyResearchSetup(snapshot);
   const mandatory = (s.parameters || []).filter(row => row.mandatory);
@@ -62,7 +62,7 @@ function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, 
   const option = s.option || {};
   const decision = s.decision || {};
   const sizing = calculateSimulationSizing(snapshot, settings, liveQuote);
-  const quotePrice = liveQuote?.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : null;
+  const quotePrice = liveQuote && liveQuote.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : null;
   const entry = quotePrice ?? positive(option.ltp);
   const qualified = Boolean(classification.eligible && marketDataReady);
   const direction = option.optionType || decision.side || '—';
@@ -74,10 +74,10 @@ function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, 
       </div>
       <button className="fyers-ref-score" type="button" onClick={onDetail} aria-label="Open 13-point Advanced detail"><b>{Number.isFinite(Number(decision.score)) && decision.score != null ? decision.score : '—'}</b><small>/100</small><span>Advanced ›</span></button>
     </div>
-    <SectionHead title="MANDATORY · HARD SAFETY" aside={String(classification.mandatoryPassCount ?? 0) + '/5'} />
+    {mode === 'advanced' && <><SectionHead title="MANDATORY · HARD SAFETY" aside={String(classification.mandatoryPassCount ?? 0) + '/5'} />
     <Dots rows={mandatory}/>
     <SectionHead title="CONFIRMATIONS" aside={String(classification.confirmationPassCount ?? 0) + '/8'} />
-    <Dots rows={confirms} compact />
+    <Dots rows={confirms} compact /></>}
     <div className="fyers-ref-price-grid">
       <Value label="Entry" value={money(entry)} />
       <Value label="Stop" value={money(option.estimatedPremiumStop)} tone="danger" />
@@ -110,7 +110,7 @@ function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, on
     </div>)}
   </section>;
 }
-export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
+export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
   return <div className="fyers-ref-page fyers-ref-core">
     <div className="fyers-ref-trade-grid">
       <div className="fyers-ref-chart-column">
@@ -120,7 +120,7 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mar
       </div>
       <div className="fyers-ref-decision-column">
         {corePosition && <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('core',{...meta,closedBy:'USER'})}/>}
-        <FyersCoreDecision snapshot={snapshot} liveQuote={liveQuote} settings={settings} marketDataReady={marketDataReady} onDetail={()=>onNavigate('detail')} onTicket={()=>onNavigate('ticket')}/>
+        <FyersCoreDecision snapshot={snapshot} liveQuote={liveQuote} settings={settings} marketDataReady={marketDataReady} mode={mode} onDetail={()=>onNavigate('detail')} onTicket={()=>onNavigate('ticket')}/>
         <FyersMarketContext snapshot={snapshot}/>
         {corePosition && <LivePositionPanel position={corePosition} onExit={meta=>onExit('core',meta)} history={history} snapshot={snapshot}/>}
         <div className="fyers-ref-actions">
@@ -135,7 +135,7 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
   const ev = evaluation || {};
   const checks = Array.isArray(ev.checks) ? ev.checks : [];
   const option = snapshot?.option || {};
-  const price = liveQuote?.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
+  const price = liveQuote && liveQuote.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
   const sizing = calculateTradeAmountSizing(settings, price, Number(option.lotSize));
   const ready = Boolean(marketDataReady && ev.manualEligible && sizing.lots > 0 && !position);
   function manual(side) {
@@ -185,7 +185,7 @@ export function FyersTicket({ snapshot, settings, liveQuote, onBack }) {
   const [copied,setCopied] = useState(false);
   const option = snapshot?.option || {}, market = snapshot?.market || {}, structure=snapshot?.structure || {};
   const sizing = calculateSimulationSizing(snapshot,settings,liveQuote);
-  const price = liveQuote?.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
+  const price = liveQuote && liveQuote.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
   const values = [['Lots / Qty',(sizing.lots||'—') + ' / ' + (sizing.quantity||'—')],['Option ref.',money(option.ltp)],['Buy option price · limit',money(price)],['Initial stop price',money(option.estimatedPremiumStop)],['NIFTY stop',fmt(structure.underlyingStop)],['NIFTY target',fmt(structure.underlyingTarget)],['Premium cost',money(sizing.premiumCost)],['Amount per trade',money(settings.tradeAmount)]];
   function copy() {
     const text = ['TRADE PLAN · TEXT ONLY', 'Symbol: '+(option.symbol||'—'), 'Spot: '+fmt(market.spot), ...values.map(([label,value])=>label+': '+value)].join('\n');
