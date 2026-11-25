@@ -1,0 +1,261 @@
+/* Reference redesign v61 — layouts rebuilt from the supplied 390px and 1440px Fyers handoff.
+   No fake market values, API changes, broker actions or strategy-rule changes. */
+html[data-theme] #root .premium-design-shell {
+ --ui-bg:#0B0E13;--ui-card:#121823;--ui-line:#1F2733;--ui-text:#E8ECF3;
+ --ui-muted:#9AA3B2;--ui-green:#2ECC8F;--ui-red:#FF5C6C;--ui-blue:#5B8CFF;--ui-amber:#F5B84B;
+ font-family:Inter,system-ui,-apple-system,sans-serif!important;background:#0B0E13!important;color:#E8ECF3!important;
+}
+html[data-theme] #root .premium-design-shell .mentor-v2-topbar{height:60px!important;min-height:60px!important;padding:6px 20px!important;background:#0F131A!important}
+html[data-theme] #root .premium-design-shell{--ui-header:60px!important;padding-top:60px!important}
+html[data-theme] #root .premium-design-shell .premium-market-price>strong{font-size:23px!important}
+html[data-theme] #root .premium-design-shell .premium-market-context{font-size:11px!important}
+html[data-theme] #root .premium-design-shell .fyers-reference-main{padding:16px 20px 100px!important;background:#0B0E13!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-page{color:#E8ECF3;font-size:13px;min-width:0;line-height:1.4}
+html[data-theme] #root .premium-design-shell .fyers-ref-page *{box-sizing:border-box;min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-page :is(h1,h2,h3,p){margin:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-page h1{font-size:24px;font-weight:700;letter-spacing:.005em}
+html[data-theme] #root .premium-design-shell .fyers-ref-page > p{font-size:12px;color:#9AA3B2;margin-bottom:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-card{background:#121823!important;border:1px solid #1F2733!important;border-radius:12px!important;padding:12px!important;box-shadow:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-trade-grid,
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-grid{display:grid!important;grid-template-columns:minmax(0,1fr) 430px!important;gap:16px!important;align-items:start;width:100%}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart-column,
+html[data-theme] #root .premium-design-shell .fyers-ref-decision-column{display:flex;flex-direction:column;gap:12px;min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart :is(.trader-market-panel,.nifty-strategy-chart){background:#121823!important;border:1px solid #1F2733!important;border-radius:12px!important;margin:0!important;padding:0!important;overflow:hidden}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .trader-market-panel>.panel-heading,
+html[data-theme] #root .premium-design-shell .fyers-ref-chart :is(.market-metric-grid,.mentor-reasoning){display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas-wrap{height:300px!important;max-height:300px!important;overflow:hidden!important;overscroll-behavior:auto!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas{min-height:280px!important;height:300px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-live-toolbar{padding:6px 14px!important;min-height:35px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-live-price{font-size:16px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-live-context-row{padding:3px 12px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-level-strip{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-rule-note{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-livepath .mentor-workflow{display:block!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-label{font-size:10px!important;color:#9AA3B2!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-track{margin:0!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step{min-height:29px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-decision{padding:12px 14px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-decision-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-verdict{display:flex;align-items:center;gap:6px;flex-wrap:wrap;line-height:1.1}
+html[data-theme] #root .premium-design-shell .fyers-ref-verdict>strong{font-size:16px!important;color:#E8ECF3;font-weight:750;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-tag{font-size:9px;font-weight:700;letter-spacing:.04em;border-radius:4px;padding:4px 6px;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-tag.good{background:#2ECC8F;color:#061610}
+html[data-theme] #root .premium-design-shell .fyers-ref-tag.wait{background:#4e3b1c;color:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-tag.blue{background:#1E2A44;color:#91B1FF}
+html[data-theme] #root .premium-design-shell .fyers-ref-contract{font-size:11px;color:#9AA3B2;margin-top:4px;line-height:1.2;overflow-wrap:anywhere}
+html[data-theme] #root .premium-design-shell .fyers-ref-score{background:transparent;border:0;padding:0;color:#9AA3B2;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:flex-end;min-width:74px;text-align:right;gap:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-score b{font-size:29px;color:#2ECC8F;font-weight:700;line-height:1}
+html[data-theme] #root .premium-design-shell .fyers-ref-score small{font-size:10px;color:#9AA3B2}
+html[data-theme] #root .premium-design-shell .fyers-ref-score span{display:block;width:100%;font-size:10px;color:#8FB0FF;margin-top:4px}
+html[data-theme] #root .premium-design-shell .fyers-ref-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0 6px;color:#9AA3B2;letter-spacing:.06em;font-size:10px;line-height:1.3}
+html[data-theme] #root .premium-design-shell .fyers-ref-section-head strong{color:#2ECC8F;font-size:10px;font-weight:700;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots{display:grid;gap:4px;max-width:100%}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.mandatory{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations{grid-template-columns:repeat(8,minmax(0,1fr))}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;color:#9AA3B2;font-size:10px;min-width:0;line-height:1.25}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.mandatory .fyers-ref-dot{padding:6px 1px;background:#192a2d;border-radius:7px;min-height:42px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot.fail{color:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot.partial{color:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;font-size:10px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot>strong{font-size:10px;color:#2ECC8F;font-weight:650}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot.fail>strong{color:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-dot.partial>strong{color:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations i{width:100%;height:4px;background:#2ECC8F;border-radius:4px;display:block;margin-bottom:2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations .fail i{background:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations .partial i{background:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-price-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;border-top:1px solid #1F2733;padding-top:10px;margin-top:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-value{min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-value>span{display:block;font-size:10px;color:#9AA3B2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-theme] #root .premium-design-shell .fyers-ref-value>strong{font-size:13px;display:block;color:#E8ECF3;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-value.positive>strong,
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row .positive{color:#2ECC8F!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-value.danger>strong,
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row .danger{color:#FF5C6C!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-invalidation{color:#9AA3B2;font-size:10px;margin-top:5px;line-height:1.4}
+html[data-theme] #root .premium-design-shell .fyers-ref-mentor{color:#ABB6C8!important;font-size:12px;margin-top:9px;line-height:1.38}
+html[data-theme] #root .premium-design-shell .fyers-ref-mentor b{color:#8FB0FF}
+html[data-theme] #root .premium-design-shell .fyers-ref-review-link{display:flex;justify-content:flex-end;margin-top:8px}
+html[data-theme] #root .premium-design-shell .fyers-ref-review-link button{background:transparent;border:0;color:#8FB0FF;font-size:11px;padding:2px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-context{padding:12px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-context-grid{display:grid;gap:6px}
+html[data-theme] #root .premium-design-shell .fyers-ref-context-grid.top{grid-template-columns:repeat(4,1fr)}
+html[data-theme] #root .premium-design-shell .fyers-ref-context-grid.bottom{grid-template-columns:repeat(5,1fr);margin-top:6px}
+html[data-theme] #root .premium-design-shell .fyers-ref-context-grid .fyers-ref-value{text-align:center;background:#111720;border:1px solid #1F2733;border-radius:8px;padding:6px 1px}
+html[data-theme] #root .premium-design-shell .fyers-ref-context-grid .fyers-ref-value>strong{font-size:11px}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions{padding:12px;background:#121823;border:1px solid #1F2733;border-radius:12px;display:flex;flex-direction:column;gap:10px}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:#E8ECF3;cursor:pointer;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch input{position:absolute;opacity:0;width:1px;height:1px}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch>span{width:36px;height:20px;border-radius:14px;background:#333E50;position:relative;flex:none;display:inline-block}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch>span::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .15s}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch input:checked+span{background:#2ECC8F}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch input:checked+span::after{transform:translateX(16px)}
+html[data-theme] #root .premium-design-shell .fyers-ref-switch input:focus-visible+span{outline:2px solid #5B8CFF;outline-offset:3px}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions .strategy-quick-actions{position:static!important;inset:auto!important;width:100%!important;height:auto!important;min-height:0!important;padding:0!important;background:transparent!important;box-shadow:none!important;border:0!important;display:grid!important;grid-template-columns:minmax(0,1fr) 100px!important;gap:10px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions .strategy-quick-actions .strategy-quick-status{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions .strategy-quick-actions button{height:46px!important;min-height:46px!important;border-radius:8px!important;font-size:14px!important;font-weight:700!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions .strategy-quick-buy{background:#2ECC8F!important;color:#061610!important;border-color:#2ECC8F!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions .strategy-quick-sell{background:#FF5C6C!important;color:#171017!important;border-color:#FF5C6C!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-strip{min-height:180px}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-head{display:flex;justify-content:space-between;align-items:center;color:#9AA3B2;font-size:11px;margin-bottom:8px}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-head button{background:#1E2A44;border:0;border-radius:8px;color:#8FB0FF;padding:8px 12px;font-size:11px}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-columns,
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row{display:grid;grid-template-columns:1.3fr 1.6fr .5fr .7fr .7fr .8fr 60px;gap:6px;align-items:center;min-height:40px;padding:0 4px;white-space:nowrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-columns{color:#9AA3B2;font-size:10px;border-bottom:1px solid #1F2733}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row{font-size:11px;border-bottom:1px solid #1F2733;color:#C4CBD5}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row>strong{overflow:hidden;text-overflow:ellipsis}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row>button{background:#321C25;color:#FF5C6C;border:1px solid #7B3442;border-radius:7px;min-height:30px}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-row>button:disabled{opacity:0!important;pointer-events:none}
+html[data-theme] #root .premium-design-shell .fyers-ref-muted{color:#9AA3B2}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart{padding:0!important;overflow:hidden}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-strategy-chart{border:0!important;box-shadow:none!important;background:transparent!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{height:320px!important;max-height:320px!important;overflow:hidden!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{height:320px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.scalp{grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.scalp .pass{background:#192a2d;border-radius:6px;padding:7px 2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-dots.scalp .fail{background:#241c26;border-radius:6px;padding:7px 2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-notice{background:#2e281d;color:#F5B84B;border-radius:6px;padding:8px 10px;font-size:10px;margin-top:9px}
+html[data-theme] #root .premium-design-shell .fyers-ref-toggle-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-buy{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-buy button{min-height:48px!important;background:#2ECC8F;color:#071610;border:0;border-radius:8px;font-size:14px;font-weight:700}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-buy .pe{background:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-sell{min-height:48px;background:#FF5C6C;color:#170A0E;border-radius:8px;border:0;font-weight:700;font-size:14px}
+html[data-theme] #root .premium-design-shell .fyers-ref-actions button:disabled{background:#1A2331!important;color:#738095!important;opacity:1!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-back{border:0;background:none;color:#8FB0FF;padding:6px 0;margin:0 0 12px;font-size:13px}
+html[data-theme] #root .premium-design-shell .fyers-ref-detail,
+html[data-theme] #root .premium-design-shell .fyers-ref-ticket{max-width:670px;margin:0 auto}
+html[data-theme] #root .premium-design-shell .fyers-ref-detail>.fyers-ref-card,
+html[data-theme] #root .premium-design-shell .fyers-ref-ticket>.fyers-ref-card{margin-top:14px}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row{display:grid;grid-template-columns:110px 1fr 50px;gap:12px;align-items:center;padding:7px 0;font-size:12px;color:#E8ECF3}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row>strong{text-align:right;color:#2ECC8F;font-size:11px}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row.fail>strong{color:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row.partial>strong{color:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-progress{background:#202938;border-radius:99px;height:5px;overflow:hidden}
+html[data-theme] #root .premium-design-shell .fyers-ref-progress span{display:block;background:#2ECC8F;height:100%;border-radius:99px}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row.fail .fyers-ref-progress span{background:#FF5C6C}
+html[data-theme] #root .premium-design-shell .fyers-ref-param-row.partial .fyers-ref-progress span{background:#F5B84B}
+html[data-theme] #root .premium-design-shell .fyers-ref-ticket-row{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #1F2733;padding:11px 4px;color:#9AA3B2;font-size:13px;gap:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-ticket-row strong{color:#E8ECF3;font-size:13px;text-align:right}
+html[data-theme] #root .premium-design-shell .fyers-ref-disclaimer{color:#9AA3B2!important;margin:12px 0 22px!important;font-size:12px;line-height:1.5}
+html[data-theme] #root .premium-design-shell .fyers-ref-copy{width:100%;height:48px;background:#2ECC8F;color:#061610;border:0;border-radius:9px;font-size:14px;font-weight:700;margin-top:16px}
+html[data-theme] #root .premium-design-shell .fyers-ref-disabled{padding:10px;margin-top:8px;background:#1A2130;border-radius:8px;color:#9AA3B2;font-size:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-segment{display:grid;grid-template-columns:1fr 1fr;background:#121823;border:1px solid #1F2733;padding:4px;border-radius:9px;margin:12px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-segment button{background:transparent;border:0;border-radius:7px;color:#9AA3B2;min-height:37px;font-size:12px;font-weight:600}
+html[data-theme] #root .premium-design-shell .fyers-ref-segment button.active{background:#1E2A44;color:#8FB0FF}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-active{display:block}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-active .trade-focus-card{width:100%!important;max-width:none!important;position:static!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-today{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-today .fyers-ref-value{text-align:center;background:#121823;border:1px solid #1F2733;border-radius:8px;padding:8px 2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-positions-secondary{margin-top:12px;padding:12px;background:#121823;border:1px solid #1F2733;border-radius:9px;color:#9AA3B2}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters{display:flex;flex-direction:column;gap:8px;margin:10px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters>div{display:flex;gap:8px;flex-wrap:wrap}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters button{border:1px solid #293241;background:#10141b;color:#9AA3B2;padding:7px 13px;border-radius:18px;font-size:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters button.active{background:#1E2A44;border-color:#1E2A44;color:#8FB0FF}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-panel{padding:0!important;background:transparent!important;border:0!important;box-shadow:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-panel>.panel-heading,
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-filter-tabs{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-grid{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:8px!important;margin-bottom:12px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card{background:#121823!important;border:1px solid #1F2733!important;border-radius:8px!important;padding:10px 6px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-v2{background:#121823!important;border:1px solid #1F2733!important;border-radius:9px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings .settings-page{background:transparent!important;border:0!important;box-shadow:none!important;padding:0!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings .settings-hero{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings .settings-card{background:#121823!important;border:1px solid #1F2733!important;border-radius:10px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings .settings-card h2{color:#9AA3B2!important;font-size:11px!important;letter-spacing:.06em!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-data-warning{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:7px 12px;margin-bottom:10px;border:1px solid #785d2c;border-radius:8px;background:#2B2318;color:#F5B84B;font-size:11px}
+html[data-theme] #root .premium-design-shell .fyers-ref-data-warning strong{font-size:11px}
+html[data-theme] #root .premium-design-shell .fyers-ref-data-warning span{flex:1}
+html[data-theme] #root .premium-design-shell .fyers-ref-data-warning button{border:1px solid #85682f;background:#32291b;border-radius:7px;padding:5px 10px;color:#F5B84B}
+html[data-theme] #root .premium-design-shell :is(.mentor-footer,.scalp-footer){display:none!important}
+
+@media(max-width:1199px) and (min-width:901px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-trade-grid,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-grid{grid-template-columns:minmax(0,1fr) 355px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-position-columns,
+ html[data-theme] #root .premium-design-shell .fyers-ref-position-row{grid-template-columns:1.2fr 1.4fr .5fr .7fr .6fr .7fr 48px;gap:4px;font-size:10px}
+}
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell{--ui-header:76px!important;padding-top:76px!important;padding-bottom:72px!important}
+ html[data-theme] #root .premium-design-shell .mentor-v2-topbar{inset:0 0 auto 0!important;height:76px!important;min-height:76px!important;padding:8px 20px 4px!important}
+ html[data-theme] #root .premium-design-shell .premium-market-ticker{display:flex!important;flex-wrap:wrap;gap:2px 10px;align-items:flex-start;min-height:62px}
+ html[data-theme] #root .premium-design-shell .premium-market-symbol{width:55%;gap:0}
+ html[data-theme] #root .premium-design-shell .premium-market-symbol strong{font-size:13px}
+ html[data-theme] #root .premium-design-shell .premium-market-symbol span{font-size:9px}
+ html[data-theme] #root .premium-design-shell .premium-market-price{order:2;width:100%;display:flex;align-items:baseline;gap:7px}
+ html[data-theme] #root .premium-design-shell .premium-market-price>strong{font-size:24px!important;line-height:1.05}
+ html[data-theme] #root .premium-design-shell .premium-market-price>span{font-size:10px}
+ html[data-theme] #root .premium-design-shell .premium-market-context{position:absolute;right:74px;top:14px;display:none!important}
+ html[data-theme] #root .premium-design-shell .mentor-v2-menu-button{position:absolute!important;right:12px;top:10px;width:37px;height:37px;min-height:37px!important;border:0!important}
+ html[data-theme] #root .premium-design-shell .mentor-v2-mobile-status{right:54px!important;top:22px!important}
+ html[data-theme] #root .premium-design-shell .fyers-reference-main{margin:0!important;padding:8px 20px 90px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-trade-grid,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-grid{display:flex!important;flex-direction:column!important;gap:0!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart-column,
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision-column{display:contents!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart{order:1;width:100%}
+ html[data-theme] #root .premium-design-shell .fyers-ref-livepath{order:2;width:100%;margin:6px 0 10px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision{order:3;width:100%;margin-bottom:10px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart{order:1;width:100%;margin-bottom:10px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-decision{order:3;width:100%;margin-bottom:8px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-context{order:4;width:100%;margin-bottom:12px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision-column>.trade-focus-card,
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision-column>.position-action-banner{order:4}
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision-column>.fyers-ref-actions{order:5}
+ html[data-theme] #root .premium-design-shell .fyers-ref-desktop-positions{display:none!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart :is(.trader-market-panel,.nifty-strategy-chart){border-radius:8px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas-wrap{height:125px!important;max-height:125px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-canvas{height:125px!important;min-height:125px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas-wrap{height:126px!important;max-height:126px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-canvas{height:126px!important;min-height:126px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart :is(.nifty-live-toolbar,.nifty-live-context-row),
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart :is(.nifty-live-toolbar,.nifty-live-context-row){display:none!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart .nifty-chart-timeframe-tabs,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-chart .nifty-chart-timeframe-tabs{position:relative!important;display:flex!important;justify-content:flex-start;padding:6px 12px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-livepath .mentor-workflow{padding:0!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step{min-height:20px!important;padding:3px 0!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step strong{font-size:9px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-decision{padding:10px 12px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-verdict>strong{font-size:14px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-contract{font-size:10px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-section-head{margin:7px 0 4px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-dots.mandatory .fyers-ref-dot{min-height:36px;padding:4px 1px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-dot>span{font-size:9px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-dot>strong{font-size:9px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations{gap:2px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-price-grid{margin-top:8px;padding-top:8px;gap:4px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-value>strong{font-size:12px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-mentor{font-size:11px;margin-top:5px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-review-link{margin-top:4px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-context{display:none}
+ html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions,
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions{position:fixed!important;left:0!important;right:0!important;bottom:calc(64px + env(safe-area-inset-bottom,0px))!important;border:0!important;border-top:1px solid #1F2733!important;border-radius:0!important;background:#0B0E13!important;padding:8px 20px!important;gap:5px!important;z-index:85!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions{position:static!important;height:auto!important;min-height:43px!important;max-height:none!important;grid-template-columns:1fr 85px!important;padding:0!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions button{min-height:40px!important;height:40px!important;font-size:13px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-buy button{height:40px!important;min-height:40px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-sell{display:none!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-toggle-row{gap:14px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-switch{font-size:11px}
+ html[data-theme] #root .premium-design-shell .fyers-reference-main:has(.fyers-ref-core),
+ html[data-theme] #root .premium-design-shell .fyers-reference-main:has(.fyers-ref-scalp){padding-bottom:185px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-detail,
+ html[data-theme] #root .premium-design-shell .fyers-ref-ticket{max-width:none}
+ html[data-theme] #root .premium-design-shell .fyers-ref-detail .fyers-ref-card{margin-top:10px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-detail .fyers-ref-context{display:block}
+ html[data-theme] #root .premium-design-shell .fyers-ref-param-row{grid-template-columns:78px 1fr 43px;gap:6px;font-size:11px;padding:6px 0}
+ html[data-theme] #root .premium-design-shell .fyers-ref-param-row>strong{font-size:10px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-ticket-row{font-size:12px;padding:9px 2px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-positions .trade-focus-card{padding:12px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-settings .settings-grid{grid-template-columns:1fr!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-data-warning{display:flex;flex-wrap:wrap;font-size:10px;margin:0 0 8px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-data-warning span{flex:1 1 100%}
+}
+@media(min-width:901px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-positions{max-width:1000px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal{max-width:1360px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart-column{min-height:620px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-chart-column .fyers-ref-position-strip{flex:1}
+}
+@media(max-width:360px){
+ html[data-theme] #root .premium-design-shell .fyers-reference-main{padding-left:10px!important;padding-right:10px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-tag{font-size:8px;padding:3px 4px}
+ html[data-theme] #root .premium-design-shell .fyers-ref-dots.confirmations{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:5px}
+}
