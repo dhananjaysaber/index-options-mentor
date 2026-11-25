@@ -31,7 +31,7 @@ jobs:
           GITHUB_ACTIONS: 'true'
       - name: Browser dependencies
         run: |
-          npm install --no-save playwright --no-audit --no-fund
+          npm install --no-save playwright fake-indexeddb --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: SELL and navigation smoke on iPhone viewport
         run: node scripts/verify-sell-no-black.mjs
@@ -39,5 +39,12 @@ jobs:
           GITHUB_ACTIONS: 'true'
       - name: Existing scalp trailing and guidance smoke
         run: node scripts/verify-scalp-guidance.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+
+      - name: Durable storage failure and restart regressions
+        run: node scripts/verify-trading-storage.mjs
+      - name: Full phone storage manual and automatic exits
+        run: node scripts/verify-quota-exits.mjs
         env:
           GITHUB_ACTIONS: 'true'

@@ -1,3 +1,4 @@
+import { readTradingJson, writeTradingJson, durableJournalEvents, acknowledgeDurableEvent } from './tradingStorage.js';
 import { sendJournalWrite } from './journalTransport.js';
 const HISTORY_KEY = 'index-options-mentor-history-v05';
 const POSITION_KEY = 'index-options-mentor-open-position-v07';
@@ -19,6 +20,7 @@ let knownHistoryIds = new Set();
 let currentPositionIds = new Set();
 let onlineHandler = null;
 let pageHideHandler = null;
+let durableHandler = null;
 
 export async function prepareJournalHistory({ maxWaitMs = 1800 } = {}) {
   const local = readJson(HISTORY_KEY, []);
@@ -86,6 +88,8 @@ export function startTradeJournalBridge() {
   pageHideHandler = () => { void flushJournalQueue({ keepalive: true }); };
   window.addEventListener('online', onlineHandler);
   window.addEventListener('pagehide', pageHideHandler);
+  durableHandler=()=>{void flushJournalQueue();};
+  window.addEventListener('mentor:durable-trade',durableHandler);
   void flushJournalQueue();
 
   return stopTradeJournalBridge;
@@ -100,6 +104,8 @@ export function stopTradeJournalBridge() {
   if (pageHideHandler) window.removeEventListener('pagehide', pageHideHandler);
   onlineHandler = null;
   pageHideHandler = null;
+  if(durableHandler)window.removeEventListener('mentor:durable-trade',durableHandler);
+  durableHandler=null;
 }
 
 export async function loadRemoteTrades(limit = 500) {
@@ -271,7 +277,8 @@ async function flushJournalQueue({ keepalive = false } = {}) {
   if (Date.now() < nextJournalSyncAt) return;
   if (flushPromise) return flushPromise;
   flushPromise = (async () => {
-    const events = await getOutbox();
+    const [oldEvents,criticalEvents]=await Promise.all([getOutbox(),durableJournalEvents()]);
+    const events=[...new Map([...oldEvents,...criticalEvents].map(event=>[event.id,event])).values()];
     events.sort((a, b) => String(a.queuedAt).localeCompare(String(b.queuedAt)));
 
     for (const event of events) {
@@ -291,6 +298,7 @@ async function flushJournalQueue({ keepalive = false } = {}) {
         journalFailureCount = 0;
         nextJournalSyncAt = 0;
         await deleteOutbox(event.id);
+        await acknowledgeDurableEvent(event.id);
       } catch {
         journalFailureCount = Math.min(5, journalFailureCount + 1);
         nextJournalSyncAt = Date.now() + Math.min(120000, 5000 * (2 ** (journalFailureCount - 1)));
@@ -362,18 +370,9 @@ function setMetricFields(id, patch) {
   return all[id];
 }
 
-function readJson(key, fallback) {
-  try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
+function readJson(key, fallback) { return readTradingJson(key, fallback); }
 
-function writeJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
+function writeJson(key, value) { writeTradingJson(key, value); }
 
 function numberOrNull(value) {
   const n = Number(value);
@@ -461,3 +460,4 @@ function putFallback(event) {
 function deleteFallback(id) {
   writeJson(FALLBACK_KEY, getFallback().filter(row => row?.id !== id));
 }
+
