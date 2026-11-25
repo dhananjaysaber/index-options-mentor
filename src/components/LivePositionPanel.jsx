@@ -41,7 +41,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
           <small>{position.side} · {position.lots} lot{Number(position.lots) === 1 ? '' : 's'} · {position.quantity} qty · opened {formatOpened(position.openedAt)} · {formatDuration(position.openedAt)}</small>
           <small>Buy option price ₹{Number(position.entry).toLocaleString('en-IN')} · Premium cost ₹{(Number(position.entry) * Number(position.quantity)).toLocaleString('en-IN')}</small>
         </div>
-        <span className="simulation-pill open">LIVE</span>
+        <span className="simulation-pill open">PAPER</span>
       </div>
 
       <div className="position-live-hero">
@@ -70,7 +70,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
           <div className="scalp-option-trail-heading">
             <span>13-POINT RUNNER TRAIL · PAPER</span>
             <strong>{position.coreOptionTrailingActive
-              ? `ARMED · floor +₹${fmt(position.coreOptionTrailingFloorPnl)}`
+              ? `ACTIVE · exit threshold +₹${fmt(position.coreOptionTrailingFloorPnl)}`
               : 'WAITING · activates after +5% option premium'}</strong>
           </div>
           <small>{position.coreOptionTrailingActive
@@ -94,7 +94,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
           <div className="scalp-option-trail-heading">
             <span>OPTION PROFIT TRAIL · PAPER</span>
             <strong>{position.optionTrailingActive
-              ? `ARMED · floor +₹${fmt(position.optionTrailingFloorPnl)}`
+              ? `ACTIVE · exit threshold +₹${fmt(position.optionTrailingFloorPnl)}`
               : 'WAITING · activates after +3% option premium'}</strong>
           </div>
           <small>{position.optionTrailingActive

@@ -32,7 +32,7 @@ try{
     assert.ok(feed.width>=outer.width-4,'Data banner must span available content width');
     assert.ok(left.width>=300,'Trade plan must not collapse into a narrow column');
     assert.ok(right.width>=300,'Checklist must stay readable');
-    if(width>=1280){assert.ok(Math.abs(left.y-right.y)<3,'Plan and checklist share their top edge');assert.ok(right.x>=left.x+left.width+12,'Desktop columns have separation');}
+    if(width>=1200){const chart=await layout.locator('.trader-market-panel').boundingBox();assert.ok(left.x>=chart.x+chart.width+12,'Trade plan sits to the right of the chart');assert.ok(right.y>=left.y+left.height+12,'Checklist follows the plan in the review column');}
     else assert.ok(right.y>=left.y+left.height+12,'Smaller desktop stacks full-width panels');
     const chipHeights=await checklist.locator('.quick-chip').evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().height));
     assert.ok(chipHeights.every(h=>h>=40&&h<110),'Checklist tiles must not stretch into tall empty boxes');
@@ -66,3 +66,4 @@ try{
   assert.deepEqual(errors,[]);
   console.log('PASS 13-point desktop geometry at 2048/1440/1024; banner, readable panels, compact tiles, sidebar-safe actions, legible navigation hover, wheel scrolling over chart and mobile isolation');
 }finally{if(browser)await browser.close();server.kill('SIGTERM');}
+

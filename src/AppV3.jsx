@@ -30,6 +30,7 @@ import { clearFyersSession, getFyersLoginUrl } from './services/apiBridge.js';
 import { queuePaperOpen, queuePaperClose, acknowledgeAwsPaperExit, findVerifiedAwsPaperExit } from './services/paperSync.js';
 import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
+import PremiumMarketTicker, { UiIcon } from './components/PremiumMarketTicker.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
@@ -677,12 +678,13 @@ export default function AppV3() {
 
   const reconnectRequired = authRequired;
   return (
-    <div className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell">
+    <div className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell premium-design-shell">
       <header className="topbar mentor-v2-topbar">
         <button className="brand-group brand-button" onClick={() => navigate('dashboard')} type="button">
           <div className="brand-mark">IO</div>
           <div><div className="brand-kicker">INDEX-ONLY · FYERS PRIME</div><div className="brand-title">Index Options Mentor</div></div>
         </button>
+        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} />
         <div className="mentor-v2-desktop-actions">
           <span className={`connection-pill ${reconnectRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}>FYERS {reconnectRequired ? 'Reconnect' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</span>
           {reconnectRequired && <button className="secondary-btn fyers-reconnect-btn" onClick={reconnectFyers}>Reconnect FYERS</button>}
@@ -821,20 +823,24 @@ export default function AppV3() {
         <button type="button" className={view === 'dashboard' && strategyMode === 'core' ? 'active' : ''}
           aria-current={view === 'dashboard' && strategyMode === 'core' ? 'page' : undefined}
           onClick={() => { setStrategyMode('core'); navigate('dashboard'); }}>
-          <span className="premium-nav-icon" aria-hidden="true">⌂</span><span>Home</span>
+          <span className="premium-nav-icon" aria-hidden="true"><UiIcon name="trade" /></span><span>Trade</span>
         </button>
         <button type="button" className={view === 'dashboard' && strategyMode === 'scalp' ? 'active' : ''}
           aria-current={view === 'dashboard' && strategyMode === 'scalp' ? 'page' : undefined}
           onClick={() => { setStrategyMode('scalp'); navigate('dashboard'); }}>
-          <span className="premium-nav-icon" aria-hidden="true">ϟ</span><span>Scalp</span>
+          <span className="premium-nav-icon" aria-hidden="true"><UiIcon name="scalp" /></span><span>Scalp</span>
         </button>
         <button type="button" className={view === 'position' ? 'active' : ''}
           aria-current={view === 'position' ? 'page' : undefined} onClick={() => navigate('position')}>
-          <span className="premium-nav-icon" aria-hidden="true">▣</span><span>Positions{positionCount ? ` · ${positionCount}` : ''}</span>
+          <span className="premium-nav-icon" aria-hidden="true"><UiIcon name="positions" /></span><span>Positions{positionCount ? ` · ${positionCount}` : ''}</span>
         </button>
         <button type="button" className={view === 'history' ? 'active' : ''}
           aria-current={view === 'history' ? 'page' : undefined} onClick={() => navigate('history')}>
-          <span className="premium-nav-icon" aria-hidden="true">≡</span><span>Journal</span>
+          <span className="premium-nav-icon" aria-hidden="true"><UiIcon name="journal" /></span><span>Journal</span>
+        </button>
+        <button type="button" className={view === 'settings' ? 'active' : ''}
+          aria-current={view === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}>
+          <span className="premium-nav-icon" aria-hidden="true"><UiIcon name="settings" /></span><span>Settings</span>
         </button>
       </nav>
 
@@ -865,11 +871,12 @@ function ResearchStatus({ classification, position, settings, manualReady }) {
 
 function DesktopNav({ view, navigate, strategyMode, setStrategyMode, settings, setup, positionCount, corePosition, scalpPosition }) {
   return (
-    <aside className="mentor-sidebar-v2">
+    <aside className="mentor-sidebar-v2" aria-label="Desktop navigation">
+      <div className="premium-rail-brand" aria-label="Index Options Mentor">IO</div>
       <div className="sidebar-section-label">WORKSPACE</div>
       <NavButton active={view === 'dashboard' && strategyMode === 'core'} onClick={() => { setStrategyMode('core'); navigate('dashboard'); }} icon="⌁" label="13-Point" />
       <NavButton active={view === 'dashboard' && strategyMode === 'scalp'} onClick={() => { setStrategyMode('scalp'); navigate('dashboard'); }} icon="ϟ" label="Scalp" />
-      <button type="button" className={`sidebar-nav-button ${view === 'position' ? 'active' : ''}`} onClick={() => navigate('position')}><span>↗</span><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong></button>
+      <button type="button" className={`sidebar-nav-button ${view === 'position' ? 'active' : ''}`} onClick={() => navigate('position')}><span><UiIcon name="positions" /></span><strong>Positions {positionCount ? `(${positionCount})` : ''}</strong></button>
       <NavButton active={view === 'history'} onClick={() => navigate('history')} icon="↺" label="Trade journal" />
       <NavButton active={view === 'analysis'} onClick={() => navigate('analysis')} icon="◫" label="Analysis" />
       <NavButton active={view === 'settings'} onClick={() => navigate('settings')} icon="⚙" label="Settings" />
@@ -900,7 +907,7 @@ function MobileDrawer({ view, navigate, positionCount, activePosition, onClose, 
 }
 
 function NavButton({ active, onClick, icon, label }) {
-  return <button type="button" className={`sidebar-nav-button ${active ? 'active' : ''}`} onClick={onClick}><span>{icon}</span><strong>{label}</strong></button>;
+  return <button type="button" className={`sidebar-nav-button ${active ? 'active' : ''}`} onClick={onClick}><span><UiIcon name={label === 'Scalp' ? 'scalp' : label === 'Trade journal' ? 'journal' : label === 'Analysis' ? 'analysis' : label === 'Settings' ? 'settings' : 'trade'} /></span><strong>{label}</strong></button>;
 }
 
 // Keep browser-completed exits when an older Google Sheets sync returns later.

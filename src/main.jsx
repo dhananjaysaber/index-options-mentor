@@ -24,7 +24,6 @@ import './mentor-shell-v2.css';
 import './premium-responsive-v3.css';
 import './premium-responsive-v4.css';
 import './premium-responsive-v5.css';
-import './premium-desktop-v6.css';
 import './session-ui-fixes.css';
 import './cockpit-alignment-fix.css';
 import './mobile-dashboard-v21.css';
@@ -46,6 +45,7 @@ import './iphone-shell-v52.css';
 import './view-mode-menu-v55.css';
 import './scalp-profit-protection-v56.css';
 import './target-index-trail-v58.css';
+import './premium-design-v60.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is

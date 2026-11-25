@@ -50,7 +50,7 @@ export default function CoreResearchPanel({ snapshot, settings }) {
       <div className="core-checkpoint-card" aria-live="polite">
         <span>13-POINT GATE AUDIT · {market.phase === 'LIVE' ? 'LIVE' : 'LAST SNAPSHOT'}</span>
         <strong>{classification.eligible ? 'Research setup qualified.' : blockers.length ? blockers.slice(0, 3).join(' · ') : classification.reason}</strong>
-        <small>Candidate monitoring is not a trade. The full Mentor, 4/5 controlled and 3/5 experimental tiers still require real option liquidity, an adequate structural stop and room, a confirmed 5m close and a held retest.</small>
+        <small>Paper plan only. Entry still requires the existing safety and confirmation rules.</small>
       </div>
 
       <div className="core-compact-grid">

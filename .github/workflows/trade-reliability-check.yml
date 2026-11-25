@@ -2,7 +2,7 @@ name: Verify SELL and profit trail (no deploy)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feature/live-execution-20261123]
     paths:
       - 'src/**'
       - 'tests/**'
@@ -58,3 +58,15 @@ jobs:
         env:
           GITHUB_ACTIONS: 'true'
 
+
+      - name: Approved premium desktop and mobile design
+        run: node scripts/verify-premium-design.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+      - name: Save isolated UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: premium-design-screenshots
+          path: test-artifacts/premium-design/
+          if-no-files-found: ignore

@@ -29,8 +29,9 @@ export default function History({ history }) {
         <SummaryMetric label="Avg R" value={formatR(summary.avgR)} tone={summary.avgR >= 0 ? 'positive' : 'negative'} />
       </div>
 
+      <div className="premium-history-columns" aria-hidden="true"><span>Strategy / contract</span><span>Entry / exit</span><span>Quantity / source</span><span>Profit / loss</span><span>Details</span></div>
       {displayHistory.length === 0 ? (
-        <div className="empty-state"><p>No completed trades are available yet. Permanent Google Sheets history will appear here after it syncs.</p></div>
+        <div className="empty-state"><p>No completed trades are available yet. Saved journal history will appear here after it syncs.</p></div>
       ) : (
         <>
           <div className="history-list history-list-v2">
@@ -41,6 +42,8 @@ export default function History({ history }) {
                     <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
                     <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
                   </div>
+                  <div className="premium-history-prices"><span>₹{formatMoney(trade.entry)}</span><small>→ ₹{formatMoney(trade.exit)}</small></div>
+                  <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : trade.initiatedBy === 'USER' ? 'MANUAL' : 'UNSPECIFIED')} · {trade.executionMode === 'LIVE' || trade.mode === 'LIVE' ? 'REAL' : 'PAPER'}</small></div>
                   <div className="history-card-open-hint"><span>View position details</span><i aria-hidden="true" /></div>
                 </summary>
 
@@ -106,7 +109,7 @@ export default function History({ history }) {
               </details>
             ))}
           </div>
-          <p className="history-storage-note">Permanent journal: completed trades are restored from Google Sheets; browser storage remains the fast local cache. Full trade JSON and journey checkpoints preserve the detailed Mentor context for later analysis.</p>
+          <p className="history-storage-note">Saved journal · completed trades and their detailed entry/exit context are kept for later analysis.</p>
         </>
       )}
     </section>
