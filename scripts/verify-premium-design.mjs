@@ -125,6 +125,12 @@ try {
               || strong.scrollWidth>strong.clientWidth+1);
           }));
           assert.equal(overflow,false,'Journal P&L and other metrics fit their own cards');
+          const tradePnl=await page.locator('.fyers-ref-journal .history-card-v2 .history-pnl strong').first().evaluate(el=>{
+            const rect=el.getBoundingClientRect();
+            return {height:rect.height,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth};
+          });
+          assert.ok(tradePnl.height<28 && tradePnl.scrollWidth<=tradePnl.clientWidth+1,
+            'Large INR position P&L fits on a single readable line inside the journal card');
         }
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();
