@@ -229,6 +229,66 @@ export function FyersJournal({ history, onNavigate }) {
     <History history={filtered}/>
   </div>;
 }
-export function FyersSettings({ settings, onSave }) {
-  return <div className="fyers-ref-page fyers-ref-settings"><h1>Settings</h1><p>Account, automation and risk</p><SettingsPanel settings={settings} onSave={onSave}/></div>;
+export function FyersSettings({ settings, onSave, brokerStatus, mode }) {
+  const [advanced, setAdvanced] = useState(false);
+  const update = (name, value) => onSave(previous => ({ ...previous, [name]: value }));
+  const moneyInr = value => '₹' + Number(value || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  const sw = (label, name, isOn) => <label className="fyers-ref-settings-row switch-row" key={name}>
+    <span>{label}</span><input type="checkbox" aria-label={label} checked={Boolean(isOn)} onChange={event => update(name, event.target.checked)} />
+    <i aria-hidden="true" /></label>;
+  const openAdvanced = () => {
+    setAdvanced(true);
+    window.requestAnimationFrame?.(() => document.getElementById('fyers-ref-advanced-settings')?.scrollIntoView({ behavior:'smooth', block:'start' }));
+  };
+  return <div className="fyers-ref-page fyers-ref-settings">
+    <h1>Settings</h1><p>Account, automation and risk</p>
+    <div className="fyers-ref-settings-group">
+      <h2>FYERS</h2>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}>
+        <span>Connection</span><strong className={brokerStatus?.authenticated ? 'positive' : 'fyers-ref-muted'}>{brokerStatus?.authenticated ? 'Connected · Prime' : brokerStatus?.configured ? 'Reconnect required' : 'Not connected'}</strong>
+      </button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Practice-mode system check</span><strong>›</strong></button>
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>PAPER AUTOMATION</h2>
+      {sw('13-point auto open','mentorAutoOpen',settings.mentorAutoOpen)}
+      {sw('13-point auto close','mentorAutoClose',settings.mentorAutoClose)}
+      {sw('Scalp auto open','scalpAutoOpen',settings.scalpAutoOpen !== false)}
+      {sw('Scalp auto close','scalpAutoClose',settings.scalpAutoClose !== false)}
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>RESEARCH TIERS</h2>
+      <div className="fyers-ref-settings-row"><span>Full · 5/5 mandatory</span><strong className="positive">Always on</strong></div>
+      {sw('Controlled · 4/5','controlledResearch',settings.controlledResearch)}
+      {sw('Experimental · 3/5','experimentalResearch',settings.experimentalResearch)}
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>REAL-MONEY TRADING</h2>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Real-money buying</span><strong>Connection details ›</strong></button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>13-point / Scalp automatic buying</span><strong>Broker protected ›</strong></button>
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>RISK</h2>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Capital</span><strong>{moneyInr(settings.capital)}</strong></button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Risk per trade</span><strong>{settings.riskPct}%</strong></button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Amount per trade</span><strong>{moneyInr(settings.tradeAmount)}</strong></button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Default lots / cap</span><strong>{settings.defaultLots || '—'} / {settings.lotCap || '—'}</strong></button>
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>DISPLAY</h2>
+      <div className="fyers-ref-settings-row"><span>View</span><strong>{mode === 'advanced' ? 'Advanced' : 'Basic'} · menu</strong></div>
+      {sw('Show live handoff','liveHandoffEnabled',settings.liveHandoffEnabled !== false)}
+    </div>
+    <div className="fyers-ref-settings-group">
+      <h2>DATA & RULES</h2>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Rules Mentor always checks</span><strong>›</strong></button>
+      <button type="button" className="fyers-ref-settings-row" onClick={openAdvanced}><span>Trade recovery · connection · export</span><strong>›</strong></button>
+    </div>
+    <button type="button" className="fyers-ref-expand-settings" onClick={() => setAdvanced(value => !value)} aria-expanded={advanced}>
+      {advanced ? 'Hide detailed controls' : 'Advanced connection and full settings'} <span>{advanced ? '−' : '›'}</span>
+    </button>
+    <div id="fyers-ref-advanced-settings" className={'fyers-ref-full-settings ' + (advanced ? 'open' : 'collapsed')}>
+      <SettingsPanel settings={settings} onSave={onSave}/>
+    </div>
+  </div>;
 }
