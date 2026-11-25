@@ -380,3 +380,12 @@ html[data-theme] #root .premium-design-shell .premium-core-verdict>div:first-chi
 html[data-theme] #root .premium-design-shell .premium-core-verdict small{font-size:11px;color:var(--ui-muted);}
 html[data-theme] #root .premium-design-shell .premium-core-score{display:flex;align-items:baseline;gap:3px;}
 html[data-theme] #root .premium-design-shell .premium-core-score strong{font-size:28px;color:var(--ui-green);}
+
+html[data-theme] #root .premium-design-shell .workflow-step{grid-column:auto!important;grid-row:auto!important;}
+html[data-theme] #root .premium-design-shell .workflow-track{width:100%!important;min-width:0!important;}
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .mentor-v2-content>.decision-banner,
+ html[data-theme] #root .premium-design-shell .mentor-v2-content>.mentor-workflow,
+ html[data-theme] #root .premium-design-shell .mentor-v2-content>.position-lock-bar,
+ html[data-theme] #root .premium-design-shell .mentor-v2-content>.position-alert-banner{display:none!important;}
+}
