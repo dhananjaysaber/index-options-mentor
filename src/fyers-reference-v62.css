@@ -242,3 +242,27 @@ html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{flex
    width:min(90vw,370px)!important;background:#111925!important;
  }
 }
+
+/* Journal trade row: reserve a real right-hand column for large INR amounts.
+   The legacy grid's intrinsic auto column was collapsing the amount to 2–3 chars. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-summary{
+   display:grid!important;grid-template-columns:minmax(0,1fr) minmax(112px,36%)!important;
+   gap:8px!important;align-items:start!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl{
+   grid-column:2!important;grid-row:1!important;justify-self:stretch!important;align-self:start!important;
+   width:100%!important;min-width:0!important;max-width:none!important;overflow:hidden!important;
+   text-align:right!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>strong{
+   display:block!important;width:100%!important;max-width:100%!important;
+   font-size:clamp(11px,3.15vw,14px)!important;
+   line-height:1.25!important;white-space:nowrap!important;
+   overflow:hidden!important;text-overflow:ellipsis!important;
+   overflow-wrap:normal!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>small{
+   font-size:10px!important;white-space:nowrap!important;
+ }
+}
