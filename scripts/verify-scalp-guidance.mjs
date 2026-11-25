@@ -108,7 +108,7 @@ try {
   await page.waitForTimeout(150);
 
   const guidanceBox = await guidance.boundingBox();
-  const dockBox = await page.locator('.scalp-quick-actions').boundingBox();
+  const dockBox = await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
   const navBox = await page.locator('.premium-mobile-bottom-nav').boundingBox();
 
   assert.ok(guidanceBox && dockBox && navBox);
