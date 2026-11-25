@@ -107,7 +107,7 @@ class ReadinessTests(unittest.TestCase):
 
     def test_expired_and_private_error_payload_are_redacted(self):
         for payload, expected in [
-            ({'s': 'error', 'code': -16, 'message': TOKEN}, 'FYERS_LOGIN_EXPIRED_OR_INVALID'),
+            ({'s': 'error', 'code': -16, 'message': TOKEN}, 'FYERS_LOGIN_INVALID_OR_UNAUTHENTICATED'),
             ({'s': 'error', 'message': TOKEN}, 'FYERS_READ_REJECTED'),
         ]:
             with self.assertRaisesRegex(r.CheckFailed, expected) as error:
@@ -117,6 +117,32 @@ class ReadinessTests(unittest.TestCase):
         with self.assertRaisesRegex(r.CheckFailed, 'FYERS_HTTP_401') as caught:
             r.ReadOnlyClient('TESTAPP-100', TOKEN, FakeOpener(error)).get('profile')
         self.assertNotIn(TOKEN, str(caught.exception))
+
+    def test_http_400_auth_code_is_read_without_exposing_payload(self):
+        for code, reason in [(-8, 'FYERS_LOGIN_EXPIRED'),
+                             (-16, 'FYERS_LOGIN_INVALID_OR_UNAUTHENTICATED'),
+                             (-50, 'FYERS_HTTP_400')]:
+            payload = json.dumps({'s': 'error', 'code': code, 'message': TOKEN}).encode()
+            error = urllib.error.HTTPError(r.HOST+'/profile', 400, 'Bad request', {}, io.BytesIO(payload))
+            with self.assertRaisesRegex(r.CheckFailed, reason) as caught:
+                r.ReadOnlyClient('TESTAPP-100', TOKEN, FakeOpener(error)).get('profile')
+            self.assertEqual(caught.exception.broker_code, code)
+            self.assertEqual(caught.exception.http_status, 400)
+            self.assertNotIn(TOKEN, str(caught.exception))
+
+    def test_login_hints_do_not_trust_expiry_or_expose_token(self):
+        import base64
+        middle = base64.urlsafe_b64encode(json.dumps({'exp': 1, 'private': TOKEN}).encode()).decode().rstrip('=')
+        with tempfile.TemporaryDirectory() as directory:
+            app = Path(directory)
+            (app/'fyersAuthRoutes.mjs').write_text("if (url.pathname === '/auth/fyers/login') {}; const secret='"+SECRET+"';")
+            result = r.local_login_hints('header.'+middle+'.signature', app)
+            self.assertTrue(result['storedTokenExpiryTimePassed'])
+            self.assertEqual(result['configuredAwsLoginUrl'], 'https://api.optionsmentor.in/auth/fyers/login')
+            self.assertNotIn(TOKEN, json.dumps(result))
+            self.assertNotIn(SECRET, json.dumps(result))
+            (app/'fyersAuthRoutes.mjs').write_text("['/fyers/login','/fyers/auth','/fyers/callback']")
+            self.assertNotIn('configuredAwsLoginUrl', r.local_login_hints('invalid', app))
 
     def test_ambiguous_token_and_app_mismatch_fail_closed(self):
         for stored in ({'token': TOKEN, 'data': {'access_token': 'other-token'}}, {'refresh_token': TOKEN}):

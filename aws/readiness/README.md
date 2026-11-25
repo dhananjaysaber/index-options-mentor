@@ -13,3 +13,5 @@ Official API references checked 25 November 2026:
 - https://fyers.in/api-docs/v3/api/account/funds/
 - https://fyers.in/api-docs/v3/getting-started/create-an-app/individual-app/
 - https://github.com/FyersDev/fyers-skills/blob/master/skills/fyers-trading/references/endpoints.md
+
+HTTP error bodies are now inspected for bounded numeric FYERS codes only: -8 means expired login, and -15/-16/-17 indicate invalid or unauthenticated login. HTTP 400 alone is never treated as proof of expiry. Raw messages and payloads remain private. An unverified local JWT expiry hint is explicitly separate from actual broker authentication; a unique login route found in the existing auth-route source may be reported on the known AWS API origin. Neither reading a hint nor printing a URL authenticates the user or changes the stored session.

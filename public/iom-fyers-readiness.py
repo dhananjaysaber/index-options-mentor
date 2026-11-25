@@ -5,6 +5,7 @@ Run with sudo on the existing AWS host. Reads the mentor service's App ID and
 stored token; never writes files, refreshes credentials, starts services or logs
 broker payloads. Profile identity is verified before reading funds/exposure.
 """
+import base64
 import hashlib
 import hmac
 import json
@@ -28,7 +29,25 @@ BASE = Path('/var/lib/index-options-mentor')
 
 
 class CheckFailed(Exception):
-    """Only constant, non-private error codes may leave this module."""
+    """Only constant reasons and bounded numeric FYERS codes may leave this module."""
+    def __init__(self, reason, *, http_status=None, broker_code=None):
+        super().__init__(reason)
+        self.http_status = http_status
+        self.broker_code = broker_code
+
+
+def broker_failure(data, http_status=None):
+    code = data.get('code') if isinstance(data, dict) else None
+    code = code if type(code) is int and -100000 <= code <= 999999 else None
+    if code == -8:
+        reason = 'FYERS_LOGIN_EXPIRED'
+    elif code in (-15, -16, -17):
+        reason = 'FYERS_LOGIN_INVALID_OR_UNAUTHENTICATED'
+    elif http_status is not None:
+        reason = 'FYERS_HTTP_' + str(http_status)
+    else:
+        reason = 'FYERS_READ_REJECTED'
+    return CheckFailed(reason, http_status=http_status, broker_code=code)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -66,16 +85,21 @@ class ReadOnlyClient:
                     raise CheckFailed('FYERS_RESPONSE_TOO_LARGE')
                 data = json.loads(raw)
         except urllib.error.HTTPError as error:
-            code = error.code
-            error.close()
-            raise CheckFailed('FYERS_HTTP_' + str(code)) from None
+            status = error.code
+            try:
+                raw = error.read(65537)
+                data = json.loads(raw) if len(raw) <= 65536 else None
+            except (OSError, ValueError):
+                data = None
+            finally:
+                error.close()
+            # FYERS auth errors can arrive with HTTP 400. Never discard their
+            # numeric code; never forward the potentially private message/body.
+            raise broker_failure(data, status) from None
         except (OSError, ValueError, urllib.error.URLError):
             raise CheckFailed('FYERS_READ_UNAVAILABLE') from None
         if not isinstance(data, dict) or data.get('s') != 'ok':
-            code = data.get('code') if isinstance(data, dict) else None
-            if type(code) is int and code in (-8, -15, -16, -17):
-                raise CheckFailed('FYERS_LOGIN_EXPIRED_OR_INVALID')
-            raise CheckFailed('FYERS_READ_REJECTED')
+            raise broker_failure(data)
         return data
 
     def place_order(self, *args, **kwargs):
@@ -176,7 +200,8 @@ def inspect_broker(client, secret, expected):
             else:
                 result['brokerReads'][route] = {'passed': True, 'orderCount': len(rows)}
         except CheckFailed as error:
-            result['brokerReads'][route] = {'passed': False, 'reason': str(error)}
+            result['brokerReads'][route] = {'passed': False, 'reason': str(error),
+                'httpStatus': error.http_status, 'brokerCode': error.broker_code}
     result['readOnlyBrokerAccessPassed'] = all(r['passed'] for r in result['brokerReads'].values())
     return result
 
@@ -213,6 +238,33 @@ def service_app_id(pid, mentor_uid):
         raise CheckFailed('SERVICE_CONFIGURATION_UNAVAILABLE') from None
 
 
+
+def local_login_hints(token, app=Path('/opt/index-options-mentor/app')):
+    """Non-secret hints only. JWT expiry is a hint, never trusted authentication."""
+    hints = {}
+    try:
+        value = token.split(':', 1)[-1]
+        parts = value.split('.')
+        if len(parts) == 3 and len(parts[1]) < 20000:
+            payload = json.loads(base64.urlsafe_b64decode(parts[1] + '=' * (-len(parts[1]) % 4)))
+            expiry = payload.get('exp') if isinstance(payload, dict) else None
+            if type(expiry) in (int, float) and math.isfinite(expiry):
+                hints['storedTokenExpiryTimePassed'] = expiry <= time.time()
+    except (ValueError, UnicodeError):
+        pass
+    try:
+        source = (app/'fyersAuthRoutes.mjs').read_text()[:100000]
+        literals = re.findall(r"[\"'](/[A-Za-z0-9_./-]{1,120})[\"']", source)
+        paths = sorted({path for path in literals if 'fyers' in path.lower()
+                        and path.rstrip('/').rsplit('/', 1)[-1].lower() in ('login', 'connect', 'auth')
+                        and not any(word in path.lower() for word in ('callback', '..'))})
+        if len(paths) == 1:
+            hints['configuredAwsLoginUrl'] = 'https://api.optionsmentor.in' + paths[0]
+    except OSError:
+        pass
+    return hints
+
+
 def main():
     report = {'stage': 'READ_ONLY_ACCOUNT_CHECK', 'realMoneyEnabled': False,
               'ordersSent': 0, 'filesModified': False, 'servicesRestarted': False,
@@ -229,6 +281,7 @@ def main():
         app_id = service_app_id(before[SERVICES[0]]['pid'], mentor_uid)
         stored = secure_json(BASE / 'fyers-token.json', mentor_uid)
         token = extract_token(stored)
+        report.update(local_login_hints(token))
         config = secure_json('/etc/index-options-journal.json', mentor_uid)
         secret = config.get('secret') if isinstance(config, dict) else None
         if not isinstance(secret, str) or len(secret) < 32:
@@ -237,6 +290,8 @@ def main():
         report.update(inspect_broker(ReadOnlyClient(app_id, token), secret, expected))
     except CheckFailed as error:
         report['blocker'] = str(error)
+        report['httpStatus'] = error.http_status
+        report['brokerCode'] = error.broker_code
     except Exception:
         # Never print exceptions, object reprs, token values or broker responses.
         report['blocker'] = 'LOCAL_READINESS_CHECK_FAILED'
