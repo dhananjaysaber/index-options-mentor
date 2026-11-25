@@ -1,3 +1,4 @@
+import { readTradingJson, writeTradingJson } from './tradingStorage.js';
 import { sendJournalWrite } from './journalTransport.js';
 import {
   advanceShadowResearchTrade,
@@ -501,15 +502,8 @@ function serialiseTracker(tracker) {
   };
 }
 
-function readJson(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-}
+function readJson(key, fallback) { return readTradingJson(key, fallback); }
 
-function writeJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
+function writeJson(key, value) { writeTradingJson(key, value); }
+
+

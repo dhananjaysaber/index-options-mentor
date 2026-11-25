@@ -1,3 +1,4 @@
+import { initializeTradingStorage } from './services/tradingStorage.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AppV3 from './AppV3.jsx';
@@ -52,6 +53,8 @@ import './target-index-trail-v58.css';
 // Do not reopen a standalone PWA halfway down a strategy card.
 // Browser-restored scroll positions caused the approved header to appear clipped.
 if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+async function startMentor(){
+await initializeTradingStorage();
 installApiBridge();
 installFyersRequestGuard();
 
@@ -61,11 +64,13 @@ installLiveQuoteFeed();
 installPaperSyncQueue();
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
+  const registerWorker=() => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
       console.warn('PWA service worker registration failed:', error);
     });
-  });
+  };
+  if(document.readyState==='complete')registerWorker();
+  else window.addEventListener('load',registerWorker,{once:true});
 }
 
 // Observe completed mentor snapshots and journal important setup decisions in
@@ -90,3 +95,7 @@ createRoot(document.getElementById('root')).render(
 
 // Permanent trade journal writes and retries stay outside the live trading path.
 startTradeJournalBridge();
+}
+void startMentor();
+
+

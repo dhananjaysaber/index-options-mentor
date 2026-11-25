@@ -1,3 +1,4 @@
+import { readTradingJson, writeTradingJson } from './tradingStorage.js';
 import { FYERS_REFRESH, isNseMarketHours } from './fyersRefreshPolicy.js';
 
 const POSITION_KEYS = [
@@ -143,8 +144,7 @@ function readOpenPositions() {
   const seen = new Set();
   for (const key of POSITION_KEYS) {
     try {
-      const value = localStorage.getItem(key);
-      const position = value ? JSON.parse(value) : null;
+      const position = readTradingJson(key, null);
       if (position?.symbol && !seen.has(position.symbol)) {
         result.push(position);
         seen.add(position.symbol);
@@ -155,3 +155,5 @@ function readOpenPositions() {
   }
   return result;
 }
+
+
