@@ -564,8 +564,8 @@ export default function AppV3() {
     try {
       await commitPaperOpen(strategy==='scalp'?SCALP_POSITION_KEY:CORE_POSITION_KEY,enriched);
       positionRefs.current[strategy]=enriched;
-      if(strategy==='scalp')setScalpPosition(current=>current||enriched);
-      else setCorePosition(current=>current||enriched);
+      if(strategy==='scalp')setScalpPosition(current => current ? current : enriched);
+      else setCorePosition(current => current ? current : enriched);
       setOperationError('');
     } catch(error) {setOperationError(error?.message||'The paper position could not be saved and was not opened.');}
     finally {openingStrategiesRef.current.delete(strategy);}
@@ -1069,13 +1069,9 @@ function inferExitReason(position, underlyingExit) {
 }
 
 function initialPosition(kind) {
-  const key = kind === 'scalp' ? SCALP_POSITION_KEY : CORE_POSITION_KEY;
-  const saved = readJson(key, null);
-  if (saved) return saved;
-  const legacy = readJson(LEGACY_POSITION_KEY, null);
-  if (!legacy) return null;
-  const isScalp = legacy.strategyFamily === 'SCALP';
-  return kind === 'scalp' ? (isScalp ? legacy : null) : (!isScalp ? legacy : null);
+  // Startup migrates the legacy pointer only when no managed record exists.
+  // A committed null position must never fall back to an older open pointer.
+  return readJson(kind === 'scalp' ? SCALP_POSITION_KEY : CORE_POSITION_KEY, null);
 }
 
 function persistPosition(key, position) { writeTradingJson(key, position); }

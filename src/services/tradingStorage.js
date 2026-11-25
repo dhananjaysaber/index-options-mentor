@@ -67,8 +67,8 @@ async function transaction(stores, action) {
     try {
       const tx=db.transaction(stores,'readwrite');
       action(name=>tx.objectStore(name));
-      tx.oncomplete=()=>resolve(true);
-      tx.onerror=tx.onabort=()=>resolve(false);
+      tx.oncomplete=()=>{if(!durableAvailable){durableAvailable=true;changed();}resolve(true);};
+      tx.onerror=tx.onabort=()=>{durableAvailable=false;changed();resolve(false);};
     } catch { resolve(false); }
   });
 }
@@ -147,6 +147,13 @@ export function initializeTradingStorage() {
     for(const key of [TRADE_KEYS.core,TRADE_KEYS.scalp,TRADE_KEYS.legacy]){
       if(!memory.has(key))memory.set(key,localRead(key,null));
       if(closedIds.has(memory.get(key)?.id))memory.set(key,null);
+    }
+    const legacy=memory.get(TRADE_KEYS.legacy);
+    if(legacy?.id){
+      const key=legacy.strategyFamily==='SCALP'?TRADE_KEYS.scalp:TRADE_KEYS.core;
+      const managed=states.some(row=>row.key===key)||localRead(key,undefined)!==undefined;
+      if(managed)memory.set(TRADE_KEYS.legacy,memory.get(key)||null);
+      else if(!closedIds.has(legacy.id))memory.set(key,legacy);
     }
     memory.set(TRADE_KEYS.history,history);
     const saved=await transaction(['state','trades','events'],get=>{
