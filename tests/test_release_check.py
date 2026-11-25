@@ -5,6 +5,8 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+import io
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'aws/readiness'))
@@ -81,6 +83,30 @@ class ReleaseCheckTests(unittest.TestCase):
         self.assertFalse(result['passed'])
         self.assertEqual(result['exportBlocker'],'SHEETS_EXISTING_TRADE_NOT_UNIQUE')
         self.assertEqual(self.journal.health()['trades'],1)
+
+    def test_deployed_simulation_requires_explicit_no_real_orders_claims(self):
+        valid = {'mode':'SIMULATED_EXECUTION_CHECK','realMoneyEnabled':False,
+            'productionJournalTouched':False,'brokerNetworkRequests':0,
+            'checks':[{'strategy':strategy,'passed':True,'journalRows':1,
+                'journalEvents':1,'replayCreatedOrders':0} for strategy in ('CORE','SCALP')]}
+        class Opener:
+            def __init__(self,result):self.result=result
+            def open(self,request,timeout):
+                self.request=request
+                return io.BytesIO(json.dumps(self.result).encode())
+        def configuration(path,uid):
+            return {'owner':'0'*64} if str(path).endswith('paper-owner.json') else {'secret':'test-secret-'*4}
+        with patch('pwd.getpwnam'), patch.object(check.account,'secure_json',side_effect=configuration):
+            opener=Opener(valid)
+            with patch.object(check.urllib.request,'build_opener',return_value=opener):
+                self.assertTrue(check.check_simulation()['passed'])
+            self.assertEqual(opener.request.full_url,'https://deploy-preview-28--optionsmentor.netlify.app/api/execution/maintenance')
+            self.assertEqual(opener.request.get_method(),'POST')
+            self.assertEqual(set(json.loads(opener.request.data)),{'checkId'})
+            for changed in ({'realMoneyEnabled':True},{'productionJournalTouched':True},
+                            {'brokerNetworkRequests':1},{'mode':'LIVE'}):
+                with patch.object(check.urllib.request,'build_opener',return_value=Opener({**valid,**changed})):
+                    with self.assertRaises(check.ExportFailure):check.check_simulation()
 
     def test_packaged_source_hashes_match(self):
         import base64,zlib,re,hashlib

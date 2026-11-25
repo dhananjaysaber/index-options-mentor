@@ -35,7 +35,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs): return None
 
 
+_last_sheet_started = 0.0
+
+
 def signed_sheet_call(configuration, payload):
+    global _last_sheet_started
     origin = configuration.get('netlify', '')
     secret = configuration.get('secret', '')
     if (not re.fullmatch(r'https://[a-z0-9-]+\.netlify\.app', origin)
@@ -49,6 +53,9 @@ def signed_sheet_call(configuration, payload):
         'Content-Type': 'application/json', 'x-iom-time': stamp, 'x-iom-nonce': nonce,
         'x-iom-signature': hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+    delay = 3 - (time.monotonic() - _last_sheet_started)
+    if delay > 0: time.sleep(delay)
+    _last_sheet_started = time.monotonic()
     try:
         with opener.open(request, timeout=55) as response:
             raw = response.read(8_000_001)
@@ -193,6 +200,8 @@ def check_simulation():
     if isinstance(result, dict) and isinstance(result.get('result'), dict): result = result['result']
     rows = result.get('checks') if isinstance(result, dict) else None
     if (not isinstance(rows, list) or len(rows) != 2 or result.get('realMoneyEnabled') is not False
+            or result.get('mode') != 'SIMULATED_EXECUTION_CHECK'
+            or result.get('productionJournalTouched') is not False or result.get('brokerNetworkRequests') != 0
             or {r.get('strategy') for r in rows if isinstance(r, dict)} != {'CORE', 'SCALP'}
             or any(r.get('passed') is not True or r.get('journalRows') != 1
                    or r.get('journalEvents') != 1 or r.get('replayCreatedOrders') != 0
