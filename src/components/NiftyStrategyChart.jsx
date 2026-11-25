@@ -3,11 +3,13 @@ import useLiveQuote from '../hooks/useLiveQuote.js';
 import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 
 const TIMEFRAMES = {
-  '5': { label: '5 min', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48, rightPaddingSlots: 6 },
-  '3': { label: '3 min', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 }
+  '1': { label: '1m', shortLabel: '1m', seconds: 60, maxCandles: 160, visibleCandles: 75, rightPaddingSlots: 7 },
+  '3': { label: '3m', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 },
+  '5': { label: '5m', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48, rightPaddingSlots: 6 },
+  '15': { label: '15m', shortLabel: '15m', seconds: 900, maxCandles: 32, visibleCandles: 28, rightPaddingSlots: 5 }
 };
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', lineMode = false }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', lineMode = false, availableTimeframes = ['3', '5'] }) {
   const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [candles, setCandles] = useState([]);
@@ -103,7 +105,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         </div>
 
         <div className="nifty-chart-timeframe-tabs" role="group" aria-label="Chart timeframe">
-          {Object.entries(TIMEFRAMES).map(([value, config]) => (
+          {Object.entries(TIMEFRAMES).filter(([value]) => availableTimeframes.includes(value)).map(([value, config]) => (
             <button key={value} type="button" className={timeframe === value ? 'active' : ''} onClick={() => setTimeframe(value)} aria-pressed={timeframe === value}>
               {config.label}
             </button>
