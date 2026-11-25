@@ -131,7 +131,7 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mar
     </div>
   </div>;
 }
-export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, setSettings, liveQuote, history, alertsEnabled, onTakeTrade, onExit }) {
+export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, setSettings, liveQuote, history, alertsEnabled, onTakeTrade, onExit, onNavigate }) {
   const ev = evaluation || {};
   const checks = Array.isArray(ev.checks) ? ev.checks : [];
   const option = snapshot?.option || {};
@@ -147,7 +147,7 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
     <div className="fyers-ref-scalp-grid">
       <div className="fyers-ref-chart-column">
         <section className="fyers-ref-card fyers-ref-scalp-chart"><NiftyStrategyChart snapshot={snapshot} position={position} defaultTimeframe="3" strategyNote="5m context · 3m execution" /></section>
-        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={position} liveQuote={liveQuote} onOpen={()=>{}} onExit={onExit}/></div>
+        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={position} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
       </div>
       <div className="fyers-ref-decision-column">
         {position && <><PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('scalp',{...meta,closedBy:'USER'})}/><LivePositionPanel position={position} onExit={meta=>onExit('scalp',meta)} history={history} snapshot={snapshot}/></>}
@@ -212,7 +212,7 @@ export function FyersPositions({ corePosition, scalpPosition, history, snapshot,
     <div className="fyers-ref-positions-secondary">{slot==='core'?'Scalp':'13-Point'} slot · {(slot==='core'?scalpPosition:corePosition)?'1 open position':'No position · watching'}</div>
   </div>;
 }
-export function FyersJournal({ history }) {
+export function FyersJournal({ history, onNavigate }) {
   const [source,setSource]=useState('all');
   const [strategy,setStrategy]=useState('all');
   const rows=Array.isArray(history)?Array.from(new Map(history.filter(x=>x?.id).map(x=>[x.id,x])).values()):[];
@@ -223,7 +223,7 @@ export function FyersJournal({ history }) {
     return (strategy==='all'||(strategy==='scalp'?scalp:!scalp)) && (source==='all'||(source==='shadow'?shadow:source===src.toLowerCase()&&!shadow));
   });
   return <div className="fyers-ref-page fyers-ref-journal"><div className="fyers-ref-journal-title"><h1>Trade journal</h1><p>Permanent learning loop</p></div>
-    <div className="fyers-ref-segment"><button className="active" type="button">Journal</button><button type="button" onClick={()=>window.dispatchEvent(new CustomEvent('mentor:open-analysis'))}>Analysis</button></div>
+    <div className="fyers-ref-segment"><button className="active" type="button">Journal</button><button type="button" onClick={()=>onNavigate('analysis')}>Analysis</button></div>
     <div className="fyers-ref-journal-filters"><div>{[['all','All'],['core','13-point'],['scalp','Scalp']].map(([v,label])=><button type="button" className={strategy===v?'active':''} onClick={()=>setStrategy(v)} key={v}>{label}</button>)}</div><div>{[['all','Any source'],['auto','Auto'],['shadow','Shadow'],['manual','Manual']].map(([v,label])=><button type="button" className={source===v?'active':''} onClick={()=>setSource(v)} key={v}>{label}</button>)}</div></div>
     <History history={filtered}/>
   </div>;
