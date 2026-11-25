@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - 'aws/live/**'
+      - 'aws/readiness/**'
+      - 'tests/test_fyers_readiness.py'
+      - 'scripts/build-fyers-readiness.py'
+      - 'public/iom-fyers-readiness.py'
       - 'aws/journal/store.py'
       - 'tests/live_*test.py'
       - 'tests/test_live_stage_installer.py'
@@ -45,3 +49,9 @@ jobs:
           python3 scripts/build-execution-connect.py
           cmp /tmp/iom-execution-connect.expected.py public/iom-execution-connect.py
           python3 public/iom-execution-connect.py --verify-only --journal-store aws/journal/store.py
+      - name: Verify read-only FYERS checker and published checksum source
+        run: |
+          cp public/iom-fyers-readiness.py /tmp/iom-fyers-readiness.expected.py
+          python3 scripts/build-fyers-readiness.py
+          cmp /tmp/iom-fyers-readiness.expected.py public/iom-fyers-readiness.py
+          python3 -m unittest discover -s tests -p 'test_fyers_readiness.py' -v
