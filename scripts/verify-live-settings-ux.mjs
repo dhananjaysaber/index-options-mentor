@@ -27,6 +27,7 @@ try{
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
+  await page.getByRole('button',{name:/Advanced connection and full settings/}).click();
   const card=page.getByRole('region',{name:'Real-money trading setup'});
   await card.waitFor({state:'visible'});
   await card.getByText('Buying is OFF',{exact:true}).waitFor();
@@ -36,6 +37,7 @@ try{
   const firstReads=actions.length;
   await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Scalp/}).first().click();
   await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
+  await page.getByRole('button',{name:/Advanced connection and full settings/}).click();
   await card.getByText('Buying is OFF',{exact:true}).waitFor();
   assert.ok(actions.length>firstReads,'Returning to Settings checks again without a click');
   const beforeFocus=actions.length;
