@@ -1,7 +1,9 @@
+"$schema" = "https://open-api.netlify.com/netlify.schema.json"
+
 [build]
   command = "npm run build"
   publish = "dist"
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- netlify/functions server netlify.toml package.json package-lock.json"
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- src public index.html vite.config.js netlify/functions server netlify.toml package.json package-lock.json"
 
 [build.environment]
   VITE_FYERS_TIER = "prime"
