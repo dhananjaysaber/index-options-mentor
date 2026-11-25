@@ -46,6 +46,7 @@ import './view-mode-menu-v55.css';
 import './scalp-profit-protection-v56.css';
 import './target-index-trail-v58.css';
 import './premium-design-v60.css';
+import './fyers-reference-v61.css';
 
 // On GitHub Pages the visible PWA is static, while all /api/* traffic is
 // transparently routed to the existing secure backend. No FYERS secret is
