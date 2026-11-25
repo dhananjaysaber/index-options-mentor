@@ -389,3 +389,21 @@ html[data-theme] #root .premium-design-shell .workflow-track{width:100%!importan
  html[data-theme] #root .premium-design-shell .mentor-v2-content>.position-lock-bar,
  html[data-theme] #root .premium-design-shell .mentor-v2-content>.position-alert-banner{display:none!important;}
 }
+
+html[data-theme] #root .premium-design-shell .position-exit-alert{display:flex!important;flex-wrap:wrap!important;align-items:center;gap:12px!important;padding:14px!important;margin:0 0 12px!important;min-height:0!important;border:1px solid rgba(255,92,108,.45)!important;border-radius:10px!important;background:#2b161e!important;box-shadow:none!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-pulse{width:34px!important;height:34px!important;min-width:34px!important;font-size:20px!important;border:1px solid var(--ui-red)!important;background:transparent!important;animation:none!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-copy{flex:1;min-width:180px;}
+html[data-theme] #root .premium-design-shell .exit-alert-copy>strong{font-size:18px!important;color:#ffb8c0!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-copy>p{font-size:12px!important;color:#e7b9c0!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-metrics{display:flex!important;gap:12px!important;flex-wrap:wrap;}
+html[data-theme] #root .premium-design-shell .exit-alert-metrics>div{background:transparent!important;border:0!important;padding:4px!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-metrics strong{font-size:13px!important;}
+html[data-theme] #root .premium-design-shell .exit-alert-button{background:var(--ui-red)!important;color:#240a10!important;min-height:44px!important;border:0!important;border-radius:8px!important;padding:10px 16px!important;font-size:12px!important;}
+html[data-theme] #root .premium-design-shell .scalp-dashboard>.position-exit-alert{grid-column:1 / -1!important;}
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .workflow-step strong{font-size:10px!important;white-space:normal!important;overflow-wrap:anywhere!important;}
+ html[data-theme] #root .premium-design-shell .mentor-v2-content>.position-exit-alert{display:none!important;}
+ html[data-theme] #root .premium-design-shell .scalp-dashboard>.position-exit-alert{order:3;}
+ html[data-theme] #root .premium-design-shell .position-exit-alert{width:100%;}
+ html[data-theme] #root .premium-design-shell .exit-alert-button{width:100%;}
+}

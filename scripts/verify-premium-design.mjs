@@ -70,6 +70,28 @@ try {
       await page.screenshot({path:`test-artifacts/premium-design/${width}-analysis.png`,fullPage:true});
     }
   }
+  // Open-paper target-hit presentation remains actionable on phone and desktop.
+  const positionPage=await browser.newPage({viewport:{width:390,height:844},serviceWorkers:'block'});
+  positionPage.on('pageerror',e=>errors.push(e.message));
+  await positionPage.addInitScript(()=>{
+    localStorage.setItem('index-options-mentor-settings-v2',JSON.stringify({mentorAutoOpen:false,scalpAutoOpen:false,mentorAutoClose:false,scalpAutoClose:false}));
+    localStorage.setItem('index-options-mentor-scalp-position-v41',JSON.stringify({id:'isolated-target-hit',mode:'SIMULATION',strategyFamily:'SCALP',strategyTier:'SCALP',side:'CE',symbol:'NSE:NIFTY26NOV25400CE',lots:2,quantity:130,entry:230,currentPrice:245,underlyingEntry:25500,underlyingCurrent:25550,underlyingStop:25475,underlyingTarget:25525,rr:1,bestR:2,currentR:2,peakUnrealizedPnl:2000,optionTrailingActive:true,optionTrailingFloorPnl:1000,openedAt:new Date().toISOString(),score:85,scalpMaxHoldMinutes:12}));
+  });
+  await positionPage.route('**/api/**',r=>r.fulfill({status:401,contentType:'application/json',body:'{"error":"Isolated target-state fixture"}'}));
+  await positionPage.goto(base,{waitUntil:'domcontentloaded'});
+  for(const width of [390,1440]){
+    await positionPage.setViewportSize({width,height:844});
+    const nav=width<=900?positionPage.locator('.premium-mobile-bottom-nav'):positionPage.locator('.mentor-sidebar-v2');
+    await nav.getByRole('button',{name:/Scalp/}).first().click();
+    const panel=positionPage.locator('.scalp-dashboard .position-essential-card');
+    await panel.waitFor({state:'visible'});
+    assert.match(await panel.innerText(),/PAPER/);
+    assert.equal(await positionPage.locator('.scalp-quick-sell').isDisabled(),false,'Existing paper position retains SELL');
+    await positionPage.locator('.scalp-dashboard .position-exit-alert').waitFor();
+    assert.ok(await positionPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Target-hit state has no horizontal overflow');
+    await positionPage.screenshot({path:`test-artifacts/premium-design/${width}-target-hit.png`,fullPage:true});
+  }
+  await positionPage.close();
   assert.ok(!writes.some(p=>/\/orders\/(submit|exit|settings|stop)$/.test(p)),'Layout navigation cannot send broker actions');
   assert.deepEqual(errors,[],'No rendering errors');
   console.log('PASS approved UI at 320/390/430/768/1024/1440/1920; five mobile tabs, journal details, live OFF states and accessible docks; no broker writes');
