@@ -4,7 +4,7 @@ function fmt(value) {
   return value == null ? '—' : Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 }
 
-export default function TraderMarketPanel({ snapshot, lineMode = false }) {
+export default function TraderMarketPanel({ snapshot, lineMode = false, availableTimeframes = ['3', '5'] }) {
   if (!snapshot) return <section className="panel trader-market-panel premium-market-empty" aria-label="Market connection needed">
     <div className="eyebrow">MARKET VIEW</div><h2>Waiting for your live connection</h2>
     <p>Connect FYERS above or from the menu to load the chart, current prices and Mentor's trade plan.</p>
@@ -36,7 +36,7 @@ export default function TraderMarketPanel({ snapshot, lineMode = false }) {
         <span className={`phase-pill ${market.phase === 'LIVE' ? 'live' : ''}`}>{market.phase.replaceAll('_', ' ')}</span>
       </div>
 
-      <NiftyStrategyChart snapshot={snapshot} compact lineMode={lineMode} />
+      <NiftyStrategyChart snapshot={snapshot} compact lineMode={lineMode} availableTimeframes={availableTimeframes} />
 
       <div className="market-metric-grid">
         {metrics.map(([label, value]) => (
