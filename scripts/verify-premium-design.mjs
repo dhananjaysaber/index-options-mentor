@@ -52,8 +52,9 @@ try {
       if(label==='scalp'){
         const dock=await page.locator('.scalp-quick-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
-        if(mobile)assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');
+        if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
       }
+      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count())assert.ok((await workflow.boundingBox()).height<120,'Live path stays compact');}
       if(label==='journal'){
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();
