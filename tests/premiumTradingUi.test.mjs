@@ -81,3 +81,20 @@ test('reference handoff layer has real chart, order handlers and narrow-screen l
   assert.match(read('src/main.jsx'), /import '\.\/fyers-reference-v61\.css';/);
   assert.doesNotMatch(screen, /24,386\.35|₹1,462|25,539\.85/);
 });
+
+test('v62 design explicitly restores mobile hamburger, keeps seven workflow cards and removes 1m interval', () => {
+  const app = read('src/AppV3.jsx');
+  const workflow = read('src/components/MentorWorkflow.jsx');
+  const chart = read('src/components/NiftyStrategyChart.jsx');
+  const view = read('src/components/FyersReferenceViews.jsx');
+  const css = read('src/fyers-reference-v62.css');
+  assert.ok(postcss.parse(css).nodes.length > 10);
+  assert.match(app, /className="fyers-ref-mobile-header"/);
+  assert.match(app, /className="fyers-ref-mobile-menu"/);
+  assert.match(css, /workflow-step:nth-child\(7\)/);
+  assert.match(css, /grid-column:3 \/ span 2/);
+  assert.match(workflow, /id: 'approval'/);
+  assert.doesNotMatch(chart, /'1': \{ label: '1m'/);
+  assert.doesNotMatch(view, /availableTimeframes=\{\['1'/);
+  assert.match(read('src/main.jsx'), /import '\.\/fyers-reference-v62\.css';/);
+});
