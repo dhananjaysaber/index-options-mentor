@@ -1,3 +1,4 @@
+import { FyersCoreTrade, FyersScalpTrade, FyersDetail, FyersTicket, FyersPositions, FyersJournal, FyersSettings } from './components/FyersReferenceViews.jsx';
 import { updateLivePosition } from './engine/managedPosition.js';
 import { readTradingJson, writeTradingJson, commitPaperOpen, commitPaperClose } from './services/tradingStorage.js';
 import TradeStorageNotice, { TradeRecoveryPanel } from './components/TradeStorageNotice.jsx';
@@ -702,121 +703,39 @@ export default function AppV3() {
 
       <TradeStorageNotice />
         {operationError && <div className="alert-bar" role="alert">{operationError}</div>}
-      <main className="mentor-v2-content">
+      <main className="mentor-v2-content fyers-reference-main">
         {view === 'dashboard' && (
           <>
-            <section className={`premium-feed-status ${marketDataReady ? 'live' : 'waiting'}`}
-              role="status" aria-label="NIFTY data connection status">
-              <div className="premium-feed-indicator" aria-hidden="true" />
-              <div className="premium-feed-copy">
-                <strong>{marketDataReady ? 'LIVE MARKET DATA' : brokerStatus.authenticated ? 'WAITING FOR FRESH DATA' : 'FYERS CONNECTION REQUIRED'}</strong>
-                <small>{marketDataReady ? 'NIFTY quote and Mentor analysis in sync' :
-                  brokerStatus.authenticated ? 'Entries paused until fresh prices return' : 'Connect FYERS in the menu to load market research'}</small>
-              </div>
-              <div className="premium-feed-time">
-                <span>Last refresh</span>
-                <strong>{formatTime(snapshot?.generatedAt)}</strong>
-              </div>
-              <button type="button" className="premium-feed-refresh"
-                onClick={() => refreshSnapshot({ manual: true })}
-                disabled={!brokerStatus.authenticated || refreshing}
-                title="Refresh Mentor data" aria-label="Refresh Mentor data">{refreshing ? '…' : '↻'}</button>
-            </section>
-
+            {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
+            {!marketDataReady && <div className="fyers-ref-data-warning" role="status">
+              <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated ? 'WAITING FOR FRESH MARKET DATA' : 'FYERS CONNECTION REQUIRED'}</strong>
+              <span>{brokerStatus.authenticated ? 'New entries remain disabled until quotes and Mentor analysis are fresh.' : 'Connect FYERS to load actual market prices and research.'}</span>
+              <button type="button" disabled={!brokerStatus.authenticated || refreshing} onClick={() => refreshSnapshot({ manual:true })}>{refreshing ? 'Checking…' : 'Retry data'}</button>
+            </div>}
             {strategyMode === 'scalp' ? (
-              <ScalpMentorDashboard
-                snapshot={snapshot}
-                loading={loading}
-                liveError={liveError}
-                authRequired={authRequired}
-                onRetry={retryFyersAfterUpgrade}
-                marketDataReady={marketDataReady}
-                position={scalpPosition}
-                positionMentor={scalpMentor}
-                alertsEnabled={alertsEnabled}
-                history={history}
-                settings={{ ...settings, liveHandoffEnabled: false }}
-                onReconnect={reconnectFyers}
-                onTakeTrade={takeTrade}
-                onExit={meta => exitStrategy('scalp', meta)}
-                candles={scalpResearch.candles}
-                candleLoading={scalpResearch.candleLoading}
-                candleError={scalpResearch.candleError}
-                evaluation={scalpStatus}
-              />
+              <FyersScalpTrade snapshot={snapshot} evaluation={scalpStatus} position={scalpPosition}
+                corePosition={corePosition} positionMentor={scalpMentor} marketDataReady={marketDataReady}
+                settings={settings} setSettings={setSettings} liveQuote={liveQuote} history={history}
+                alertsEnabled={alertsEnabled} onTakeTrade={takeTrade} onExit={exitStrategy} onNavigate={navigate} />
             ) : (
-              <>
-                <section className="trader-toolbar mentor-v2-toolbar">
-                  <div className="toolbar-live"><span>DATA</span><strong>{brokerStatus.authenticated ? 'FYERS LIVE' : 'OFFLINE'}</strong></div>
-                  <ToolbarStat label="Capital" value={`₹${Number(settings.capital).toLocaleString('en-IN')}`} />
-                  <ToolbarStat label="Risk" value={`${settings.riskPct}%`} />
-                  <ToolbarStat label="Amount per trade" value={`₹${Number(settings.tradeAmount).toLocaleString('en-IN')}`} />
-                  <div className={`automation-pill ${settings.mentorAutoOpen ? 'on' : ''}`}><span>MENTOR AUTO</span><strong>{settings.mentorAutoOpen ? 'OPEN + MANAGE' : 'MANUAL'}</strong></div>
-                </section>
-
-                <MobileMentorDashboardV41
-                  mode={mode}
-                  snapshot={snapshot}
-                  loading={loading}
-                  liveError={liveError}
-                  authRequired={authRequired}
-                  onRetry={retryFyersAfterUpgrade}
-                  position={corePosition}
-                  positionMentor={coreMentor}
-                  alertsEnabled={alertsEnabled}
-                  history={history}
-                  settings={settings}
-                  onReconnect={reconnectFyers}
-                  onExit={meta => exitStrategy('core', meta)}
-                />
-
-                {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
-                {corePosition && <div className="position-lock-bar">13-POINT POSITION ACTIVE · OPENED BY {corePosition.initiatedBy || 'USER'} · {corePosition.strategyTierLabel || corePosition.strategyTier || 'RESEARCH'}</div>}
-                <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta => exitStrategy('core', { ...meta, closedBy: 'USER' })} />
-                <TraderDecisionBanner snapshot={snapshot} loading={loading} />
-                <ResearchStatus classification={setupClassification} position={corePosition} settings={settings} manualReady={coreManualReady} />
-                <MentorWorkflow snapshot={snapshot} />
-                <div className="desktop-core-layout">
-                {mode === 'advanced' && <QuickChecklist rows={snapshot?.parameters || []} directionReady={Boolean(snapshot?.decision?.side)} />}
-
-                <section className={`trader-workspace ${mode === 'simple' ? 'simple-workspace' : 'advanced-workspace'} mentor-v2-workspace compact-v41-workspace`}>
-                  <div className={`workspace-left ${mode === 'advanced' ? 'advanced-left' : ''}`}>
-                    {mode === 'advanced' && snapshot && <ParameterGrid rows={snapshot.parameters} directionReady={Boolean(snapshot?.decision?.side)} />}
-                    <TraderMarketPanel snapshot={snapshot} />
-                  </div>
-                  {corePosition
-                    ? <LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky />
-                    : <CoreResearchPanel snapshot={snapshot} settings={settings} />}
-                </section>
-
-                </div>
-
-                <CoreQuickActions snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={takeTrade} onExit={meta => exitStrategy('core', meta)} />
-              </>
+              <FyersCoreTrade snapshot={snapshot} liveQuote={liveQuote} settings={settings}
+                setSettings={setSettings} marketDataReady={marketDataReady}
+                corePosition={corePosition} scalpPosition={scalpPosition} coreMentor={coreMentor}
+                history={history} onTakeTrade={takeTrade} onExit={exitStrategy}
+                onNavigate={navigate} alertsEnabled={alertsEnabled}/>
             )}
           </>
         )}
-
-        {view === 'position' && (
-          <div className="mentor-page position-page-v22 dual-position-page">
-            <div className="mentor-page-head position-page-head-v22">
-              <div>
-                <div className="eyebrow">RESEARCH POSITIONS</div>
-                <h1>{positionCount ? `${positionCount} open simulated position${positionCount === 1 ? '' : 's'}` : 'No simulated positions'}</h1>
-                <p>13-point and Scalp research are tracked independently. Either strategy can stay open while you view or test the other.</p>
-              </div>
-              <span className={positionCount ? 'position-page-status open' : 'position-page-status'}>{positionCount ? `${positionCount} OPEN` : 'NO OPEN POSITION'}</span>
-            </div>
-            <div className="dual-position-grid">
-              <section><div className="dual-position-label"><span>13-POINT</span><strong>{corePosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={corePosition} onExit={meta => exitStrategy('core', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
-              <section><div className="dual-position-label"><span>SCALP</span><strong>{scalpPosition ? 'OPEN' : 'NO POSITION'}</strong></div><LivePositionPanel position={scalpPosition} onExit={meta => exitStrategy('scalp', meta)} history={history} snapshot={snapshot} sticky={false} /></section>
-            </div>
-          </div>
-        )}
-
-        {view === 'history' && <div className="mentor-page"><div className="mentor-page-head"><div><div className="eyebrow">PERMANENT LEARNING LOOP</div><h1>Trade journal</h1><p>13-point and Scalp trades remain independently tagged so Auto, Manual, qualification, management and exits can be compared later.</p></div><span>{history.length} completed</span></div><TradeRecoveryPanel /><History history={history} /></div>}
-        {view === 'analysis' && <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus} /></Suspense>}
-        {view === 'settings' && <div className="mentor-page"><SettingsPanel settings={settings} onSave={setSettings} /></div>}
+        {view === 'detail' && <FyersDetail snapshot={snapshot} onBack={() => navigate('dashboard')}/>}
+        {view === 'ticket' && <FyersTicket snapshot={snapshot} settings={settings} liveQuote={liveQuote} onBack={() => navigate('dashboard')}/>}
+        {view === 'position' && <FyersPositions corePosition={corePosition} scalpPosition={scalpPosition}
+          history={history} snapshot={snapshot} coreMentor={coreMentor} scalpMentor={scalpMentor}
+          alertsEnabled={alertsEnabled} onExit={exitStrategy}/>}
+        {view === 'history' && <><TradeRecoveryPanel/><FyersJournal history={history} onNavigate={navigate}/></>}
+        {view === 'analysis' && <div className="fyers-ref-page fyers-ref-analysis">
+          <Suspense fallback={<AnalysisPageLoading />}><ResearchAnalysis history={history} brokerStatus={brokerStatus}/></Suspense>
+        </div>}
+        {view === 'settings' && <FyersSettings settings={settings} onSave={setSettings}/>}
       </main>
 
       <nav className="premium-mobile-bottom-nav" aria-label="Primary trading navigation">
