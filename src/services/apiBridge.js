@@ -17,9 +17,9 @@ export function installApiBridge() {
 
   window.fetch = (input, init = {}) => {
     const originalUrl = typeof input === 'string' ? input : input?.url || '';
-    if (!isApiPath(originalUrl) || !API_BASE) return nativeFetch(input, init);
+    if (!isApiPath(originalUrl)) return nativeFetch(input, init);
 
-    const apiUrl = `${API_BASE}${normaliseApiPath(originalUrl)}`;
+    const apiUrl = API_BASE ? `${API_BASE}${normaliseApiPath(originalUrl)}` : originalUrl;
     const headers = new Headers(init.headers || (typeof input !== 'string' ? input?.headers : undefined) || {});
     const session = readSession();
     if (session && (normaliseApiPath(originalUrl).startsWith('/api/fyers/') || normaliseApiPath(originalUrl).startsWith('/api/monitor/') || normaliseApiPath(originalUrl).startsWith('/api/execution/'))) {
@@ -29,8 +29,7 @@ export function installApiBridge() {
     return nativeFetch(apiUrl, {
       ...init,
       headers,
-      mode: 'cors',
-      credentials: 'omit'
+      ...(API_BASE ? { mode: 'cors', credentials: 'omit' } : {})
     });
   };
 }
@@ -53,14 +52,20 @@ export function hasFyersSession() {
 
 function consumeFyersSessionFromHash() {
   const hash = String(window.location.hash || '').replace(/^#/, '');
-  if (!hash) return;
   const params = new URLSearchParams(hash);
+  const search = new URLSearchParams(window.location.search || '');
   const session = params.get('fyers_session');
-  if (!session) return;
-  try { localStorage.setItem(SESSION_KEY, session); } catch {}
+  const cookieLoginReturn = search.get('fyers') === 'connected';
+  if (!session && !cookieLoginReturn) return;
+  try {
+    if (session) localStorage.setItem(SESSION_KEY, session);
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {}
   params.delete('fyers_session');
+  if (cookieLoginReturn) search.delete('fyers');
   const cleanHash = params.toString();
-  const cleanUrl = `${window.location.pathname}${window.location.search}${cleanHash ? `#${cleanHash}` : ''}`;
+  const cleanSearch = search.toString();
+  const cleanUrl = `${window.location.pathname}${cleanSearch ? '?' + cleanSearch : ''}${cleanHash ? '#' + cleanHash : ''}`;
   window.history.replaceState({}, document.title, cleanUrl);
 }
 
