@@ -20,7 +20,7 @@ test('premium trading navigation uses only the 13-point and scalp strategies', (
   const app = read('src/AppV3.jsx');
   const main = read('src/main.jsx');
   const sw = read('public/sw.js');
-  assert.match(app, /className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell"/);
+  assert.match(app, /className="app-shell mentor-v2-shell research-v41-shell premium-fintech-shell premium-design-shell"/);
   assert.doesNotMatch(app, /<StrategyModeBar|function StrategyModeBar|Select index strategy/);
   assert.match(app, /label="13-Point"/);
   assert.match(app, /label="Scalp"/);
@@ -50,4 +50,15 @@ test('premium design keeps real FYERS data and existing paper buy/sell actions',
   assert.match(scalp, /onClick=\{quickSellScalp\}/);
   assert.match(quote, /quoteMs/);
   assert.doesNotMatch(app, /25,450\.20|4,475\.00|12,380/);
+});
+
+
+// The approved v60 design is the final visual layer; protected handlers remain above.
+test('approved mobile and desktop layer parses with safe-area action/nav clearance', () => {
+  const css = read('src/premium-design-v60.css');
+  assert.ok(postcss.parse(css).nodes.length > 30);
+  assert.match(css, /grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+  assert.match(css, /bottom:calc\(64px \+ env\(safe-area-inset-bottom,0px\)\)/);
+  assert.match(css, /touch-action:pan-y pinch-zoom/);
+  assert.match(read('src/main.jsx'), /import '\.\/premium-design-v60\.css';/);
 });
