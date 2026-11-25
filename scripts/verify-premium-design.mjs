@@ -31,7 +31,7 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
-  await page.locator('.core-compact-plan:visible').waitFor();
+  await page.locator('.fyers-ref-decision:visible').waitFor();
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
@@ -50,11 +50,11 @@ try {
         assert.ok(boxes.every(b=>b.width>=44&&b.height>=44),'Navigation tap targets');
       }
       if(label==='scalp'){
-        const dock=await page.locator('.scalp-quick-actions').boundingBox();
+        const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
       }
-      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.premium-core-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
+      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.fyers-ref-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
       if(label==='journal'){
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();
@@ -83,11 +83,11 @@ try {
     await positionPage.setViewportSize({width,height:844});
     const nav=width<=900?positionPage.locator('.premium-mobile-bottom-nav'):positionPage.locator('.mentor-sidebar-v2');
     await nav.getByRole('button',{name:/Scalp/}).first().click();
-    const panel=positionPage.locator('.scalp-dashboard .position-essential-card');
+    const panel=positionPage.locator('.fyers-ref-scalp .position-essential-card');
     await panel.waitFor({state:'visible'});
     assert.match(await panel.innerText(),/PAPER/);
-    assert.equal(await positionPage.locator('.scalp-quick-sell').isDisabled(),false,'Existing paper position retains SELL');
-    await positionPage.locator('.scalp-dashboard .position-exit-alert').waitFor();
+    assert.equal(await positionPage.locator('.fyers-ref-scalp-sell').isDisabled(),false,'Existing paper position retains SELL');
+    await positionPage.locator('.fyers-ref-scalp .position-exit-alert').waitFor();
     assert.ok(await positionPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Target-hit state has no horizontal overflow');
     await positionPage.screenshot({path:`test-artifacts/premium-design/${width}-target-hit.png`,fullPage:true});
   }
