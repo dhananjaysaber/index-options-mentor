@@ -43,6 +43,11 @@ export default function CoreResearchPanel({ snapshot, settings }) {
         <em>SIMULATION</em>
       </div>
 
+      <div className="premium-core-verdict">
+        <div><strong>{action}</strong><small>{classification.label || 'Waiting for qualification'}</small></div>
+        <div className="premium-core-score"><strong>{Number.isFinite(Number(decision.score)) && decision.score != null ? decision.score : '—'}</strong><small>/100</small></div>
+      </div>
+
       <div className="core-checkpoint-card">
         <span>NEXT CHECKPOINT</span>
         <strong>{checkpoint}</strong>

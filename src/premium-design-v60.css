@@ -373,3 +373,10 @@ html[data-theme] #root .premium-design-shell .trader-market-panel:not(.premium-m
  html[data-theme] #root .premium-design-shell .nifty-chart-level-chip span{font-size:8px!important;}
  html[data-theme] #root .premium-design-shell .nifty-chart-level-chip strong{font-size:10px!important;}
 }
+
+html[data-theme] #root .premium-design-shell .premium-core-verdict{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:10px;border-bottom:1px solid var(--ui-line);}
+html[data-theme] #root .premium-design-shell .premium-core-verdict>div:first-child{display:flex;flex-direction:column;gap:2px;}
+html[data-theme] #root .premium-design-shell .premium-core-verdict>div:first-child>strong{font-size:18px;}
+html[data-theme] #root .premium-design-shell .premium-core-verdict small{font-size:11px;color:var(--ui-muted);}
+html[data-theme] #root .premium-design-shell .premium-core-score{display:flex;align-items:baseline;gap:3px;}
+html[data-theme] #root .premium-design-shell .premium-core-score strong{font-size:28px;color:var(--ui-green);}
