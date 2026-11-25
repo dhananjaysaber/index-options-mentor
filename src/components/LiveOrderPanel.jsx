@@ -20,6 +20,22 @@ export default function LiveOrderPanel({ tradeAmount }) {
     return () => window.clearInterval(timer);
   }, [plan]);
 
+  // Read-only status checks run on entry and when returning to the app.
+  // Never restore a cached ON/OFF flag or automatically repeat an order action.
+  useEffect(() => {
+    const check = () => {
+      if (document.visibilityState === 'visible') void run(refresh);
+    };
+    const timer = window.setTimeout(check, 0);
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, []);
+
   async function api(action, payload) {
     let response, data;
     try {
@@ -74,7 +90,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
       <div><span className="live-setup-eyebrow">REAL-MONEY TRADING</span><h2>Your trading connection</h2></div>
       <span className={`live-setup-badge ${enabled ? 'is-on' : 'is-off'}`}>{status ? enabled ? 'Buying is ON' : 'Buying is OFF' : 'Connection not checked'}</span>
     </header>
-    <p className="live-setup-lead">{!status ? 'Start by checking your connection. Then review a trade before deciding to buy.' : enabled ? 'Real-money buying is enabled. Review the price and quantity before submitting a trade.' : 'Your server is connected. Real-money buying is switched off. You can still review a trade plan.'}</p>
+    <p className="live-setup-lead">{!status ? 'Your connection is checked automatically when you open this page or return to the app.' : enabled ? 'Real-money buying is enabled. Review the price and quantity before submitting a trade.' : 'Your server is connected. Real-money buying is switched off. You can still review a trade plan.'}</p>
 
     <div className="live-setup-status-grid" aria-live="polite">
       <Status label="Trading connection" value={status ? 'Connected' : 'Not checked'} />
@@ -85,8 +101,8 @@ export default function LiveOrderPanel({ tradeAmount }) {
     {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your orders and positions in FYERS before continuing.</p>}
 
     <div className="live-setup-step">
-      <div className="live-setup-step-heading"><span>1</span><div><h3>Check your connection</h3><p>Confirms this page can reach your trading server. It does not buy anything.</p></div></div>
-      <button className="live-setup-button" type="button" disabled={busy} onClick={() => run(refresh)}>{busy ? 'Please wait…' : status ? 'Refresh connection' : 'Check trading connection'}</button>
+      <div className="live-setup-step-heading"><span>1</span><div><h3>Check your connection</h3><p>Checked automatically when you return. You can also refresh it here. This does not buy anything.</p></div></div>
+      <button className="live-setup-button" type="button" disabled={busy} onClick={() => run(refresh)}>{busy ? 'Please wait…' : 'Refresh connection'}</button>
     </div>
 
     <div className="live-setup-step">
@@ -96,7 +112,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
         <button className="live-setup-button" type="button" disabled={busy || !status || Boolean(status.attentionRequired)} onClick={() => run(() => prepare('CORE'))}>Review 13-point trade</button>
         <button className="live-setup-button" type="button" disabled={busy || !status || Boolean(status.attentionRequired)} onClick={() => run(() => prepare('SCALP'))}>Review Scalp trade</button>
       </div>
-      {!status && <p className="live-setup-help">Check the connection above to unlock these buttons.</p>}
+      {!status && <p className="live-setup-help">Waiting for the connection check. If it fails, use Refresh connection to try again.</p>}
     </div>
 
     {error && <div className="live-setup-error" role="alert"><strong>This step could not finish</strong><p>{error}</p></div>}

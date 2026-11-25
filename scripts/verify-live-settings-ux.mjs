@@ -11,12 +11,13 @@ try{
   assert.ok(ready,'Preview unavailable');
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:1000},serviceWorkers:'block'});
-  const errors=[],actions=[];let rejectPlan=false;
+  const errors=[],actions=[];let rejectPlan=false, rejectStatus=false;
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
     if(path.includes('/api/orders/')){
       const action=path.split('/').at(-1);actions.push(action);
+      if(action==='status' && rejectStatus)return route.fulfill({status:503,contentType:'application/json',body:'{"error":"UNAVAILABLE"}'});
       if(action==='status')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:false,actualBrokerAcceptanceVerified:false,attentionRequired:false,positions:[],settings:{tradeAmount:30000,mentorAutoOpen:false,scalpAutoOpen:false}})});
       if(action==='prepare')return route.fulfill({status:rejectPlan?409:200,contentType:'application/json',body:JSON.stringify(rejectPlan?{error:'ORDER_NOT_ACCEPTED_CHECK_STATUS'}:{ok:true,plan:{intentId:'fake-review',expiresAt:Date.now()/1000+60,buyPrice:230,lots:2,premiumCost:29900,initialStop:220,payload:{symbol:'NSE:NIFTY26D0126000PE',qty:130}}})});
       return route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'});
@@ -28,11 +29,29 @@ try{
   await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
   const card=page.getByRole('region',{name:'Real-money trading setup'});
   await card.waitFor({state:'visible'});
-  assert.match(await card.innerText(),/Connection not checked/);
-  assert.equal(await card.getByRole('button',{name:'Review Scalp trade',exact:true}).isDisabled(),true);
-  await card.getByRole('button',{name:'Check trading connection',exact:true}).click();
   await card.getByText('Buying is OFF',{exact:true}).waitFor();
   assert.match(await card.innerText(),/Not yet verified/);
+  assert.ok(actions.includes('status'),'Opening Settings checks status automatically');
+  assert.deepEqual(actions.filter(action=>action!=='status'),[],'Automatic checks only read status');
+  const firstReads=actions.length;
+  await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Scalp/}).first().click();
+  await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
+  await card.getByText('Buying is OFF',{exact:true}).waitFor();
+  assert.ok(actions.length>firstReads,'Returning to Settings checks again without a click');
+  const beforeFocus=actions.length;
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.waitForFunction(()=>document.querySelector('.live-setup-badge')?.textContent==='Buying is OFF');
+  assert.ok(actions.length>beforeFocus,'Returning to the browser refreshes server status');
+  assert.deepEqual(actions.filter(action=>action!=='status'),[],'Navigation/focus never sends orders or settings');
+  rejectStatus=true;
+  await card.getByRole('button',{name:'Refresh connection',exact:true}).click();
+  await card.getByRole('alert').filter({hasText:'The trading connection could not be checked'}).waitFor();
+  assert.equal(await card.getByRole('button',{name:'Review Scalp trade',exact:true}).isDisabled(),true,'A failed check cannot leave stale trading controls enabled');
+  rejectStatus=false;
+  await card.getByRole('button',{name:'Refresh connection',exact:true}).click();
+  await card.getByText('Buying is OFF',{exact:true}).waitFor();
+
+
   await card.getByRole('button',{name:'Review Scalp trade',exact:true}).click();
   const plan=page.getByRole('region',{name:'Trade plan review'});
   await plan.waitFor({state:'visible'});
@@ -61,5 +80,5 @@ try{
   await paper.getByRole('button',{name:'Run practice check'}).click();
   await paper.getByText(/Practice checks passed for 13-point and Scalp/).waitFor();
   assert.deepEqual(errors,[]);
-  console.log('PASS simple live settings: checked status, plan-only review, disabled buying/auto-entry, contextual error, practice check, desktop/mobile sizing and no submit request');
+  console.log('PASS simple live settings: automatic status on navigation/focus, plan-only review, disabled buying/auto-entry, contextual error, practice check, desktop/mobile sizing and no submit request');
 }finally{if(browser)await browser.close();server.kill('SIGTERM');}

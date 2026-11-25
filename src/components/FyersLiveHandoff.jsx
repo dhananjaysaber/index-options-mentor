@@ -47,10 +47,10 @@ export default function FyersLiveHandoff({
     <section className={`fyers-live-handoff ${ready ? 'ready' : 'blocked'}`}>
       <div className="fyers-handoff-head">
         <div>
-          <span>FYERS LIVE HANDOFF</span>
+          <span>TRADE DETAILS · MANUAL COPY</span>
           <strong>{ready ? 'Order plan ready for your review' : 'Live order plan not ready'}</strong>
         </div>
-        <em>MANUAL CONFIRMATION</em>
+        <em>TEXT ONLY · NO ORDER SENT</em>
       </div>
 
       <div className="fyers-handoff-grid">
@@ -69,7 +69,7 @@ export default function FyersLiveHandoff({
 
       <div className="fyers-handoff-actions">
         <button type="button" className="fyers-handoff-copy" onClick={copyPlan}>
-          {copied ? 'COPIED' : 'COPY ORDER PLAN'}
+          {copied ? 'COPIED AS TEXT' : 'COPY TRADE DETAILS'}
         </button>
         <button type="button" className="fyers-handoff-open" onClick={openFyers}>
           OPEN FYERS

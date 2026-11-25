@@ -82,8 +82,8 @@ export default function SettingsPanel({ settings, onSave }) {
           <Toggle checked={draft.experimentalResearch} onChange={value => update('experimentalResearch', value)} title="3/5 experimental research" copy="Track 3/5 mandatory + at least 6/8 confirmation setups when hard safety gates still pass. Research only." />
         </SettingsCard>
 
-        <SettingsCard title="Copy a plan to FYERS" copy="Optional: copy Mentor’s plan and open FYERS to place the trade there yourself.">
-          <Toggle checked={draft.liveHandoffEnabled !== false} onChange={value => update('liveHandoffEnabled', value)} title="Show live handoff" copy="Show the current symbol, lots, quantity, reference price, NIFTY stop and target with Copy Plan and Open FYERS actions." />
+        <SettingsCard title="Copy trade details (manual trading)" copy="Optional: copy Mentor’s plan as text. This does not fill in a FYERS order form or send an order.">
+          <Toggle checked={draft.liveHandoffEnabled !== false} onChange={value => update('liveHandoffEnabled', value)} title="Show live handoff" copy="Show the current symbol, quantity, reference price, NIFTY stop and target. Copy saves these details to your clipboard; Open FYERS opens its website." />
           <div className="settings-note">When using this manual handoff, you place and manage the order in FYERS. The real-money connection above is a separate way to submit a reviewed plan.</div>
         </SettingsCard>
 
