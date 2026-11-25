@@ -31,7 +31,9 @@ class Manager:
             direction=1 if position['side']=='CE' else -1
             if direction*(decimal(position.get('underlyingEntry'))-decimal(position.get('underlyingStop')))<=0: raise ValueError('INVALID_STRUCTURAL_STOP')
             if position.get('strategyFamily') not in ('CORE','SCALP'): raise ValueError('INVALID_STRATEGY')
-            position={**position,'id':entry_id,'entry':entry['average_price'],'quantity':entry['filled_qty'],'openedAt':entry['created_at']}
+            position={**position,'id':entry_id,'entry':entry['average_price'],'currentPrice':entry['average_price'],
+                      'bestOptionPrice':entry['average_price'],'worstOptionPrice':entry['average_price'],
+                      'quantity':entry['filled_qty'],'openedAt':entry['created_at'],'currentR':0,'bestR':0,'worstR':0}
             tick=decimal(self.execution.planner.validate_contract(payload['symbol'])['tick_size']); stop=decimal(hard_option_stop)
             if stop>=decimal(entry['average_price']): raise ValueError('INVALID_INITIAL_PROTECTION')
             protection=self.protection.ensure(entry_id,float(stop),float(stop-tick),entry['filled_qty'])
@@ -39,6 +41,20 @@ class Manager:
             with self.orders.transaction() as db:
                 db.execute('INSERT OR IGNORE INTO live_managed_positions VALUES (?,?,?,?,?,?)',(entry_id,encoded(position),protection['intentId'],None,None,'MANAGING'))
             return self.get(entry_id)
+    def poll(self,entry_id):
+        # Broker-side protection continues when the market feed is unavailable.
+        with self.lock:
+            managed=self.get(entry_id)
+            if not managed:raise ValueError('UNKNOWN_MANAGED_POSITION')
+            if managed['state']=='CLOSED':return {'state':'CLOSED'}
+            with self.orders.transaction() as db:
+                ids=[r['id'] for r in db.execute('SELECT id FROM live_intents WHERE parent_id=?',(entry_id,))]
+            for id in ids:self.orders.reconcile(id)
+            entry=self.orders.get(entry_id)
+            with self.orders.transaction() as db:
+                closed=sum(r['filled_qty'] for r in db.execute('SELECT filled_qty FROM live_intents WHERE parent_id=?',(entry_id,)))
+            if closed==entry['filled_qty']:return self._closed(entry_id)
+            return {'state':managed['state']}
     def pulse(self,entry_id,quote,snapshot):
         with self.lock:
             managed=self.get(entry_id)
@@ -91,6 +107,6 @@ class Manager:
         if limit<=0: raise ValueError('INVALID_EXIT_BID')
         return limit
     def _closed(self,entry_id):
-        self.orders.drain_journal(self.journal)
         with self.orders.transaction() as db: db.execute("UPDATE live_managed_positions SET state='CLOSED' WHERE id=?",(entry_id,))
+        self.orders.drain_journal(self.journal)
         return {'state':'CLOSED'}

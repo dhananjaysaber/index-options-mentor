@@ -28,6 +28,13 @@ const MANDATORY_MIN = {
 
 let symbolMasterCache = { fetchedAt: 0, data: null };
 
+// Server-host injection reuses its verified FYERS master; public app callers
+// retain the existing download/cache behaviour. No strategy rule changes.
+export function setTrustedSymbolMaster(data, fetchedAt) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !Number.isFinite(fetchedAt) || Date.now()-fetchedAt < -1000 || Date.now()-fetchedAt > 86400000) throw Error('STALE_CONTRACT_MASTER');
+  symbolMasterCache = {data, fetchedAt};
+}
+
 function clamp(value, min = 0, max = 1) {
   return Math.max(min, Math.min(max, Number.isFinite(value) ? value : 0));
 }
@@ -523,3 +530,4 @@ export async function buildMentorSnapshot({ quoteResponse, historyResponse, chai
     diagnostics: { rawCandleCount: Array.isArray(historyResponse?.candles) ? historyResponse.candles.length : 0, cleanedCandleCount: allCandles.length, currentSessionCandles: rows.length, duplicateOrPreopenRowsRemoved: Math.max(0, (historyResponse?.candles?.length || 0) - allCandles.length), lotSizeSource: lotSize ? 'FYERS NSE_FO symbol master' : 'Unavailable' }
   };
 }
+

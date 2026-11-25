@@ -13,10 +13,10 @@ export default function ExecutionConnectionPanel(){
   }
   return <section className="settings-card" aria-label="AWS execution connection">
     <h2>AWS execution connection</h2>
-    <p>Real-money trading is OFF.</p>
+    <p>This check uses simulated broker orders.</p>
     <p>Check Core and Scalp exits, stop handling and duplicate protection with fake orders. Your positions and trade history are not changed.</p>
     <button type="button" className="settings-save-btn" disabled={busy} onClick={check}>{busy?'Checking AWS…':'Check AWS connection and exits'}</button>
-    <div aria-live="polite">{result&&<p>AWS connected. Core and Scalp checks passed; each exit was recorded once. Real-money trading remains OFF.</p>}</div>
+    <div aria-live="polite">{result&&<p>AWS connected. Core and Scalp checks passed; each exit was recorded once. The check did not send real orders.</p>}</div>
     {error&&<p role="alert">{error}</p>}
   </section>;
 }

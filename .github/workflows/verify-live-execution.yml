@@ -15,6 +15,14 @@ on:
       - 'aws/journal/store.py'
       - 'tests/live_*test.py'
       - 'tests/live-feed-publisher.test.mjs'
+      - 'tests/order-host-auth.test.mjs'
+      - 'tests/entry-signals.test.mjs'
+      - 'tests/test_order_host_installer.py'
+      - 'scripts/build-order-host.py'
+      - 'scripts/order-host-template.py'
+      - 'public/iom-order-host.py'
+      - 'netlify/functions/orders.mjs'
+      - 'server/mentorBase.js'
       - 'tests/test_live_connect_installer.py'
       - 'scripts/build-live-connect.py'
       - 'scripts/live-connect-template.py'
@@ -67,6 +75,13 @@ jobs:
           cmp /tmp/iom-live-connect.expected.py public/iom-live-connect.py
           python3 -m unittest discover -s tests -p 'test_live_connect_installer.py' -v
           python3 public/iom-live-connect.py --verify-only --journal-store aws/journal/store.py
+      - name: Verify actual order host with broker writes disabled
+        run: |
+          cp public/iom-order-host.py /tmp/iom-order-host.expected.py
+          python3 scripts/build-order-host.py
+          cmp /tmp/iom-order-host.expected.py public/iom-order-host.py
+          python3 -m unittest discover -s tests -p 'test_order_host_installer.py' -v
+          python3 public/iom-order-host.py --verify-only --journal-store aws/journal/store.py
       - name: Verify read-only FYERS checker and published checksum source
         run: |
           cp public/iom-fyers-readiness.py /tmp/iom-fyers-readiness.expected.py

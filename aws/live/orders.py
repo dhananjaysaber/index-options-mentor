@@ -261,6 +261,23 @@ class Orders:
             ids = [r['id'] for r in db.execute('SELECT id FROM live_intents WHERE state NOT IN (?,?,?,?,?)', tuple(TERMINAL))]
         return [self.reconcile(i) for i in ids]
 
+    def record_open(self,entry_id,ticket):
+        # The durable broker ledger remains authoritative when the journal is down.
+        with self.transaction() as db:
+            entry=db.execute('SELECT * FROM live_intents WHERE id=?',(entry_id,)).fetchone()
+            if not entry or entry['parent_id'] or entry['state'] not in TERMINAL or not entry['filled_qty']:raise ValueError('ENTRY_NOT_SETTLED')
+            payload=json.loads(entry['payload'])
+            saved=db.execute('SELECT plan FROM live_plans WHERE id=?',(entry_id,)).fetchone()
+            plan=json.loads(saved['plan']) if saved else {}
+            lot=plan.get('lotSize')
+            trade={**ticket,'id':entry_id,'mode':'LIVE','executionMode':'REAL','status':'OPEN',
+                'symbol':payload['symbol'],'entry':entry['average_price'],'quantity':entry['filled_qty'],
+                'lotSize':lot,'lots':entry['filled_qty']/lot if lot else None,
+                'premiumCost':entry['average_price']*entry['filled_qty'],
+                'openedAt':entry['created_at'],'entryOrderId':entry['broker_id'],'brokerOrderPlaced':True}
+            event={'id':entry_id+':BROKER_OPENED','type':'TRADE_OPENED','queuedAt':entry['created_at'],'trade':trade}
+            db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)',(event['id'],encoded(event)))
+
     def drain_journal(self, journal):
         with self.transaction() as db:
             events = list(db.execute('SELECT id,payload FROM live_journal_outbox WHERE delivered=0 ORDER BY id'))

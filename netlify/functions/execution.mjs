@@ -64,3 +64,6 @@ export default async function execution(request){
     return reply(200,data,origin);
   }catch{return reply(503,{error:'AWS_EXECUTION_CHECK_UNAVAILABLE',realMoneyEnabled:false},origin);}
 }
+
+// Shared authentication only; the diagnostic handler above stays order-free.
+export {token as decryptExecutionSession, signed as signExecutionRequest, proof as executionOwnerProof};

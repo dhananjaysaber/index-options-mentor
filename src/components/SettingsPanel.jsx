@@ -1,3 +1,4 @@
+import LiveOrderPanel from './LiveOrderPanel.jsx';
 import ExecutionConnectionPanel from './ExecutionConnectionPanel.jsx';
 import { useEffect, useState } from 'react';
 
@@ -54,6 +55,7 @@ export default function SettingsPanel({ settings, onSave }) {
       </div>
 
       <ExecutionConnectionPanel />
+      <LiveOrderPanel tradeAmount={draft.tradeAmount} />
 
       <div className="settings-grid">
         <SettingsCard title="Account & sizing" copy="Used for risk analysis and research sizing. The exchange contract lot size still comes directly from FYERS.">

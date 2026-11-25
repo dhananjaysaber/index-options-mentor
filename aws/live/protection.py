@@ -34,6 +34,7 @@ class Protection:
         if not self.orders.get(key): self.orders.submit_protection(key,entry_id,stop,limit,quantity)
         row,book=self.book(key)
         if row['state']=='PENDING' and not row['filled_qty']:
+            if decimal(book.get('stopPrice'))!=decimal(stop) or decimal(book.get('limitPrice'))!=decimal(limit):raise ValueError('BROKER_PROTECTION_PRICE_MISMATCH')
             return {'intentId':key,'state':'PROTECTION_CONFIRMED','stopPrice':book.get('stopPrice')}
         return {'intentId':key,'state':row['state']}
     def _reserve(self,target,kind,request):
