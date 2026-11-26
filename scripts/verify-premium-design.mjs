@@ -17,7 +17,7 @@ try {
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(()=>{
     localStorage.setItem('index-options-mentor-settings-v2',JSON.stringify({mentorAutoOpen:false,scalpAutoOpen:false,mentorAutoClose:false,scalpAutoClose:false}));
-    localStorage.setItem('index-options-mentor-history-v05',JSON.stringify([{id:'isolated-design-history',symbol:'NSE:NIFTY26D0126000CE',side:'CE',entry:230,exit:240,quantity:130,lots:2,pnl:1300,rAchieved:.5,strategyFamily:'CORE',strategyTier:'FULL',initiatedBy:'USER',openedAt:'2026-11-25T04:00:00Z',closedAt:'2026-11-25T04:05:00Z'}]));
+    localStorage.setItem('index-options-mentor-history-v05',JSON.stringify([{id:'isolated-design-history',symbol:'NSE:NIFTY26D0126000CE',side:'CE',entry:230,exit:240,quantity:130,lots:2,pnl:228614.75,rAchieved:.5,strategyFamily:'CORE',strategyTier:'FULL',initiatedBy:'USER',openedAt:'2026-11-25T04:00:00Z',closedAt:'2026-11-25T04:05:00Z'}]));
   });
   await page.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
@@ -31,15 +31,49 @@ try {
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
-  await page.locator('.core-compact-plan:visible').waitFor();
+  await page.locator('.fyers-ref-decision:visible').waitFor();
+  await page.waitForTimeout(1500);
+  console.log('Initial chart history check', JSON.stringify(await page.evaluate(() => ({
+    linePoints: document.querySelector('.fyers-ref-core .fyers-ref-price-line')?.getAttribute('points')?.split(/\s+/).length || 0,
+    chartError: document.querySelector('.fyers-ref-chart .nifty-chart-empty')?.textContent || '',
+    chartLabels: document.querySelector('.fyers-ref-chart .nifty-chart-timeframe-tabs')?.textContent || '',
+    historyRequests: performance.getEntriesByType('resource').filter(x => x.name.includes('/history')).map(x => x.name).slice(-3)
+  }))));
+
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),3,
+    'Reference Core chart keeps 3m, 5m and 15m without a 1m tab');
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
     const nav=mobile?page.locator('.premium-mobile-bottom-nav'):page.locator('.mentor-sidebar-v2');
     const go=async name=>nav.getByRole('button',{name:new RegExp(name,'i')}).first().click();
+    if (mobile) {
+      const header=page.locator('.fyers-ref-mobile-header');
+      await header.waitFor({state:'visible'});
+      const headerBounds=await header.boundingBox();
+      const menu=header.getByRole('button',{name:'Open menu'});
+      assert.ok(headerBounds && headerBounds.x>=0 && headerBounds.x+headerBounds.width<=width+1,
+        'Mobile market header stays in the viewport');
+      assert.ok(await menu.isVisible(), 'Hamburger is always visible on mobile');
+      await menu.click();
+      await page.locator('.mentor-mobile-drawer:visible').waitFor();
+      await page.getByRole('button',{name:'Close menu'}).click();
+    }
     for(const [view,label] of [['Trade','core'],['Scalp','scalp'],['Positions','positions'],['Journal','journal'],['Settings','settings']]){
       await go(view==='Trade'&&!mobile?'13-Point':view);
-      if(label==='settings')await page.getByText('Buying is OFF',{exact:true}).waitFor();
+      if(label==='settings'){
+        const settingRows=page.locator('.fyers-ref-settings .fyers-ref-settings-row');
+        const firstRow=settingRows.first();
+        const style=await firstRow.evaluate(el=>({
+          height:el.getBoundingClientRect().height,
+          fontSize:parseFloat(getComputedStyle(el).fontSize)
+        }));
+        assert.ok(style.height>=44 && style.fontSize>=13,'Settings rows have larger font and tap height');
+        assert.equal(await page.locator('.fyers-ref-settings-group input[type="checkbox"]').count(),7,
+          'Paper automation, research tier and display toggles remain in Settings');
+        await page.getByRole('button',{name:/Advanced connection and full settings/}).click();
+        await page.getByText('Buying is OFF',{exact:true}).waitFor();
+      }
       await page.screenshot({path:`test-artifacts/premium-design/${width}-${label}.png`,fullPage:true});
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),`${width} ${label}: no horizontal page overflow`);
       const bounds=await nav.boundingBox();
@@ -50,12 +84,90 @@ try {
         assert.ok(boxes.every(b=>b.width>=44&&b.height>=44),'Navigation tap targets');
       }
       if(label==='scalp'){
-        const dock=await page.locator('.scalp-quick-actions').boundingBox();
+        console.log('Scalp line point count', await page.locator('.fyers-ref-scalp .fyers-ref-price-line').getAttribute('points').then(points => points?.split(/\s+/).length || 0));
+
+        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
+          'Scalp reference chart keeps 3m and 5m without a 1m tab');
+        const cards=page.locator('.fyers-ref-scalp .fyers-ref-dots.scalp .fyers-ref-dot');
+        assert.equal(await cards.count(),7,'Scalp maintains all seven qualifying checks');
+        const grid=await cards.evaluateAll(nodes=>nodes.map(node=>{
+          const r=node.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};
+        }));
+        assert.ok(Math.abs(grid[0].y-grid[3].y)<2 && grid[4].y>grid[3].y,
+          'Scalp checklist uses four cards in the first row');
+        assert.ok(grid[6].w >= grid[5].w*1.65,
+          'Seventh Scalp check spans the final two grid columns');
+        assert.ok(await cards.evaluateAll(nodes=>nodes.every(node=>node.getBoundingClientRect().height>=60)),
+          'Scalp checklist cards have comfortable readable height');
+        const buy=page.locator('.fyers-ref-scalp-order-actions .fyers-ref-scalp-buy');
+        const sell=page.locator('.fyers-ref-scalp-order-actions .fyers-ref-scalp-sell');
+        assert.equal(await buy.count(),1,'Only one Mentor-directed Scalp BUY button');
+        assert.equal(await sell.count(),1,'Independent Scalp SELL remains available');
+        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-actions input[type="checkbox"]').count(),0,
+          'No duplicate scalp automation switches outside Settings');
+        assert.equal(await buy.isDisabled(),true,'Isolated non-qualified scalp cannot buy');
+        assert.ok(/BUY (CE|PE)|BUY · WAIT/.test(await buy.innerText()),
+          'Scalp BUY derives side from Mentor, not two selectable buttons');
+        const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
       }
-      if(label==='core'){const workflow=page.locator('.mentor-workflow:visible').first();if(await workflow.count()){const box=await workflow.boundingBox();console.log('Workflow geometry',JSON.stringify({width,box}));assert.ok(box.height<120,'Live path stays compact');}if(mobile){assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');assert.equal(await page.locator('.premium-core-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');}}
+      if(label==='core'){
+        assert.equal(await page.locator('.fyers-ref-core .fyers-ref-actions input[type="checkbox"]').count(),0,
+          'Core automation switches only live in Settings');
+      }
+      if(label==='core' && mobile){
+        const chart=await page.locator('.fyers-ref-chart .nifty-chart-canvas').boundingBox();
+        assert.ok(chart && chart.x >= 0 && chart.x + chart.width <= width + 1,
+          'The full reference NIFTY SVG scales into the mobile chart instead of clipping the line');
+      }
+      if(label==='core'){
+        const workflow=page.locator('.mentor-workflow:visible').first();
+        if(await workflow.count()){
+          const box=await workflow.boundingBox();
+          console.log('Workflow geometry',JSON.stringify({width,box}));
+          assert.ok(box.height<165,'Seven-stage live path stays compact');
+          const steps=workflow.locator('.workflow-step');
+          assert.equal(await steps.count(),7,'All seven workflow stages render');
+          if(mobile){
+            const cards=await steps.evaluateAll(nodes=>nodes.map(node=>{
+              const r=node.getBoundingClientRect();
+              return {x:r.x,y:r.y,width:r.width,height:r.height};
+            }));
+            assert.ok(cards[0].y===cards[3].y && cards[4].y>cards[3].y,'Mobile workflow uses a four-card first row');
+            assert.ok(cards[6].width >= cards[5].width*1.6,'Seventh stage spans final two columns');
+          }
+        }
+        if(mobile){
+          assert.ok(await page.locator('.decision-banner:visible').count()<=1,'No duplicate mobile decision cards');
+          assert.equal(await page.locator('.fyers-ref-verdict:visible').count(),1,'Core verdict stays visible in the trade plan');
+          const buy=page.locator('.fyers-ref-core .strategy-quick-buy');
+          const sell=page.locator('.fyers-ref-core .strategy-quick-sell');
+          for(const action of [buy,sell]){
+            const button=await action.boundingBox();
+            const text=await action.locator('span').boundingBox();
+            assert.ok(button && text && text.x>=button.x && text.x+text.width<=button.x+button.width+1,
+              'BUY and SELL labels remain centred inside their buttons');
+          }
+        }
+      }
       if(label==='journal'){
+        if(mobile){
+          const metrics=page.locator('.fyers-ref-journal .history-summary-card');
+          assert.equal(await metrics.count(),6);
+          const overflow=await metrics.evaluateAll(nodes=>nodes.some(node=>{
+            const strong=node.querySelector('strong');
+            return strong && (strong.getBoundingClientRect().right>node.getBoundingClientRect().right+1
+              || strong.scrollWidth>strong.clientWidth+1);
+          }));
+          assert.equal(overflow,false,'Journal P&L and other metrics fit their own cards');
+          const tradePnl=await page.locator('.fyers-ref-journal .history-card-v2 .history-pnl strong').first().evaluate(el=>{
+            const rect=el.getBoundingClientRect();
+            return {height:rect.height,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth};
+          });
+          assert.ok(tradePnl.height<28 && tradePnl.scrollWidth<=tradePnl.clientWidth+1,
+            'Large INR position P&L fits on a single readable line inside the journal card');
+        }
         const row=page.locator('.history-card-v2').first();
         await row.locator('summary').click();
         await row.getByRole('button',{name:'Analyse trade',exact:true}).click();
@@ -83,11 +195,11 @@ try {
     await positionPage.setViewportSize({width,height:844});
     const nav=width<=900?positionPage.locator('.premium-mobile-bottom-nav'):positionPage.locator('.mentor-sidebar-v2');
     await nav.getByRole('button',{name:/Scalp/}).first().click();
-    const panel=positionPage.locator('.scalp-dashboard .position-essential-card');
+    const panel=positionPage.locator('.fyers-ref-scalp .position-essential-card');
     await panel.waitFor({state:'visible'});
     assert.match(await panel.innerText(),/PAPER/);
-    assert.equal(await positionPage.locator('.scalp-quick-sell').isDisabled(),false,'Existing paper position retains SELL');
-    await positionPage.locator('.scalp-dashboard .position-exit-alert').waitFor();
+    assert.equal(await positionPage.locator('.fyers-ref-scalp-sell').isDisabled(),false,'Existing paper position retains SELL');
+    await positionPage.locator('.fyers-ref-scalp .position-exit-alert').waitFor();
     assert.ok(await positionPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Target-hit state has no horizontal overflow');
     await positionPage.screenshot({path:`test-artifacts/premium-design/${width}-target-hit.png`,fullPage:true});
   }

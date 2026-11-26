@@ -1,0 +1,268 @@
+/* v62 — screenshot-led refinements for the Fyers-style mobile reference.
+   Presentation only. Existing risk checks, orders, FYERS and journal logic unchanged. */
+html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header{display:none!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-page{
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif!important;
+  font-size:13px;line-height:1.45;letter-spacing:0;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-page :is(.fyers-ref-card,.fyers-ref-settings-row,.history-card-v2){box-sizing:border-box;min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-card{padding:14px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-page h1{font-size:clamp(22px,3vw,26px)!important;line-height:1.18;letter-spacing:-.025em;margin-bottom:5px}
+html[data-theme] #root .premium-design-shell .fyers-ref-page>p{font-size:13px!important;line-height:1.45;color:#9AA3B2}
+html[data-theme] #root .premium-design-shell .fyers-ref-price-grid>.fyers-ref-value{min-width:0;overflow:hidden}
+html[data-theme] #root .premium-design-shell .fyers-ref-price-grid>.fyers-ref-value>strong{
+  font-size:clamp(11px,1.1vw,14px)!important;overflow-wrap:anywhere;white-space:normal;line-height:1.23;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-grid{
+  display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:9px!important;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card{
+  display:flex!important;flex-direction:column;align-items:flex-start;justify-content:center;
+  min-width:0!important;overflow:hidden;min-height:67px;padding:10px 9px!important;gap:5px;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card>span{
+  font-size:10px!important;line-height:1.15!important;letter-spacing:.07em!important;white-space:normal;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card>strong{
+  display:block;min-width:0;max-width:100%;font-size:clamp(12px,1.65vw,20px)!important;
+  line-height:1.15!important;letter-spacing:-.025em!important;
+  overflow-wrap:anywhere;word-break:normal;white-space:normal;font-variant-numeric:tabular-nums;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-v2{overflow:hidden;padding:14px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-summary{min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-head{min-width:0;gap:10px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-head>div:first-child{
+  flex:1 1 0;min-width:0;overflow:hidden
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-head>div:first-child>strong{
+  display:block;font-size:13px!important;line-height:1.35!important;
+  overflow-wrap:anywhere;white-space:normal;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl{flex:0 0 auto;min-width:0;max-width:40%;text-align:right}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>strong{
+  font-size:clamp(12px,1.5vw,17px)!important;line-height:1.25;
+  overflow-wrap:anywhere;white-space:normal;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-open-hint{
+  font-size:11px!important;letter-spacing:.05em;min-height:32px;
+}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row{line-height:1.4;gap:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>span{min-width:0;overflow-wrap:anywhere}
+html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{flex:0 1 auto;min-width:0;white-space:normal;text-align:right}
+
+@media(max-width:900px){
+  /* A standalone header avoids the inherited desktop-header visibility rules.
+     Safe-area offset keeps the control below the iPhone system status bar. */
+  html[data-theme] #root .premium-design-shell{
+    --ui-header:calc(70px + env(safe-area-inset-top,0px))!important;
+    padding-top:var(--ui-header)!important;
+  }
+  html[data-theme] #root .premium-design-shell .mentor-v2-topbar{display:none!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header{
+    position:fixed!important;display:flex!important;flex-direction:row!important;
+    left:0!important;right:0!important;top:env(safe-area-inset-top,0px)!important;
+    height:70px!important;min-height:70px!important;max-height:70px!important;
+    padding:8px 16px!important;gap:10px;align-items:center;justify-content:space-between;
+    background:#0F131A!important;border-bottom:1px solid #253043!important;
+    color:#E8ECF3!important;z-index:120!important;box-shadow:none!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-ticker{
+    display:flex!important;flex:1 1 auto!important;flex-direction:column!important;
+    align-items:flex-start!important;justify-content:center!important;min-width:0!important;
+    min-height:0!important;gap:3px!important;margin:0!important;padding:0!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol{
+    position:static!important;display:flex!important;flex-direction:row!important;
+    align-items:baseline!important;gap:8px!important;width:auto!important;
+    white-space:nowrap!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol>strong{
+    color:#E8ECF3!important;font-size:14px!important;font-weight:750!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol>span{
+    color:#9AA3B2!important;font-size:10px!important;overflow:hidden;text-overflow:ellipsis;max-width:170px;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-price{
+    display:flex!important;position:static!important;flex-direction:row!important;
+    align-items:baseline!important;order:0!important;width:auto!important;gap:8px!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-price>strong{
+    color:#E8ECF3!important;font-size:21px!important;font-weight:750!important;line-height:1.05!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-price>span{
+    font-size:11px!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-context{display:none!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-broker{
+    display:block!important;flex:0 0 8px!important;width:8px!important;height:8px!important;
+    border-radius:50%!important;background:#F5B84B;box-shadow:0 0 0 3px rgba(245,184,75,.12);
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-broker.connected{
+    background:#2ECC8F;box-shadow:0 0 0 3px rgba(46,204,143,.14);
+  }
+  html[data-theme] #root .premium-design-shell button.fyers-ref-mobile-menu{
+    display:flex!important;flex:0 0 44px!important;align-items:center!important;justify-content:center!important;
+    width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important;
+    margin:0!important;padding:9px!important;background:#1B2534!important;
+    border:1px solid #35465E!important;border-radius:10px!important;color:#E8ECF3!important;
+    opacity:1!important;visibility:visible!important;cursor:pointer;box-shadow:none!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-menu svg{
+    display:block!important;width:23px!important;height:23px!important;color:#E8ECF3!important;
+    stroke:currentColor!important;opacity:1!important;fill:none!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-reference-main{
+    padding:12px 16px calc(110px + env(safe-area-inset-bottom,0px))!important;
+    margin:0!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-page h1{font-size:23px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-card{padding:12px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-data-warning{margin-bottom:10px!important}
+
+  /* Seven workflow cards: 4 in row one, 2 + double-width final card in row two. */
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath{
+    margin:10px 0 12px!important;width:100%;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-track{
+    display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    grid-template-rows:auto auto!important;column-gap:7px!important;row-gap:7px!important;
+    padding:0!important;margin:0!important;min-width:0!important;width:100%!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step{
+    display:flex!important;flex-direction:column!important;justify-content:center!important;
+    align-items:center!important;gap:2px!important;grid-column:auto!important;grid-row:auto!important;
+    min-width:0!important;min-height:52px!important;padding:6px 3px!important;
+    border:1px solid #303A49!important;border-top:3px solid #586578!important;
+    border-radius:8px!important;background:#151D29!important;text-align:center!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step:nth-child(7){
+    grid-column:3 / span 2!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step.done{border-top-color:#2ECC8F!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step.active{border-top-color:#5B8CFF!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step.failed{border-top-color:#FF5C6C!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step strong{
+    display:block!important;color:#D7DEE8!important;font-size:10px!important;
+    line-height:1.15!important;font-weight:650!important;
+    white-space:normal!important;overflow-wrap:anywhere!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step small{
+    display:block!important;color:#9AA3B2!important;font-size:9px!important;line-height:1.1!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step .workflow-number{display:none!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-label{
+    margin:0 0 8px!important;font-size:10px!important;
+  }
+
+  /* Disconnected chart becomes a short placeholder rather than a blank page. */
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .premium-market-empty{
+    min-height:0!important;height:auto!important;padding:12px!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .premium-market-empty h2{
+    font-size:16px!important;line-height:1.25!important;margin:4px 0 5px!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .premium-market-empty p{
+    font-size:12px!important;line-height:1.4!important;margin:4px 0!important;color:#9AA3B2;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .premium-empty-chart{
+    height:84px!important;min-height:0!important;margin:10px 0!important;
+    font-size:11px!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-chart .premium-market-empty small{
+    font-size:10px!important;line-height:1.3!important
+  }
+
+  /* Paper BUY / SELL: readable single-line text centred inside tap-sized controls. */
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions,
+  html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions{
+    padding:9px 16px!important;
+    gap:7px!important;min-height:0!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions{
+    display:grid!important;grid-template-columns:minmax(0,1fr) 104px!important;
+    gap:9px!important;width:100%!important;height:auto!important;max-height:none!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions button{
+    display:flex!important;flex-direction:row!important;justify-content:center!important;
+    align-items:center!important;gap:0!important;width:100%!important;
+    min-width:0!important;height:46px!important;min-height:46px!important;
+    padding:4px 8px!important;line-height:1!important;overflow:hidden!important;
+    text-align:center!important;white-space:nowrap!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .strategy-quick-actions button>span{
+    display:block!important;font-size:15px!important;line-height:1.15!important;font-weight:750!important;
+    white-space:nowrap!important;text-align:center!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .strategy-quick-actions button>small{display:none!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-core .strategy-quick-actions button:disabled{
+    background:#1B2534!important;color:#9AA3B2!important;border:1px solid #43536A!important;
+  }
+
+  /* Six metrics remain in three columns, but large INR numbers wrap within their own card. */
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card{
+    padding:9px 7px!important;min-height:66px;overflow:hidden!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card>span{
+    font-size:9px!important;letter-spacing:.04em!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-summary-card>strong{
+    font-size:clamp(12px,3.25vw,16px)!important;line-height:1.15!important;
+    max-width:100%!important;white-space:normal!important;overflow-wrap:anywhere!important;
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-head>div:first-child>strong{
+    font-size:12px!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>strong{
+    font-size:clamp(12px,3.7vw,15px)!important
+  }
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-row{min-height:38px;padding:8px 11px!important;font-size:12px}
+  html[data-theme] #root .premium-design-shell .fyers-ref-settings-row>strong{font-size:11px}
+  html[data-theme] #root .premium-design-shell .fyers-ref-page .fyers-ref-price-grid>.fyers-ref-value>strong{
+    font-size:11px!important;
+  }
+}
+@media(max-width:360px){
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header{padding:8px 11px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol>span{max-width:115px}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-track{column-gap:5px!important;row-gap:5px!important}
+  html[data-theme] #root .premium-design-shell .fyers-ref-livepath .workflow-step{padding:5px 2px!important}
+}
+
+/* Menu drawer always overlays the mobile market header when opened. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .mentor-drawer-backdrop{
+   position:fixed!important;inset:0!important;z-index:1400!important;
+ }
+ html[data-theme] #root .premium-design-shell .mentor-mobile-drawer{
+   position:absolute!important;top:0!important;right:0!important;
+   height:100%!important;max-height:100%!important;overflow-y:auto!important;
+   width:min(90vw,370px)!important;background:#111925!important;
+ }
+}
+
+/* Journal trade row: reserve a real right-hand column for large INR amounts.
+   The legacy grid's intrinsic auto column was collapsing the amount to 2–3 chars. */
+@media(max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-card-summary{
+   display:grid!important;grid-template-columns:minmax(0,1fr) minmax(112px,36%)!important;
+   gap:8px!important;align-items:start!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl{
+   grid-column:2!important;grid-row:1!important;justify-self:stretch!important;align-self:start!important;
+   width:100%!important;min-width:0!important;max-width:none!important;overflow:hidden!important;
+   text-align:right!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>strong{
+   display:block!important;width:100%!important;max-width:100%!important;
+   font-size:clamp(11px,3.15vw,14px)!important;
+   line-height:1.25!important;white-space:nowrap!important;
+   overflow:hidden!important;text-overflow:ellipsis!important;
+   overflow-wrap:normal!important;
+ }
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal .history-pnl>small{
+   font-size:10px!important;white-space:nowrap!important;
+ }
+}

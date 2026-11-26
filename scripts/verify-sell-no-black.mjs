@@ -52,12 +52,12 @@ try {
   }));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
-  await page.locator('.scalp-quick-sell').click();
+  await page.locator('.fyers-ref-scalp-sell').click();
   await page.locator('.premium-mobile-bottom-nav').waitFor({ state: 'visible' });
   await page.locator('.premium-mobile-bottom-nav button').nth(0).click();
   await page.locator('.strategy-quick-sell').click();
   await page.locator('.premium-mobile-bottom-nav button').nth(2).click();
-  const positionText = await page.locator('.dual-position-page').innerText();
+  const positionText = await page.locator('.fyers-ref-positions').innerText();
   assert.match(positionText, /No simulated positions|No simulated position/i);
   await page.locator('.premium-mobile-bottom-nav button').nth(3).click();
   const historyText = await page.locator('.history-panel').innerText();

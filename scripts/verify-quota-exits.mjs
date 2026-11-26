@@ -55,12 +55,12 @@ try {
   }));
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
-  await page.locator('.scalp-quick-sell').click();
+  await page.locator('.fyers-ref-scalp-sell').click();
   await page.locator('.premium-mobile-bottom-nav').waitFor({ state: 'visible' });
   await page.locator('.premium-mobile-bottom-nav button').nth(0).click();
   await page.locator('.strategy-quick-sell').click();
   await page.locator('.premium-mobile-bottom-nav button').nth(2).click();
-  const positionText = await page.locator('.dual-position-page').innerText();
+  const positionText = await page.locator('.fyers-ref-positions').innerText();
   assert.match(positionText, /No simulated positions|No simulated position/i);
   await page.locator('.premium-mobile-bottom-nav button').nth(3).click();
   const historyText = await page.locator('.history-panel').innerText();
@@ -76,7 +76,7 @@ try {
   await page.locator('.premium-mobile-bottom-nav button').nth(3).click();
   assert.match(await page.locator('.history-panel').innerText(),/NIFTY26NOV25600CE/);
   await page.locator('.premium-mobile-bottom-nav button').nth(2).click();
-  assert.match(await page.locator('.dual-position-page').innerText(),/No simulated positions|No simulated position/i);
+  assert.match(await page.locator('.fyers-ref-positions').innerText(),/No simulated positions|No simulated position/i);
   assert.deepEqual(exceptions,[]);
   console.log('PASS quota-full iPhone: manual SELL for both strategies, one closure each and correct reopening');
   const auto=await browser.newPage({viewport:{width:390,height:844},isMobile:true,hasTouch:true});

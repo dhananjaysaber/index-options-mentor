@@ -29,7 +29,9 @@ test('premium trading navigation uses only the 13-point and scalp strategies', (
   assert.match(app, /aria-label="Primary trading navigation"/);
   assert.match(app, /navigate\('position'\)/);
   assert.match(app, /navigate\('history'\)/);
-  assert.match(app, /marketDataReady \? 'LIVE MARKET DATA'/);
+  assert.match(app, /className="fyers-ref-data-warning" role="status"/);
+  assert.match(app, /<FyersCoreTrade snapshot=\{snapshot\}/);
+  assert.match(app, /<FyersScalpTrade snapshot=\{snapshot\}/);
   assert.doesNotMatch(app, /StockScanner|StockPaperPosition|strategyMode === 'stock'/);
   assert.ok(main.indexOf("import './premium-trading-v51.css';") >
             main.indexOf("import './footer-clearance-v42.css';"),
@@ -61,4 +63,61 @@ test('approved mobile and desktop layer parses with safe-area action/nav clearan
   assert.match(css, /bottom:calc\(64px \+ env\(safe-area-inset-bottom,0px\)\)/);
   assert.match(css, /touch-action:pan-y pinch-zoom/);
   assert.match(read('src/main.jsx'), /import '\.\/premium-design-v60\.css';/);
+});
+
+// The v61 redesign composes the approved reference screens, not dummy trading data.
+test('reference handoff layer has real chart, order handlers and narrow-screen layout', () => {
+  const css = read('src/fyers-reference-v61.css');
+  const screen = read('src/components/FyersReferenceViews.jsx');
+  assert.ok(postcss.parse(css).nodes.length > 50);
+  assert.match(css, /fyers-ref-trade-grid/);
+  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 430px/);
+  assert.match(css, /@media\(max-width:900px\)/);
+  assert.match(screen, /<TraderMarketPanel snapshot=\{snapshot\}/);
+  assert.match(screen, /<NiftyStrategyChart snapshot=\{snapshot\}/);
+  assert.match(screen, /<CoreQuickActions snapshot=\{snapshot\}/);
+  assert.match(screen, /buildScalpTicket\(snapshot, ev, settings, 'USER'/);
+  assert.match(screen, /<History history=\{filtered\}/);
+  assert.match(read('src/main.jsx'), /import '\.\/fyers-reference-v61\.css';/);
+  assert.doesNotMatch(screen, /24,386\.35|₹1,462|25,539\.85/);
+});
+
+test('v62 design explicitly restores mobile hamburger, keeps seven workflow cards and removes 1m interval', () => {
+  const app = read('src/AppV3.jsx');
+  const workflow = read('src/components/MentorWorkflow.jsx');
+  const chart = read('src/components/NiftyStrategyChart.jsx');
+  const view = read('src/components/FyersReferenceViews.jsx');
+  const css = read('src/fyers-reference-v62.css');
+  assert.ok(postcss.parse(css).nodes.length > 10);
+  assert.match(app, /className="fyers-ref-mobile-header"/);
+  assert.match(app, /className="fyers-ref-mobile-menu"/);
+  assert.match(css, /workflow-step:nth-child\(7\)/);
+  assert.match(css, /grid-column:3 \/ span 2/);
+  assert.match(workflow, /id: 'approval'/);
+  assert.doesNotMatch(chart, /'1': \{ label: '1m'/);
+  assert.doesNotMatch(view, /availableTimeframes=\{\['1'/);
+  assert.match(read('src/main.jsx'), /import '\.\/fyers-reference-v62\.css';/);
+});
+
+test('v63 Scalp uses a 4-column seven-check grid, one Mentor-selected BUY, SELL, and settings-only automation', () => {
+  const css=read('src/fyers-reference-v63.css');
+  const view=read('src/components/FyersReferenceViews.jsx');
+  const app=read('src/AppV3.jsx');
+  const main=read('src/main.jsx');
+  assert.ok(postcss.parse(css).nodes.length>20);
+  assert.match(css, /fyers-ref-dots\.scalp/);
+  assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css, /fyers-ref-dot:nth-child\(7\)/);
+  assert.match(css, /grid-column:3 \/ span 2/);
+  assert.match(view, /const selectedSide = \['CE', 'PE'\]\.includes\(ev\.side\)/);
+  assert.match(view, /className="fyers-ref-scalp-buy"/);
+  assert.match(view, /className="fyers-ref-scalp-sell"/);
+  assert.match(view, /onClick=\{manual\}/);
+  assert.doesNotMatch(view, /Buy CE<\/button>|Buy PE<\/button>/);
+  assert.doesNotMatch(view, /<RefSwitch/);
+  assert.match(view, /sw\('Scalp auto open','scalpAutoOpen'/);
+  assert.match(view, /sw\('Scalp auto close','scalpAutoClose'/);
+  assert.match(view, /sw\('13-point auto open','mentorAutoOpen'/);
+  assert.match(app, /<FyersScalpTrade snapshot=\{snapshot\}/);
+  assert.match(main, /import '\.\/fyers-reference-v63\.css';/);
 });
