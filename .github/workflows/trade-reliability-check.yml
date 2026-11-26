@@ -37,6 +37,11 @@ jobs:
         run: node scripts/verify-premium-design.mjs
         env:
           GITHUB_ACTIONS: 'true'
+      - name: Isolated manual Scalp BUY, SELL and paper journal (no broker orders)
+        run: node scripts/verify-manual-scalp-paper-entry.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+
       - name: SELL and navigation smoke on iPhone viewport
         run: node scripts/verify-sell-no-black.mjs
         env:
