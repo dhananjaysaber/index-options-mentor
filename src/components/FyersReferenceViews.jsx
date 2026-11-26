@@ -111,7 +111,7 @@ function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, on
     </div>)}
   </section>;
 }
-export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
+export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
   return <div className="fyers-ref-page fyers-ref-core">
     <div className="fyers-ref-trade-grid">
       <div className="fyers-ref-chart-column">
@@ -125,22 +125,24 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, setSettings, mod
         <FyersMarketContext snapshot={snapshot}/>
         {corePosition && <LivePositionPanel position={corePosition} onExit={meta=>onExit('core',meta)} history={history} snapshot={snapshot}/>}
         <div className="fyers-ref-actions">
-          <RefSwitch label="Auto entry + manage" checked={settings.mentorAutoOpen && settings.mentorAutoClose} onChange={checked=>setSettings(value=>({...value,mentorAutoOpen:checked,mentorAutoClose:checked}))}/>
+
           <CoreQuickActions snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={onTakeTrade} onExit={meta=>onExit('core',meta)}/>
         </div>
       </div>
     </div>
   </div>;
 }
-export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, setSettings, liveQuote, history, alertsEnabled, onTakeTrade, onExit, onNavigate }) {
+export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, liveQuote, history, alertsEnabled, onTakeTrade, onExit, onNavigate }) {
   const ev = evaluation || {};
   const checks = Array.isArray(ev.checks) ? ev.checks : [];
   const option = snapshot?.option || {};
   const price = liveQuote && liveQuote.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
   const sizing = calculateTradeAmountSizing(settings, price, Number(option.lotSize));
-  const ready = Boolean(marketDataReady && ev.manualEligible && sizing.lots > 0 && !position);
-  function manual(side) {
-    if (!ready || ev.side !== side || !snapshot) return;
+  const selectedSide = ['CE', 'PE'].includes(ev.side) ? ev.side : null;
+  const ready = Boolean(marketDataReady && ev.manualEligible && selectedSide && sizing.lots > 0 && !position);
+  function manual() {
+    // The Mentor alone chooses CE or PE; this button cannot override its direction.
+    if (!ready || !selectedSide || !snapshot) return;
     const ticket = buildScalpTicket(snapshot, ev, settings, 'USER', { lots:sizing.lots });
     if (ticket) onTakeTrade(ticket);
   }
@@ -155,16 +157,20 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
         <section className="fyers-ref-card fyers-ref-scalp-decision">
           <div className="fyers-ref-decision-top"><div><div className="fyers-ref-verdict"><strong>BUY {ev.side || '—'}</strong><span className={ev.eligible && marketDataReady ? 'fyers-ref-tag good' : 'fyers-ref-tag wait'}>{ev.eligible && marketDataReady ? 'SCALP READY' : 'WAITING'}</span></div><div className="fyers-ref-contract">{option.symbol || 'Waiting for candidate'} · strict scalp rules</div></div><div className="fyers-ref-score"><b>{Number.isFinite(ev.score) ? ev.score : '—'}</b><small>/100</small></div></div>
           <SectionHead title="FAST-ENTRY CHECKLIST · STRICT SCALP RULES" aside={count(checks,row=>row.pass) + '/' + checks.length}/>
-          <div className="fyers-ref-dots scalp" style={{ gridTemplateColumns: `repeat(${Math.max(1, checks.length)}, minmax(0,1fr))` }}>{checks.map(c=><div key={c.id} title={c.detail} className={'fyers-ref-dot ' + (c.pass ? 'pass' : 'fail')}><span>{c.label}</span><strong>{c.pass?'PASS':'WAIT'}</strong></div>)}</div>
+          <div className="fyers-ref-dots scalp">{checks.map(c=><div key={c.id} title={c.detail} className={'fyers-ref-dot ' + (c.pass ? 'pass' : 'fail')}><span>{c.label}</span><strong>{c.pass?'PASS':'WAIT'}</strong></div>)}</div>
           {corePosition && <div className="fyers-ref-notice">13-point position still active · independent Core slot</div>}
           <div className="fyers-ref-price-grid"><Value label="Entry" value={money(price)}/><Value label="Stop" value={money(option.estimatedPremiumStop)} tone="danger"/><Value label="Target 1R" value={money(option.estimatedPremiumTarget)} tone="positive"/><Value label="Max hold" value="12 min"/></div>
           <div className="fyers-ref-invalidation">Lots {sizing.lots || '—'} · Qty {sizing.quantity || '—'} · Cost {money(sizing.premiumCost)} · NIFTY trigger {fmt(ev.trigger)}</div>
           <p className="fyers-ref-mentor"><b>MENTOR SAYS · </b>{ev.reason || 'Waiting for confirmed three-minute scalp structure.'}</p>
         </section>
         <div className="fyers-ref-actions">
-          <div className="fyers-ref-toggle-row"><RefSwitch label="Auto entry" checked={settings.scalpAutoOpen} onChange={checked=>setSettings(value=>({...value,scalpAutoOpen:checked}))}/><RefSwitch label="Auto close" checked={settings.scalpAutoClose} onChange={checked=>setSettings(value=>({...value,scalpAutoClose:checked}))}/></div>
-          <div className="fyers-ref-scalp-buy"><button type="button" className="ce" disabled={!ready || ev.side!=='CE'} onClick={()=>manual('CE')}>Buy CE</button><button type="button" className="pe" disabled={!ready || ev.side!=='PE'} onClick={()=>manual('PE')}>Buy PE</button></div>
-          <button className="fyers-ref-scalp-sell" type="button" disabled={!position} onClick={()=>onExit('scalp',{closedBy:'USER',reasonCode:'MANUAL_EXIT',reason:'Manual scalp exit'})}>SELL · Exit scalp</button>
+
+          <div className="fyers-ref-scalp-order-actions">
+            <button type="button" className="fyers-ref-scalp-buy" disabled={!ready} onClick={manual} aria-label={selectedSide ? `Buy Mentor-selected ${selectedSide} scalp` : 'Wait for Mentor scalp direction'}>
+              {selectedSide ? `BUY ${selectedSide}` : 'BUY · WAIT'}
+            </button>
+            <button className="fyers-ref-scalp-sell" type="button" disabled={!position} onClick={()=>onExit('scalp',{closedBy:'USER',reasonCode:'MANUAL_EXIT',reason:'Manual scalp exit'})}>SELL</button>
+          </div>
         </div>
       </div>
     </div>
