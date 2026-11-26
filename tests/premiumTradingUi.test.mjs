@@ -98,3 +98,26 @@ test('v62 design explicitly restores mobile hamburger, keeps seven workflow card
   assert.doesNotMatch(view, /availableTimeframes=\{\['1'/);
   assert.match(read('src/main.jsx'), /import '\.\/fyers-reference-v62\.css';/);
 });
+
+test('v63 Scalp uses a 4-column seven-check grid, one Mentor-selected BUY, SELL, and settings-only automation', () => {
+  const css=read('src/fyers-reference-v63.css');
+  const view=read('src/components/FyersReferenceViews.jsx');
+  const app=read('src/AppV3.jsx');
+  const main=read('src/main.jsx');
+  assert.ok(postcss.parse(css).nodes.length>20);
+  assert.match(css, /fyers-ref-dots\.scalp/);
+  assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+  assert.match(css, /fyers-ref-dot:nth-child\(7\)/);
+  assert.match(css, /grid-column:3 \/ span 2/);
+  assert.match(view, /const selectedSide = \['CE', 'PE'\]\.includes\(ev\.side\)/);
+  assert.match(view, /className="fyers-ref-scalp-buy"/);
+  assert.match(view, /className="fyers-ref-scalp-sell"/);
+  assert.match(view, /onClick=\{manual\}/);
+  assert.doesNotMatch(view, /Buy CE<\/button>|Buy PE<\/button>/);
+  assert.doesNotMatch(view, /<RefSwitch/);
+  assert.match(view, /sw\('Scalp auto open','scalpAutoOpen'/);
+  assert.match(view, /sw\('Scalp auto close','scalpAutoClose'/);
+  assert.match(view, /sw\('13-point auto open','mentorAutoOpen'/);
+  assert.match(app, /<FyersScalpTrade snapshot=\{snapshot\}/);
+  assert.match(main, /import '\.\/fyers-reference-v63\.css';/);
+});
