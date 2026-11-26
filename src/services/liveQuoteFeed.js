@@ -14,6 +14,7 @@ let authenticated = false;
 let candidateSymbol = '';
 let timer = null;
 let inFlight = false;
+let resumePollPending = false;
 let nextPollAfter = 0;
 let throttleDelay = 0;
 
@@ -28,14 +29,15 @@ export function installLiveQuoteFeed() {
     return response;
   };
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && authenticated) void pollLiveQuote();
-  });
-  // Navigation is not a visibility event. Reuse the existing guarded single
-  // quote poll instead of opening another timer or accepting an old price.
-  window.addEventListener('mentor:refresh-live-quote', () => {
-    if (authenticated) void pollLiveQuote();
-  });
+  // One shared poll handles focus, visibility restoration and navigation.
+  // Never create another timer or socket for a returning tab.
+  const resume = () => {
+    if (document.visibilityState === 'visible' && authenticated) void pollLiveQuote({ resume: true });
+  };
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('focus', resume);
+  window.addEventListener('pageshow', resume);
+  window.addEventListener('mentor:refresh-live-quote', resume);
 }
 
 function observeResponse(input, response) {
@@ -78,8 +80,12 @@ function stopTimer() {
   timer = null;
 }
 
-async function pollLiveQuote() {
-  if (!authenticated || inFlight || document.visibilityState !== 'visible' || !isNseMarketHours() || Date.now() < nextPollAfter) return;
+async function pollLiveQuote(options = {}) {
+  if (inFlight) {
+    if (options.resume === true) resumePollPending = true;
+    return;
+  }
+  if (!authenticated || document.visibilityState !== 'visible' || !isNseMarketHours() || Date.now() < nextPollAfter) return;
   inFlight = true;
   try {
     // One poll serves the current candidate and both independently open strategies.
@@ -135,6 +141,12 @@ async function pollLiveQuote() {
     // Keep the last good quote. A temporary network error must not blank the UI.
   } finally {
     inFlight = false;
+    if (resumePollPending) {
+      resumePollPending = false;
+      // Another poll was already in progress when the user returned.
+      // Recheck once using the current market feed, subject to FYERS limits.
+      if (authenticated && document.visibilityState === 'visible') void pollLiveQuote();
+    }
   }
 }
 

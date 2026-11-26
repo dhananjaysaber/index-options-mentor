@@ -34,6 +34,7 @@ import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import PremiumMarketTicker, { UiIcon } from './components/PremiumMarketTicker.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
 import { assessMarketFreshness } from './services/marketFreshness.js';
+import { listenForTabResume } from './services/tabResume.js';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
@@ -76,6 +77,8 @@ export default function AppV3() {
   const [liveError, setLiveError] = useState('');
   const [authRequired, setAuthRequired] = useState(false);
   const snapshotRequestRef = useRef(false);
+  const resumeSnapshotPendingRef = useRef(false);
+  const [lastReturnAt, setLastReturnAt] = useState(0);
   const [clockTick, setClockTick] = useState(0);
   const [theme, setTheme] = useState(() => {
     // Introduce the approved dark premium interface once, then honour the
@@ -160,14 +163,22 @@ export default function AppV3() {
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') setMarketClock(Date.now());
     }, 2000);
-    const resumed = () => {
-      if (document.visibilityState === 'visible') {
-        setMarketClock(Date.now());
-        if (brokerStatus.authenticated && isNseMarketHours()) void refreshSnapshot();
+    // Focus covers switching to another browser window; visibilitychange covers
+    // background tabs; pageshow covers browser back-forward cache restoration.
+    // All three are deduplicated and use the existing single-flight REST calls.
+    const removeResume = listenForTabResume({
+      window, document,
+      onResume: () => {
+        const at = Date.now();
+        setMarketClock(at); // immediately invalidate old data before any entry
+        if (brokerStatus.authenticated && isNseMarketHours(at)) {
+          setLastReturnAt(at);
+          window.dispatchEvent(new Event('mentor:refresh-live-quote'));
+          void refreshSnapshot({ resume: true });
+        }
       }
-    };
-    document.addEventListener('visibilitychange', resumed);
-    return () => { window.clearInterval(timer); document.removeEventListener('visibilitychange', resumed); };
+    });
+    return () => { window.clearInterval(timer); removeResume(); };
   }, [brokerStatus.authenticated]);
   useEffect(() => { writeTradingJson(HISTORY_KEY, history); }, [history]);
   useEffect(() => { persistPosition(CORE_POSITION_KEY, corePosition); }, [corePosition]);
@@ -223,8 +234,12 @@ export default function AppV3() {
   }
 
   async function refreshSnapshot(options = {}) {
-    // Never overlap FYERS Prime snapshot requests; 4-second cadence is unchanged.
-    if (snapshotRequestRef.current) return null;
+    // Never overlap FYERS snapshot requests; a focus event during an existing
+    // request queues exactly one follow-up instead of losing the resume refresh.
+    if (snapshotRequestRef.current) {
+      if (options?.resume === true) resumeSnapshotPendingRef.current = true;
+      return null;
+    }
     snapshotRequestRef.current = true;
     const manual = options?.manual === true;
     if (manual) setRefreshing(true);
@@ -256,6 +271,10 @@ export default function AppV3() {
       snapshotRequestRef.current = false;
       setLoading(false);
       if (manual) setRefreshing(false);
+      if (resumeSnapshotPendingRef.current) {
+        resumeSnapshotPendingRef.current = false;
+        if (document.visibilityState === 'visible' && isNseMarketHours()) void refreshSnapshot();
+      }
     }
   }
 
@@ -659,7 +678,7 @@ export default function AppV3() {
     if (next === 'dashboard' && brokerStatus.authenticated && document.visibilityState === 'visible') {
       setMarketClock(Date.now());
       window.dispatchEvent(new Event('mentor:refresh-live-quote'));
-      if (isNseMarketHours()) void refreshSnapshot();
+      if (isNseMarketHours()) void refreshSnapshot({ resume: true });
     }
   }
 
@@ -720,8 +739,15 @@ export default function AppV3() {
           <>
             {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
             {!marketDataReady && <div className="fyers-ref-data-warning" role="status" aria-label="NIFTY data connection status">
-              <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated ? freshness.label : 'FYERS CONNECTION REQUIRED'}</strong>
-              <span>{brokerStatus.authenticated ? freshness.message : 'Connect FYERS to load actual market prices and research.'}</span>
+              <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated
+                ? (!liveError && lastReturnAt && marketClock - lastReturnAt < 8000
+                  ? 'RESUMING LIVE DATA' : freshness.label)
+                : 'FYERS CONNECTION REQUIRED'}</strong>
+              <span>{brokerStatus.authenticated
+                ? (!liveError && lastReturnAt && marketClock - lastReturnAt < 8000
+                  ? 'Restoring fresh NIFTY quotes and Mentor analysis after returning to this tab. New entries stay paused until both are verified.'
+                  : freshness.message)
+                : 'Connect FYERS to load actual market prices and research.'}</span>
               <button type="button" disabled={!brokerStatus.authenticated || refreshing} onClick={() => refreshSnapshot({ manual:true })}>{refreshing ? 'Checking…' : 'Retry data'}</button>
             </div>}
             {strategyMode === 'scalp' ? (
