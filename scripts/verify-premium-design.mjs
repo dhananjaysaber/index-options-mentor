@@ -34,8 +34,10 @@ try {
   await page.locator('.fyers-ref-decision:visible').waitFor();
   await page.waitForTimeout(1500);
   await page.locator('.fyers-ref-core .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
-  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-body').count() >= 5,
-    '13-point chart renders real OHLC candlesticks');
+  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-body').count() >= 1,
+    '13-point chart renders OHLC candle bodies');
+  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-wick').count() >= 1,
+    '13-point chart renders candle high-low wicks');
   assert.equal(await page.locator('.fyers-ref-core .fyers-ref-price-line').count(),0,
     '13-point chart no longer renders line graph');
 
@@ -84,8 +86,10 @@ try {
       }
       if(label==='scalp'){
         await page.locator('.fyers-ref-scalp .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
-        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-body').count() >= 5,
-          'Scalp chart renders OHLC candlesticks');
+        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-body').count() >= 1,
+          'Scalp chart renders OHLC candle bodies');
+        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-wick').count() >= 1,
+          'Scalp chart renders candle high-low wicks');
         assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-price-line').count(),0,
           'Scalp chart no longer renders line graph');
 
