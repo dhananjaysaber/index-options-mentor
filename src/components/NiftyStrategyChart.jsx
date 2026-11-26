@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
+import { assessMarketFreshness } from '../services/marketFreshness.js';
 
 const TIMEFRAMES = {
   '3': { label: '3m', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 },
@@ -88,6 +89,9 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
   const countdown = formatCountdown(secondsToBoundary(now, timeframeConfig.seconds));
   const change = latest ? latest.close - latest.open : null;
   const changePct = latest && latest.open ? (change / latest.open) * 100 : null;
+  const chartLive = Boolean(snapshot?.live && assessMarketFreshness({
+    snapshot, quote: liveQuote, authenticated: true, now
+  }).ready);
 
   return (
     <section className={`nifty-strategy-chart live-trading-chart ${compact ? 'compact' : ''}`} aria-label={`Live NIFTY ${timeframeConfig.label} strategy chart`}>
@@ -95,7 +99,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         <div className="nifty-live-title">
           <div className="nifty-live-symbol-row">
             <strong>NIFTY 50 · {timeframeConfig.shortLabel}</strong>
-            <span className={`nifty-live-status ${snapshot?.live ? 'online' : ''}`}><i />{snapshot?.live ? 'LIVE' : 'SESSION'}</span>
+            <span className={`nifty-live-status ${chartLive ? 'online' : ''}`}><i />{chartLive ? 'LIVE' : snapshot?.live ? 'UPDATING' : 'SESSION'}</span>
           </div>
           <div className="nifty-live-quote-row">
             <span className="nifty-live-price">{liveSpot != null ? formatPrice(liveSpot) : '—'}</span>

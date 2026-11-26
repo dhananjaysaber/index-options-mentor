@@ -31,6 +31,11 @@ export function installLiveQuoteFeed() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && authenticated) void pollLiveQuote();
   });
+  // Navigation is not a visibility event. Reuse the existing guarded single
+  // quote poll instead of opening another timer or accepting an old price.
+  window.addEventListener('mentor:refresh-live-quote', () => {
+    if (authenticated) void pollLiveQuote();
+  });
 }
 
 function observeResponse(input, response) {

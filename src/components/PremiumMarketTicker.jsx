@@ -1,11 +1,11 @@
 // Presentation only: this component never fetches, trades or persists data.
-export default function PremiumMarketTicker({ snapshot, liveQuote }) {
+export default function PremiumMarketTicker({ snapshot, liveQuote, marketDataReady = true }) {
   const market = snapshot?.market || {};
   const quote = Number(liveQuote?.nifty);
   const spot = quote > 0 ? quote : Number(market.spot);
   const change = market.changePct == null ? null : Number(market.changePct);
   return <div className="premium-market-ticker" aria-label="Current NIFTY market">
-    <div className="premium-market-symbol"><strong>NIFTY 50</strong><span>NSE · {market.phase?.replaceAll('_', ' ') || 'Waiting for data'}</span></div>
+    <div className="premium-market-symbol"><strong>NIFTY 50</strong><span>NSE · {marketDataReady ? market.phase?.replaceAll('_', ' ') || 'Waiting for data' : 'UPDATING'}</span></div>
     <div className="premium-market-price"><strong>{spot > 0 ? number(spot) : '—'}</strong>{Number.isFinite(change) && <span className={change >= 0 ? 'positive' : 'negative'}>{change >= 0 ? '+' : ''}{change.toFixed(2)}%</span>}</div>
     <div className="premium-market-context"><span>VIX <b>{number(market.vix)}</b></span><span>PCR <b>{number(market.putCallOiRatio)}</b></span><span>ATR <b>{number(market.atr5)}</b></span></div>
   </div>;

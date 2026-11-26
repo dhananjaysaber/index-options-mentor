@@ -33,6 +33,7 @@ import { clearFyersCooldown } from './services/fyersRequestGuard.js';
 import SnapshotIssueBanner from './components/SnapshotIssueBanner.jsx';
 import PremiumMarketTicker, { UiIcon } from './components/PremiumMarketTicker.jsx';
 import { FYERS_REFRESH, isNseMarketHours } from './services/fyersRefreshPolicy.js';
+import { assessMarketFreshness } from './services/marketFreshness.js';
 
 const ResearchAnalysis = lazy(() => import('./components/ResearchAnalysis.jsx'));
 
@@ -100,15 +101,12 @@ export default function AppV3() {
 
   const [operationError, setOperationError] = useState('');
 
-  // A locally displayed quote may look live after an iOS tab resumes.
-  // Enforce bounded staleness on ALL new paper entries, never on display only.
-  const latestSnapshotAt = Date.parse(snapshot?.generatedAt || '');
-  const latestQuoteAt = Date.parse(liveQuote?.at || '');
-  const snapshotFresh = Number.isFinite(latestSnapshotAt) &&
-    marketClock - latestSnapshotAt >= -3000 && marketClock - latestSnapshotAt <= 12000;
-  const quoteFresh = Number.isFinite(latestQuoteAt) && Number(liveQuote?.nifty) > 0 &&
-    marketClock - latestQuoteAt >= -3000 && marketClock - latestQuoteAt <= 5000;
-  const marketDataReady = Boolean(brokerStatus.authenticated && !liveError && snapshotFresh && quoteFresh);
+  // Both independent freshness gates remain mandatory; no stale-entry override.
+  const freshness = assessMarketFreshness({
+    snapshot, quote: liveQuote, authenticated: brokerStatus.authenticated,
+    error: liveError, now: marketClock
+  });
+  const marketDataReady = freshness.ready;
   const scalpResearch = useScalpResearch({
     snapshot, liveQuote, brokerAuthenticated: brokerStatus.authenticated,
     marketDataReady, clock: marketClock
@@ -657,6 +655,12 @@ export default function AppV3() {
   function navigate(next) {
     setView(next);
     setMobileMenuOpen(false);
+    // Returning to either strategy requires an immediate recheck of BOTH streams.
+    if (next === 'dashboard' && brokerStatus.authenticated && document.visibilityState === 'visible') {
+      setMarketClock(Date.now());
+      window.dispatchEvent(new Event('mentor:refresh-live-quote'));
+      if (isNseMarketHours()) void refreshSnapshot();
+    }
   }
 
   function retryFyersAfterUpgrade() {
@@ -685,7 +689,7 @@ export default function AppV3() {
           <div className="brand-mark">IO</div>
           <div><div className="brand-kicker">INDEX-ONLY · FYERS PRIME</div><div className="brand-title">Index Options Mentor</div></div>
         </button>
-        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} />
+        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} />
         <div className="mentor-v2-desktop-actions">
           <span className={`connection-pill ${reconnectRequired ? 'reconnect-required' : brokerStatus.authenticated ? 'connected' : ''}`}>FYERS {reconnectRequired ? 'Reconnect' : brokerStatus.authenticated ? 'Connected' : brokerStatus.configured ? 'Ready' : 'Offline'}</span>
           {reconnectRequired && <button className="secondary-btn fyers-reconnect-btn" onClick={reconnectFyers}>Reconnect FYERS</button>}
@@ -698,7 +702,7 @@ export default function AppV3() {
       </header>
 
       <div className="fyers-ref-mobile-header" role="banner" aria-label="Mobile trading header">
-        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} />
+        <PremiumMarketTicker snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} />
         <span className={`fyers-ref-mobile-broker ${brokerStatus.authenticated ? 'connected' : 'disconnected'}`} aria-label={brokerStatus.authenticated ? 'FYERS connected' : 'FYERS reconnect required'} />
         <button type="button" className="fyers-ref-mobile-menu" aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}>
           <MenuIcon />
@@ -716,8 +720,8 @@ export default function AppV3() {
           <>
             {liveError && <SnapshotIssueBanner message={liveError} authRequired={authRequired} onReconnect={reconnectFyers} onRetry={retryFyersAfterUpgrade} />}
             {!marketDataReady && <div className="fyers-ref-data-warning" role="status" aria-label="NIFTY data connection status">
-              <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated ? 'WAITING FOR FRESH MARKET DATA' : 'FYERS CONNECTION REQUIRED'}</strong>
-              <span>{brokerStatus.authenticated ? 'New entries remain disabled until quotes and Mentor analysis are fresh.' : 'Connect FYERS to load actual market prices and research.'}</span>
+              <strong>{authRequired ? 'FYERS RECONNECT REQUIRED' : brokerStatus.authenticated ? freshness.label : 'FYERS CONNECTION REQUIRED'}</strong>
+              <span>{brokerStatus.authenticated ? freshness.message : 'Connect FYERS to load actual market prices and research.'}</span>
               <button type="button" disabled={!brokerStatus.authenticated || refreshing} onClick={() => refreshSnapshot({ manual:true })}>{refreshing ? 'Checking…' : 'Retry data'}</button>
             </div>}
             {strategyMode === 'scalp' ? (
