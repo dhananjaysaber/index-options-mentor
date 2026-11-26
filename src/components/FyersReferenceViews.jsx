@@ -25,9 +25,6 @@ function Value({ label, value, tone = '' }) {
 function SectionHead({ title, aside }) {
   return <div className="fyers-ref-section-head"><span>{title}</span><strong>{aside}</strong></div>;
 }
-function RefSwitch({ label, checked, onChange }) {
-  return <label className="fyers-ref-switch"><input type="checkbox" checked={Boolean(checked)} onChange={event => onChange(event.target.checked)} /><span aria-hidden="true" />{label}</label>;
-}
 const SHORT_GATE_LABELS = { chop:'Chop', trend:'Trend', vwap:'VWAP', risk:'Risk', liquidity:'Liquidity', orb:'ORB', close:'Close', retest:'Retest', pd:'PD', volume:'Vol', momentum:'Mom', htf:'HTF', time:'Time' };
 function ParamLabel({ row }) {
   return <span title={row?.label || row?.id || ''}>{SHORT_GATE_LABELS[row?.id] || row?.label || pretty(row?.id)}</span>;
