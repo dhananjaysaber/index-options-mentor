@@ -1,5 +1,6 @@
 import { derivePositionMentor, deriveScalpPositionMentor, fmt, formatR } from '../engine/positionMentor.js';
 import useLiveQuote from '../hooks/useLiveQuote.js';
+import { freshOptionMark } from '../services/optionQuoteFreshness.js';
 
 export default function LivePositionPanel({ position, onExit, history = [], snapshot = null, sticky = false }) {
   const liveQuote = useLiveQuote();
@@ -18,9 +19,11 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
   }
 
   const liveUnderlying = numberOrNull(liveQuote?.nifty);
-  const liveOption = liveQuote?.optionSymbol === position.symbol ? numberOrNull(liveQuote?.optionPrice) : null;
+  const mark = freshOptionMark(liveQuote, position.symbol);
   const currentUnderlying = liveUnderlying ?? numberOrNull(position.underlyingCurrent ?? snapshot?.market?.spot);
-  const currentOption = liveOption ?? numberOrNull(position.currentPrice);
+  // A cached paper position may have a numeric currentPrice after the browser
+  // sleeps. That is not a fresh market quote and must not show as live profit.
+  const currentOption = mark?.price ?? null;
   const entryOption = numberOrNull(position.entry);
   const quantity = Number(position.quantity) || 0;
   const livePnl = currentOption != null && entryOption != null ? (currentOption - entryOption) * quantity : null;
@@ -46,9 +49,9 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
 
       <div className="position-live-hero">
         <div className={`position-pnl-hero ${livePnl == null ? '' : livePnl >= 0 ? 'positive' : 'negative'}`}>
-          <span>LIVE SIM P&amp;L</span>
+          <span>EST. SIM P&amp;L · {mark ? 'FRESH LTP' : 'STALE QUOTE'}</span>
           <strong className={pnlTone}>{livePnl == null ? '—' : `${livePnl >= 0 ? '+' : '-'}₹${Math.abs(livePnl).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}</strong>
-          <small>{pnlPct == null ? 'Waiting for live option quote' : `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% · Entry ₹${fmt(entryOption)} → Live ₹${fmt(currentOption)}`}</small>
+          <small>{pnlPct == null ? 'Option quote stale or missing — previous profit is not live' : `${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(2)}% · Entry ₹${fmt(entryOption)} → Last trade ₹${fmt(currentOption)} · Not a guaranteed selling price`}</small>
         </div>
 
         <div className="position-r-hero">
@@ -110,7 +113,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
       </div>
 
       <div className="position-essential-grid">
-        <Essential label="Option live" value={currentOption == null ? '—' : `₹${fmt(currentOption)}`} emphasis />
+        <Essential label="Option fresh LTP" value={currentOption == null ? '—' : `₹${fmt(currentOption)}`} emphasis />
         <Essential label="Option entry" value={entryOption == null ? '—' : `₹${fmt(entryOption)}`} />
         <Essential label="NIFTY now" value={currentUnderlying == null ? '—' : fmt(currentUnderlying)} emphasis />
         <Essential label="NIFTY entry" value={fmt(position.underlyingEntry)} />

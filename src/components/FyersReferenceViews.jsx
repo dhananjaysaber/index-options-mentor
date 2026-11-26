@@ -8,6 +8,7 @@ import MentorWorkflow from './MentorWorkflow.jsx';
 import CoreQuickActions from './CoreQuickActions.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
+import { freshOptionMark } from '../services/optionQuoteFreshness.js';
 import History from './History.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 
@@ -89,23 +90,26 @@ function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, 
 }
 function Pnl({ position, quote }) {
   if (!position) return <span className="fyers-ref-muted">No position · watching</span>;
-  const last = quote?.optionSymbol === position.symbol ? positive(quote.optionPrice) : positive(position.currentPrice);
+  // Never present a stored paper-option price as a currently realisable profit.
+  const last = freshOptionMark(quote, position.symbol)?.price ?? null;
   const entry = positive(position.entry);
   const pnl = last != null && entry != null ? (last - entry) * Number(position.quantity || 0) : null;
-  return <strong className={pnl == null ? '' : pnl >= 0 ? 'positive' : 'danger'}>{pnl == null ? '—' : (pnl >= 0 ? '+' : '−') + money(Math.abs(pnl))}</strong>;
+  return <strong title={pnl == null ? 'Option quote is stale or missing. Previous profit is not live.' : 'Estimated paper P&L at last-traded price, before charges; not a guaranteed broker fill.'} className={pnl == null ? '' : pnl >= 0 ? 'positive' : 'danger'}>{pnl == null ? '—' : (pnl >= 0 ? '+' : '−') + money(Math.abs(pnl))}</strong>;
 }
 function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, onExit }) {
   const core = corePosition, scalp = scalpPosition;
   const rows = [['13-POINT',core,'core'],['SCALP',scalp,'scalp']];
   return <section className="fyers-ref-card fyers-ref-position-strip">
     <div className="fyers-ref-position-head"><button type="button" onClick={onOpen}>Open positions · {Number(Boolean(core)) + Number(Boolean(scalp))}</button><span>Core and Scalp · independent slots</span></div>
-    <div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>LTP</span><span>P&L</span><span></span></div>
-    {rows.map(([name,position,strategy])=><div className="fyers-ref-position-row" key={strategy}>
+    <div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>Fresh LTP</span><span>Est. P&L</span><span></span></div>
+    {rows.map(([name,position,strategy])=>{
+      const mark = position ? freshOptionMark(liveQuote, position.symbol) : null;
+      return <div className="fyers-ref-position-row" key={strategy}>
       <strong>{position?.symbol || name + ' slot'}</strong><span>{position ? name + ' · ' + (position.initiatedBy || 'PAPER') : 'No position · watching'}</span>
       <span>{position?.quantity ?? '—'}</span><span>{position ? money(position.entry) : '—'}</span>
-      <span>{position ? money(liveQuote?.optionSymbol === position.symbol ? liveQuote.optionPrice : position.currentPrice) : '—'}</span><Pnl position={position} quote={liveQuote}/>
-      <button type="button" disabled={!position} onClick={() => onExit(strategy, { closedBy:'USER', reasonCode:'MANUAL_EXIT', reason:'Manual simulated exit from positions table.' })}>SELL</button>
-    </div>)}
+      <span title={position && !mark ? 'Stale or missing option quote; previous LTP is not live' : 'Current option last-traded price, not executable bid'}>{position ? mark ? money(mark.price) : '—' : '—'}</span><Pnl position={position} quote={liveQuote}/>
+      <button type="button" disabled={!position} title="Simulation only. This button does not submit a FYERS sell order." onClick={() => onExit(strategy, { closedBy:'USER', reasonCode:'MANUAL_EXIT', reason:'Manual simulated exit from positions table.' })}>SELL · PAPER</button>
+    </div>})}
   </section>;
 }
 export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
