@@ -1,0 +1,47 @@
+name: Rebuild disabled FYERS packages after market-status fix
+on:
+  push:
+    branches: [feature/live-execution-20261123]
+    paths:
+      - 'aws/live/fyers_rest.py'
+      - 'aws/live/market.py'
+      - 'tests/live_market_status_test.py'
+      - '.github/workflows/rebuild-live-bundles.yml'
+permissions:
+  contents: write
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test broker-session routing and all simulated lifecycle checks
+        run: python3 -m unittest discover -s tests -p 'live_*test.py' -v
+      - name: Regenerate content-addressed installers from the tested sources
+        run: |
+          python3 scripts/build-execution-connect.py
+          python3 scripts/build-live-connect.py
+          python3 scripts/build-order-host.py
+      - name: Verify disabled order-host package without broker writes
+        run: |
+          python3 -m unittest discover -s tests -p 'test_order_host_installer.py' -v
+          python3 public/iom-order-host.py --verify-only --journal-store aws/journal/store.py
+      - name: Commit verified generated packages to PR branch only
+        run: |
+          git add public/iom-execution-connect.py public/iom-live-connect.py public/iom-order-host.py
+          if git diff --cached --quiet; then
+            echo 'No generated package changes'
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'build: regenerate verified disabled live-execution packages'
+            git push origin HEAD:feature/live-execution-20261123
+          fi

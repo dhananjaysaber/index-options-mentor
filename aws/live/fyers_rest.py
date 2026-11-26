@@ -28,7 +28,7 @@ class FyersRest:
             if path not in reads|market:raise ValueError('BROKER_ROUTE_NOT_ALLOWED')
         elif method not in ('POST','PATCH','DELETE') or path!='/orders/sync' or self.send_enabled is not True:
             raise ValueError('FYERS_SEND_DISABLED')
-        root=DATA if path in market-{'/marketStatus'} else API
+        root=DATA if path in market else API
         url=root+path+('?' + urllib.parse.urlencode(params) if params else '')
         raw=None if data is None else json.dumps(data,allow_nan=False).encode()
         request=urllib.request.Request(url,raw,method=method,headers={'Authorization':self._auth,'Accept':'application/json','Content-Type':'application/json','version':'3','User-Agent':'IOM-owned-execution/1'})

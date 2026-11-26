@@ -87,7 +87,14 @@ class Market:
         now=datetime.fromtimestamp(self.clock(),TZ)
         if now.weekday()>=5 or not 9*60+15 <= now.hour*60+now.minute <= 15*60+15:return False
         data=self.client.market_status().get('marketStatus',[])
-        return any(isinstance(row,dict) and row.get('exchange')=='NSE' and row.get('segment')=='FO' and row.get('status')=='OPEN' for row in data)
+        return any(
+            isinstance(row, dict)
+            and row.get('exchange') == 10
+            and row.get('segment') == 11
+            and row.get('market_type') == 'NORMAL'
+            and row.get('status') == 'OPEN'
+            for row in data
+        )
     def refresh_master(self):
         if self.clock()-self.master_at<21600 and self.master:return
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
