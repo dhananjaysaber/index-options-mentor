@@ -61,7 +61,19 @@ try {
     }
     for(const [view,label] of [['Trade','core'],['Scalp','scalp'],['Positions','positions'],['Journal','journal'],['Settings','settings']]){
       await go(view==='Trade'&&!mobile?'13-Point':view);
-      if(label==='settings'){await page.getByRole('button',{name:/Advanced connection and full settings/}).click();await page.getByText('Buying is OFF',{exact:true}).waitFor();}
+      if(label==='settings'){
+        const settingRows=page.locator('.fyers-ref-settings .fyers-ref-settings-row');
+        const firstRow=settingRows.first();
+        const style=await firstRow.evaluate(el=>({
+          height:el.getBoundingClientRect().height,
+          fontSize:parseFloat(getComputedStyle(el).fontSize)
+        }));
+        assert.ok(style.height>=44 && style.fontSize>=13,'Settings rows have larger font and tap height');
+        assert.equal(await page.locator('.fyers-ref-settings-group input[type="checkbox"]').count(),7,
+          'Paper automation, research tier and display toggles remain in Settings');
+        await page.getByRole('button',{name:/Advanced connection and full settings/}).click();
+        await page.getByText('Buying is OFF',{exact:true}).waitFor();
+      }
       await page.screenshot({path:`test-artifacts/premium-design/${width}-${label}.png`,fullPage:true});
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),`${width} ${label}: no horizontal page overflow`);
       const bounds=await nav.boundingBox();
@@ -76,9 +88,33 @@ try {
 
         assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
           'Scalp reference chart keeps 3m and 5m without a 1m tab');
+        const cards=page.locator('.fyers-ref-scalp .fyers-ref-dots.scalp .fyers-ref-dot');
+        assert.equal(await cards.count(),7,'Scalp maintains all seven qualifying checks');
+        const grid=await cards.evaluateAll(nodes=>nodes.map(node=>{
+          const r=node.getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height};
+        }));
+        assert.ok(Math.abs(grid[0].y-grid[3].y)<2 && grid[4].y>grid[3].y,
+          'Scalp checklist uses four cards in the first row');
+        assert.ok(grid[6].w >= grid[5].w*1.65,
+          'Seventh Scalp check spans the final two grid columns');
+        assert.ok(await cards.evaluateAll(nodes=>nodes.every(node=>node.getBoundingClientRect().height>=60)),
+          'Scalp checklist cards have comfortable readable height');
+        const buy=page.locator('.fyers-ref-scalp-order-actions .fyers-ref-scalp-buy');
+        const sell=page.locator('.fyers-ref-scalp-order-actions .fyers-ref-scalp-sell');
+        assert.equal(await buy.count(),1,'Only one Mentor-directed Scalp BUY button');
+        assert.equal(await sell.count(),1,'Independent Scalp SELL remains available');
+        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-actions input[type="checkbox"]').count(),0,
+          'No duplicate scalp automation switches outside Settings');
+        assert.equal(await buy.isDisabled(),true,'Isolated non-qualified scalp cannot buy');
+        assert.ok(/BUY (CE|PE)|BUY · WAIT/.test(await buy.innerText()),
+          'Scalp BUY derives side from Mentor, not two selectable buttons');
         const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
+      }
+      if(label==='core'){
+        assert.equal(await page.locator('.fyers-ref-core .fyers-ref-actions input[type="checkbox"]').count(),0,
+          'Core automation switches only live in Settings');
       }
       if(label==='core' && mobile){
         const chart=await page.locator('.fyers-ref-chart .nifty-chart-canvas').boundingBox();
