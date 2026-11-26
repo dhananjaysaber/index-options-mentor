@@ -33,12 +33,11 @@ try {
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.fyers-ref-decision:visible').waitFor();
   await page.waitForTimeout(1500);
-  console.log('Initial chart history check', JSON.stringify(await page.evaluate(() => ({
-    linePoints: document.querySelector('.fyers-ref-core .fyers-ref-price-line')?.getAttribute('points')?.split(/\s+/).length || 0,
-    chartError: document.querySelector('.fyers-ref-chart .nifty-chart-empty')?.textContent || '',
-    chartLabels: document.querySelector('.fyers-ref-chart .nifty-chart-timeframe-tabs')?.textContent || '',
-    historyRequests: performance.getEntriesByType('resource').filter(x => x.name.includes('/history')).map(x => x.name).slice(-3)
-  }))));
+  await page.locator('.fyers-ref-core .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
+  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-body').count() >= 5,
+    '13-point chart renders real OHLC candlesticks');
+  assert.equal(await page.locator('.fyers-ref-core .fyers-ref-price-line').count(),0,
+    '13-point chart no longer renders line graph');
 
   assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),3,
     'Reference Core chart keeps 3m, 5m and 15m without a 1m tab');
@@ -84,7 +83,11 @@ try {
         assert.ok(boxes.every(b=>b.width>=44&&b.height>=44),'Navigation tap targets');
       }
       if(label==='scalp'){
-        console.log('Scalp line point count', await page.locator('.fyers-ref-scalp .fyers-ref-price-line').getAttribute('points').then(points => points?.split(/\s+/).length || 0));
+        await page.locator('.fyers-ref-scalp .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
+        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-body').count() >= 5,
+          'Scalp chart renders OHLC candlesticks');
+        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-price-line').count(),0,
+          'Scalp chart no longer renders line graph');
 
         assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
           'Scalp reference chart keeps 3m and 5m without a 1m tab');
