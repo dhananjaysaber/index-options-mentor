@@ -723,11 +723,11 @@ export default function AppV3() {
             {strategyMode === 'scalp' ? (
               <FyersScalpTrade snapshot={snapshot} evaluation={scalpStatus} position={scalpPosition}
                 corePosition={corePosition} positionMentor={scalpMentor} marketDataReady={marketDataReady}
-                settings={settings} setSettings={setSettings} liveQuote={liveQuote} history={history}
+                settings={settings} liveQuote={liveQuote} history={history}
                 alertsEnabled={alertsEnabled} onTakeTrade={takeTrade} onExit={exitStrategy} onNavigate={navigate} />
             ) : (
               <FyersCoreTrade snapshot={snapshot} liveQuote={liveQuote} settings={settings} mode={mode}
-                setSettings={setSettings} marketDataReady={marketDataReady}
+                marketDataReady={marketDataReady}
                 corePosition={corePosition} scalpPosition={scalpPosition} coreMentor={coreMentor}
                 history={history} onTakeTrade={takeTrade} onExit={exitStrategy}
                 onNavigate={navigate} alertsEnabled={alertsEnabled}/>
