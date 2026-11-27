@@ -101,16 +101,21 @@ def build(config,account,secret):
     if config.get('version')!=1 or type(config.get('realMoneyEnabled')) is not bool:raise ValueError('INVALID_HOST_CONFIG')
     enabled=config['realMoneyEnabled']
     # Activation is a separate operator action, never an installer/env/browser toggle.
-    if enabled and config.get('operatorApprovedAppId')!=account['appId']:raise ValueError('SEPARATE_OPERATOR_APPROVAL_REQUIRED')
-    client=FyersRest(account['appId'],account['accessToken'],send_enabled=enabled)
+    approved=config.get('operatorApprovedAppId')==account['appId']
+    if enabled and not approved:raise ValueError('SEPARATE_OPERATOR_APPROVAL_REQUIRED')
+    # Owner decision 27 Nov 2026: realMoneyEnabled false blocks new buys but keeps
+    # stops and sales working for held trades. That needs the operator approval to
+    # remain in the file; without it (as installed) nothing at all can be sent.
+    client=FyersRest(account['appId'],account['accessToken'],send_enabled=approved)
     profile=startup('TRADING_ACCOUNT_READ',client.get_profile)
     owner=startup('TRADING_ACCOUNT_OWNER',lambda:verify_owner(profile,account['ownerProof'],secret))
-    broker=FyersBroker(client,send_enabled=enabled);feed=Feed('/var/lib/index-options-mentor/live-feed')
+    broker=FyersBroker(client,send_enabled=approved,entries_enabled=enabled);feed=Feed('/var/lib/index-options-mentor/live-feed')
     market=Market(client,lambda:runtime.settings())
     # A real contract master is required even when the host is disabled.
     startup('CONTRACT_MASTER',market.refresh_master)
     maximum=max(int(row.get('qtyFreeze',0)) for row in market.master.values() if str(row.get('qtyFreeze','')).isdigit())
     orders=Orders(DATA/'orders.sqlite3',broker,owner,max_quantity=maximum,enabled=enabled)
+    orders.exits_enabled=approved
     planner=EntryPlanner(market.contract,feed.quote,market.session_open,max_amount=config['maxTradeAmount'],fee_reserve=config['feeReserve'])
     execution=Execution(orders,planner);journal=JournalBridge(secret)
     runtime=Runtime(execution,Manager(execution,journal),feed,market,max_amount=config['maxTradeAmount'])

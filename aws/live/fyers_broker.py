@@ -7,8 +7,9 @@ import math
 
 
 class FyersBroker:
-    def __init__(self, client, send_enabled=False):
+    def __init__(self, client, send_enabled=False, entries_enabled=None):
         self.client, self.send_enabled = client, send_enabled
+        self.entries_enabled = send_enabled if entries_enabled is None else entries_enabled
 
     @staticmethod
     def _ok(result):
@@ -54,6 +55,9 @@ class FyersBroker:
     def place_order(self, payload):
         if self.send_enabled is not True:
             raise ValueError('FYERS_SEND_DISABLED')
+        # Only a sale may be placed while new buying is off.
+        if payload.get('side') != -1 and self.entries_enabled is not True:
+            raise ValueError('FYERS_ENTRIES_DISABLED')
         return self.client.place_order(data=dict(payload))
 
     def cancel_order(self, order_id):

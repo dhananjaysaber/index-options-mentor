@@ -43,8 +43,20 @@ existing journal backup/Sheet export timer remains unchanged.
 
 The new Settings panel checks the signed order host and can prepare server-owned
 Core/Scalp plans with buy premium, lots, quantity, premium cost and initial stop.
-Real submit/exit and real auto-entry controls remain disabled while AWS sending is
-OFF. Existing research-position controls remain simulations.
+New buys and real auto-entry controls stay disabled while AWS sending is OFF.
+Exit stays available only for trades the server already holds (see below).
+Existing research-position controls remain simulations.
+
+## Switching real money off
+
+Set `realMoneyEnabled` to `false`, keep `operatorApprovedAppId`, and restart the
+order service. New buys are blocked. Stops, stop changes, order cancellations and
+sales still go to FYERS for trades this server already holds. A new stop or sale
+is sent only when the FYERS holding matches the server's own record.
+
+To block every order, also remove `operatorApprovedAppId` and restart. The server
+then cannot sell or change anything; stops already at FYERS stay there, so check
+FYERS by hand. A fresh install has no approval and cannot send any order.
 
 The Netlify gateway verifies the existing encrypted browser session against FYERS,
 derives the pinned owner proof and signs the request to `/monitor/orders/`. It

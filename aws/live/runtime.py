@@ -51,6 +51,9 @@ class Runtime:
             return [dict(r) for r in db.execute("SELECT * FROM live_requests WHERE state NOT IN ('CLOSED','NO_FILL','EXPIRED')")]
     def _enabled(self):
         return self.orders.enabled is True and getattr(self.orders.broker,'send_enabled',False) is True
+    def _exits_allowed(self):
+        return ((self.orders.enabled is True or self.orders.exits_enabled is True)
+                and getattr(self.orders.broker,'send_enabled',False) is True)
     def acceptance(self):
         from fyers_broker import FyersBroker
         from fyers_rest import FyersRest
@@ -59,7 +62,7 @@ class Runtime:
             managed=list(db.execute('SELECT * FROM live_managed_positions'))
             stops={r['id']:dict(r) for r in db.execute('SELECT * FROM live_intents WHERE parent_id IS NOT NULL')}
             delivered={r['id'] for r in db.execute('SELECT id FROM live_journal_outbox WHERE delivered=1')}
-        stop_proof=real and any(r['state']!='PROTECTING' and r['exit_reason']!='PROTECTION_FAILED' and stops.get(r['stop_intent'],{}).get('state') in ('PENDING','FILLED','CANCELLED') for r in managed)
+        stop_proof=real and any(json.loads(r['payload']).get('stopConfirmed') is True and r['exit_reason']!='PROTECTION_FAILED' and stops.get(r['stop_intent'],{}).get('state') in ('PENDING','FILLED','CANCELLED') for r in managed)
         verified=set()
         for row in managed:
             if real and row['state']=='CLOSED' and row['exit_reason'] and row['exit_reason'] not in NOT_STRATEGY_EXITS and row['id']+':BROKER_CLOSED' in delivered:
@@ -70,7 +73,7 @@ class Runtime:
         with self.lock:
             rows=self._active()
             return {'ok':True,'mode':'OWNED_EXECUTION_HOST','actualLiveExecutionHostReleased':True,
-                'realMoneyEnabled':self._enabled(),'settings':self.settings(),'positions':[
+                'realMoneyEnabled':self._enabled(),'exitsAllowed':self._exits_allowed(),'settings':self.settings(),'positions':[
                     {'id':r['id'],'strategy':r['strategy'],'state':r['state'],'symbol':json.loads(r['ticket'])['symbol']} for r in rows],
                 'attentionRequired':self.last_error,'strategyReadingStale':self.reading_stale,**self.acceptance()}
     def prepare(self,intent_id,strategy,automatic=False):
@@ -205,12 +208,13 @@ class Runtime:
                             self._state(row['id'],'CLOSED');continue
                         managed=self.manager.get(row['id'])
                         if closing and not managed['exit_intent']:managed=self.manager._request_exit(row['id'],'END_OF_DAY')
-                        if managed['state']=='PROTECTING':managed=self.manager.protect(row['id'])
+                        if managed['state']=='PROTECTING':managed=self.manager.try_protect(row['id'])
                         if managed['exit_intent']:pair={}
                         else:pair=self.feed.pair(json.loads(managed['payload'])['symbol'])
                         result=self.manager.pulse(row['id'],pair,snapshot)
                         if result.get('state')=='CLOSED':self._state(row['id'],'CLOSED')
                         elif self.manager.exit_overdue(row['id']):errors.append('EXIT_OVERDUE')
+                        if self.manager.get(row['id'])['state']=='PROTECTING':errors.append('STOP_UNCONFIRMED')
                 except Exception as error:errors.append(type(error).__name__)
             self.last_error='OWNED_POSITION_REQUIRES_ATTENTION' if errors else None
             self.orders.drain_journal(self.manager.journal)

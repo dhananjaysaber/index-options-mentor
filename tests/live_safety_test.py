@@ -229,4 +229,126 @@ class ReadingTests(Case):
         from order_host import refresh_pause
         self.assertEqual([refresh_pause(t) for t in (0.5,3,9)],[4.5,2,1])
 
+class OffSwitchTests(Case):
+    def off(self):self.orders.enabled=False
+    def test_held_trade_can_still_be_sold_when_off(self):
+        id,_,_=self.entry();self.off();self.tick(240)
+        self.assertEqual((self.runtime.request_exit(id)['state'],self.held()),('CLOSED',0))
+    def test_stop_still_trails_and_strategy_exit_still_sells_when_off(self):
+        id,_,_=self.entry();self.off();self.cycle(300)
+        stop=self.orders.get(self.manager.get(id)['stop_intent'])
+        self.assertGreater(self.manager.protection.book(stop['id'])[1]['stopPrice'],220)
+        self.cycle(240)
+        self.assertEqual((self.manager.get(id)['state'],self.held()),('CLOSED',0))
+    def test_a_buy_that_filled_just_before_off_still_gets_its_stop(self):
+        def fills_then_off(payload):
+            result=self.place(payload)
+            if is_buy(payload):self.off()
+            return result
+        self.broker.place_order=fills_then_off;id,_,result=self.entry()
+        self.assertEqual((result['protectionConfirmed'],len(self.stops())),(True,1))
+    def test_no_new_buy_by_hand_or_automatically_when_off(self):
+        self.off();self.runtime.set_settings({'scalpAutoOpen':True,'mentorAutoOpen':True});self.cycle(230)
+        id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaisesRegex(ValueError,'REAL_MONEY_DISABLED'):self.runtime.submit(id)
+        with self.assertRaisesRegex(ValueError,'DISABLED'):
+            self.orders.submit(str(uuid.uuid4()),self.execution.planner.plan(self.symbol,30000,100000)['payload'])
+        self.assertEqual(self.broker.calls(),0)
+        status=self.runtime.status();self.assertEqual((status['realMoneyEnabled'],status['exitsAllowed']),(False,True))
+    def test_no_stop_is_sent_when_off_if_fyers_no_longer_holds_the_trade(self):
+        def sold_outside(payload):
+            result=self.place(payload)
+            if is_buy(payload):self.off();self.broker.net_quantity=lambda symbol:0
+            return result
+        self.broker.place_order=sold_outside;id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaisesRegex(ValueError,'BROKER_POSITION_MISMATCH'):self.runtime.submit(id)
+        self.cycle(230);self.assertEqual(len(self.stops()),0);self.assertTrue(self.runtime.last_error)
+    def test_full_lock_sends_nothing_at_all(self):
+        id,_,_=self.entry();self.off();self.orders.exits_enabled=False;before=self.broker.calls();self.tick(240)
+        with self.assertRaises(ValueError):self.runtime.request_exit(id)
+        self.assertFalse(self.runtime.status()['exitsAllowed'])
+        self.assertEqual((len(self.sells()),self.held()),(0,130))
+    def test_broker_adapter_refuses_buys_but_passes_sales_when_off(self):
+        from fyers_broker import FyersBroker
+        sent=[]
+        class Client:
+            def place_order(self,data):sent.append(data['side']);return {'s':'ok','id':'X'}
+        broker=FyersBroker(Client(),send_enabled=True,entries_enabled=False)
+        for side in (1,None,0):
+            with self.assertRaisesRegex(ValueError,'DISABLED'):broker.place_order({'side':side})
+        broker.place_order({'side':-1});self.assertEqual(sent,[-1])
+    def test_host_allows_exits_when_off_only_for_a_previously_approved_account(self):
+        import order_host
+        from unittest import mock
+        def build(config):
+            made={}
+            def keep(name):
+                def make(*a,**k):made[name]=(a,k);return mock.MagicMock(**({'exits_enabled':None} if name=='orders' else {}))
+                return make
+            market=mock.MagicMock();market.master={'X':{'qtyFreeze':'1755'}}
+            holder={}
+            def orders(*a,**k):holder['orders']=mock.MagicMock();holder['enabled']=k['enabled'];return holder['orders']
+            with mock.patch.multiple(order_host,FyersRest=keep('client'),FyersBroker=keep('broker'),Orders=orders,verify_owner=lambda *a:'OWNER',
+                    Market=lambda *a,**k:market,Feed=mock.MagicMock(),Execution=mock.MagicMock(),Manager=mock.MagicMock(),Runtime=mock.MagicMock(),
+                    JournalBridge=mock.MagicMock(),startup=lambda stage,call:call()):
+                order_host.build({'version':1,'maxTradeAmount':30000,'feeReserve':100,**config},{'appId':'APP','accessToken':'t','ownerProof':'p'},'s')
+            return (made['client'][1]['send_enabled'],made['broker'][1]['send_enabled'],made['broker'][1]['entries_enabled'],holder['enabled'],holder['orders'].exits_enabled)
+        self.assertEqual(build({'realMoneyEnabled':False}),(False,False,False,False,False))
+        self.assertEqual(build({'realMoneyEnabled':False,'operatorApprovedAppId':'OTHER'}),(False,False,False,False,False))
+        self.assertEqual(build({'realMoneyEnabled':False,'operatorApprovedAppId':'APP'}),(True,True,False,False,True))
+        self.assertEqual(build({'realMoneyEnabled':True,'operatorApprovedAppId':'APP'}),(True,True,True,True,True))
+        with self.assertRaisesRegex(ValueError,'SEPARATE_OPERATOR_APPROVAL'):build({'realMoneyEnabled':True})
+
+class UnconfirmedStopTests(Case):
+    def lost_stop(self):
+        """The stop request times out and FYERS does not show it (yet)."""
+        held=[]
+        def placed(payload):
+            if is_stop(payload):held.append(payload);raise TimeoutError()
+            return self.place(payload)
+        self.broker.place_order=placed;id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaises(ValueError):self.runtime.submit(id)
+        return id,held
+    def odd_stop(self):
+        """A stop rests at the broker, but at a price that cannot be confirmed."""
+        def placed(payload):
+            result=self.place(payload)
+            if is_stop(payload):
+                row=self.stops()[0];row.update(stopPrice=219.5);self.broker._write(row,'ODD')
+            return result
+        self.broker.place_order=placed;id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaisesRegex(ValueError,'PRICE_MISMATCH'):self.runtime.submit(id)
+        return id
+    def nifty(self,value):
+        real=type(self.feed).pair
+        self.feed.pair=lambda symbol:{**real(self.feed,symbol),'nifty':value}
+    def test_warns_and_sends_nothing_more_while_unconfirmed(self):
+        id,held=self.lost_stop();status=self.cycle(231)
+        self.assertEqual((self.manager.get(id)['state'],len(held),len(self.sells())),('PROTECTING',1,0))
+        self.assertTrue(status['attentionRequired'])
+    def test_strategy_exit_is_noticed_but_held_back_until_the_old_stop_is_gone(self):
+        id,held=self.lost_stop();self.nifty(25101);self.cycle(228);self.cycle(228)
+        self.assertEqual(self.manager.get(id)['exit_reason'],'STRUCTURE_INVALIDATED')
+        self.assertEqual((len(held),len(self.sells()),self.held()),(1,0,130));self.assertTrue(self.runtime.last_error)
+        self.broker.place_order=self.place;self.place(held[0]);self.cycle(228)
+        self.assertEqual((self.manager.get(id)['state'],self.held(),self.stops()[0]['status']),('CLOSED',0,1))
+    def test_a_stop_that_appears_late_is_confirmed(self):
+        id,held=self.lost_stop();self.cycle(231);self.broker.place_order=self.place;self.place(held[0])
+        status=self.cycle(231)
+        self.assertEqual((self.manager.get(id)['state'],status['attentionRequired']),('MANAGING',None))
+    def test_exit_sells_once_an_odd_resting_stop_is_confirmed_cancelled(self):
+        id=self.odd_stop();self.nifty(25101);self.cycle(228)
+        self.assertEqual((self.manager.get(id)['state'],self.held(),len(self.sells())),('CLOSED',0,1))
+    def test_no_sale_while_the_odd_stop_cannot_be_cancelled(self):
+        id=self.odd_stop();self.nifty(25101);self.broker.cancel_order=lambda i:{'s':'ok','id':i}
+        for _ in range(4):self.cycle(228)
+        self.assertEqual((self.held(),len(self.sells())),(130,0));self.assertTrue(self.runtime.last_error)
+    def test_price_below_the_intended_stop_is_acted_on_while_unconfirmed(self):
+        id=self.odd_stop();self.cycle(215,1);self.assertEqual(len(self.sells()),0);self.cycle(215,4)
+        self.assertEqual((self.manager.get(id)['exit_reason'],self.held()),('STOP_NOT_FILLED',0))
+    def test_end_of_day_waits_for_the_unknown_stop(self):
+        id,_=self.lost_stop();self.runtime.day_clock=lambda:ist(15,18);self.cycle(231);self.cycle(231)
+        self.assertEqual((self.manager.get(id)['exit_reason'],len(self.sells()),self.held()),('END_OF_DAY',0,130))
+        self.assertTrue(self.runtime.last_error)
+
 if __name__=='__main__':unittest.main()

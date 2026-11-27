@@ -40,7 +40,10 @@ class Protection:
                 decimal(stop)%tick or decimal(limit)%tick or not 0<decimal(limit)<decimal(stop)):
             raise ValueError('INVALID_PROTECTION_PRICES_OR_QUANTITY')
         key=key or self.key(entry_id)
-        if not self.orders.get(key): self.orders.submit_protection(key,entry_id,stop,limit,quantity)
+        if not self.orders.get(key):
+            # With buying off, send a new stop only for a trade FYERS still holds.
+            if self.orders.enabled is not True: self.execution.check_holding(json.loads(entry['payload'])['symbol'])
+            self.orders.submit_protection(key,entry_id,stop,limit,quantity)
         row,book=self.book(key)
         if row['state']=='PENDING' and not row['filled_qty']:
             if decimal(book.get('stopPrice'))!=decimal(stop) or decimal(book.get('limitPrice'))!=decimal(limit):raise ValueError('BROKER_PROTECTION_PRICE_MISMATCH')

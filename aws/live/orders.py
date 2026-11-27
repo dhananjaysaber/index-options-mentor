@@ -31,6 +31,9 @@ class Orders:
             raise ValueError('OWNER_REQUIRED')
         self.file, self.broker, self.account_id = file, broker, account_id
         self.max_quantity, self.enabled = max_quantity, enabled
+        # `enabled` allows new buys. `exits_enabled` allows stops and sales of
+        # quantity this ledger already owns, including while buying is off.
+        self.exits_enabled = enabled
         self.clock = time.time
         with self.transaction() as db:
             db.executescript('''
@@ -136,7 +139,8 @@ class Orders:
                 if existing['fingerprint'] not in (fingerprint, legacy) or existing['parent_id'] != parent_id:
                     raise ValueError('INTENT_REUSED_WITH_DIFFERENT_ORDER')
                 return dict(existing)
-            if self.enabled is not True or type(self.max_quantity) is not int or quantity > self.max_quantity:
+            allowed = self.enabled is True or (parent_id is not None and self.exits_enabled is True)
+            if not allowed or type(self.max_quantity) is not int or quantity > self.max_quantity:
                 raise ValueError('LIVE_EXECUTION_DISABLED_OR_LIMIT_UNSET')
             if parent_id:
                 entry = db.execute('SELECT * FROM live_intents WHERE id=?', (parent_id,)).fetchone()

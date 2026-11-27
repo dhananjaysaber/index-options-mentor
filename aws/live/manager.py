@@ -74,7 +74,8 @@ class Manager:
                 if not row or row['state'] not in TERMINAL:
                     result=self.protection.ensure(entry_id,float(stop),float(stop-tick),entry['filled_qty'],key)
                     if result['state']=='PROTECTION_CONFIRMED':
-                        with self.orders.transaction() as db:db.execute("UPDATE live_managed_positions SET state='MANAGING' WHERE id=?",(entry_id,))
+                        position['stopConfirmed']=True
+                        with self.orders.transaction() as db:db.execute("UPDATE live_managed_positions SET payload=?,state='MANAGING' WHERE id=?",(encoded(position),entry_id))
                         return self.get(entry_id)
                     row=self.orders.get(key)
                     if row['state'] not in TERMINAL:raise ValueError('PROTECTION_NOT_CONFIRMED')
@@ -82,6 +83,10 @@ class Manager:
                     return self._request_exit(entry_id,'PROTECTION_FAILED')
                 attempt+=1
                 with self.orders.transaction() as db:db.execute('UPDATE live_managed_positions SET stop_intent=? WHERE id=?',(self.protection.key(entry_id,attempt),entry_id))
+    def try_protect(self,entry_id):
+        """As protect(), but an unconfirmed stop leaves the trade still watched."""
+        try:return self.protect(entry_id)
+        except ValueError:return self.get(entry_id)
     def _request_exit(self,entry_id,reason):
         with self.lock:
             managed=self.get(entry_id)
@@ -109,10 +114,13 @@ class Manager:
             if not managed: raise ValueError('UNKNOWN_MANAGED_POSITION')
             if managed['state']=='CLOSED': return {'state':'CLOSED'}
             if managed['state']=='PROTECTING':
-                managed=self.protect(entry_id)
+                managed=self.try_protect(entry_id)
+            # Until the first stop is confirmed, strategy exits are still watched.
+            # A sale still waits in _work_exit until any old stop is confirmed gone.
+            unconfirmed=managed['state']=='PROTECTING'
             if self.orders.get(managed['stop_intent']): self.orders.reconcile(managed['stop_intent'])
             if self._remaining(entry_id)==0: return self._closed(entry_id)
-            if not managed['exit_intent']:
+            if not managed['exit_intent'] and not unconfirmed:
                 stop=self.orders.get(managed['stop_intent'])
                 if stop['state'] in TERMINAL:
                     # Rejected, cancelled or expired while we still hold units.
@@ -123,10 +131,11 @@ class Manager:
                 decision=json.loads(process.stdout)
                 if not decision.get('accepted'): return decision
                 state=decision['position'];reason=decision.get('exitReason')
-                if not reason and self._stop_passed(managed['stop_intent'],state,quote): reason='STOP_NOT_FILLED'
+                if not reason and self._stop_passed(managed,unconfirmed,state,quote): reason='STOP_NOT_FILLED'
                 with self.orders.transaction() as db:
-                    db.execute('UPDATE live_managed_positions SET payload=?,state=? WHERE id=?',(encoded(state),'MANAGING',entry_id))
+                    db.execute('UPDATE live_managed_positions SET payload=?,state=? WHERE id=?',(encoded(state),managed['state'],entry_id))
                 if reason: self._request_exit(entry_id,reason)
+                elif unconfirmed: return {'state':'PROTECTING','position':state}
                 else:
                     floor=state.get('optionTrailingFloorPnl') if state['strategyFamily']=='SCALP' else state.get('coreOptionTrailingFloorPnl')
                     if floor is not None:
@@ -136,9 +145,14 @@ class Manager:
                         if trigger>decimal(book.get('stopPrice')) and trigger<decimal(quote['optionPrice']): self.protection.tighten(managed['stop_intent'],float(trigger),float(trigger-tick))
                     return {'state':'MANAGING','position':state}
             return self._work_exit(entry_id)
-    def _stop_passed(self,stop_intent,state,quote):
-        _,book=self.protection.book(stop_intent);now=self.execution.planner.clock()
-        if decimal(quote['optionPrice'])>=decimal(book.get('limitPrice')):
+    def _stop_passed(self,managed,unconfirmed,state,quote):
+        now=self.execution.planner.clock()
+        if unconfirmed:
+            # The broker's copy cannot be relied on: use the intended stop.
+            tick=decimal(self.execution.planner.validate_contract(state['symbol'])['tick_size'])
+            limit=decimal(state['initialStop'])-tick
+        else:limit=decimal(self.protection.book(managed['stop_intent'])[1].get('limitPrice'))
+        if decimal(quote['optionPrice'])>=limit:
             state.pop('stopPassedSince',None);return False
         state.setdefault('stopPassedSince',now)
         return now-state['stopPassedSince']>=STOP_PASSED_SECONDS

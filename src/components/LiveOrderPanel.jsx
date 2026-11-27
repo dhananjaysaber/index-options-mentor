@@ -10,6 +10,8 @@ export default function LiveOrderPanel({ tradeAmount }) {
   const pending = useRef(null);
   const running = useRef(false);
   const enabled = status?.realMoneyEnabled === true;
+  const exitsAllowed = enabled || status?.exitsAllowed === true;
+  const heldWhileOff = !enabled && exitsAllowed && Boolean(status?.positions?.some(position => position.state !== 'PREPARED'));
   const money = value => Number.isFinite(Number(value)) && value != null ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value)) : '—';
   const expiresIn = plan ? Math.max(0, Math.ceil(plan.expiresAt - now / 1000)) : 0;
 
@@ -100,6 +102,8 @@ export default function LiveOrderPanel({ tradeAmount }) {
     {status && !status.actualBrokerAcceptanceVerified && <p className="live-setup-note">The connection is working. A real broker trade is still needed to verify the stop and automatic exit.</p>}
     {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your orders and positions in FYERS before continuing.</p>}
 
+    {heldWhileOff && <p className="live-setup-note" role="status">Buying is off. Stops and sales for trades your server already holds still send real orders to FYERS.</p>}
+
     <div className="live-setup-step">
       <div className="live-setup-step-heading"><span>1</span><div><h3>Check your connection</h3><p>Checked automatically when you return. You can also refresh it here. This does not buy anything.</p></div></div>
       <button className="live-setup-button" type="button" disabled={busy} onClick={() => run(refresh)}>{busy ? 'Please wait…' : 'Refresh connection'}</button>
@@ -129,7 +133,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
       <button className="live-setup-button live-setup-buy" type="button" disabled={busy || !enabled || !expiresIn} onClick={() => run(submit)}>Submit this real buy</button>
     </div>}
 
-    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !enabled} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
+    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
 
     {status && <details className="live-setup-details"><summary>Automatic real-money entries</summary><p>These switches control real trades. The paper-trading switches below are separate.</p>{!enabled && <p>Unavailable while real-money buying is switched off.</p>}
       <AutoToggle title="13-point automatic buying" checked={Boolean(status.settings?.mentorAutoOpen)} disabled={busy || !enabled} onChange={checked => run(async () => { await api('settings', { settings: { mentorAutoOpen: checked } }); await refresh(); })} />

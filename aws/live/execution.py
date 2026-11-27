@@ -78,12 +78,7 @@ class Execution:
         with self.orders.transaction() as db:
             children = [r['id'] for r in db.execute('SELECT id FROM live_intents WHERE parent_id=?',(entry_id,))]
         for child in children: self.orders.reconcile(child)
-        with self.orders.transaction() as db:
-            rows = list(db.execute('SELECT * FROM live_intents'))
-        owned = sum((1 if not r['parent_id'] else -1)*r['filled_qty'] for r in rows
-                    if json.loads(r['payload'])['symbol'] == symbol)
-        if self.orders.broker.net_quantity(symbol) != owned:
-            raise ValueError('BROKER_POSITION_MISMATCH')
+        self.check_holding(symbol)
         # Exit price must be a valid tick. There is no market-order fallback.
         contract = self.planner.validate_contract(symbol)
         if type(quantity) is not int or quantity <= 0 or quantity % contract['lot_size']:
@@ -92,6 +87,15 @@ class Execution:
         if tick <= 0 or decimal(price) <= 0 or decimal(price)%tick:
             raise ValueError('INVALID_EXIT_PRICE')
         return self.orders.submit_exit(intent_id,entry_id,price,quantity)
+
+    def check_holding(self, symbol):
+        """FYERS must hold exactly what this ledger says it owns."""
+        with self.orders.transaction() as db:
+            rows = list(db.execute('SELECT * FROM live_intents'))
+        owned = sum((1 if not r['parent_id'] else -1)*r['filled_qty'] for r in rows
+                    if json.loads(r['payload'])['symbol'] == symbol)
+        if self.orders.broker.net_quantity(symbol) != owned:
+            raise ValueError('BROKER_POSITION_MISMATCH')
 
     def recover(self, journal):
         results = self.orders.recover()
