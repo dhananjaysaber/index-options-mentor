@@ -54,7 +54,7 @@ html[data-theme] #root .premium-design-shell .fyers-ref-scalp-decision .fyers-re
 }
 html[data-theme] #root .premium-design-shell .fyers-ref-scalp-order-actions{
   width:100%!important;display:grid!important;
-  grid-template-columns:minmax(0,1fr) 110px!important;gap:10px!important;
+  grid-template-columns:minmax(0,1fr) 138px!important;gap:10px!important;
 }
 html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-order-actions>button{
   display:flex!important;align-items:center!important;justify-content:center!important;
@@ -115,10 +115,10 @@ html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row 
     padding:11px 16px!important;gap:0!important;
   }
   html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-order-actions{
-    grid-template-columns:minmax(0,1fr) 100px!important;gap:9px!important;
+    grid-template-columns:minmax(0,1fr) 132px!important;gap:9px!important;
   }
   html[data-theme] #root .premium-design-shell .fyers-ref-scalp .fyers-ref-actions .fyers-ref-scalp-order-actions>button{
-    min-height:48px!important;height:48px!important;font-size:14px!important;
+    min-height:48px!important;height:48px!important;font-size:13px!important;
   }
   html[data-theme] #root .premium-design-shell .fyers-ref-dots.scalp{
     column-gap:7px!important;row-gap:8px!important;
@@ -156,3 +156,7 @@ html[data-theme] #root .premium-design-shell .fyers-ref-settings-row.switch-row 
     font-size:10px!important;
   }
 }
+/* Both 13-Point buttons say PRACTICE, so give them equal room and let words wrap. */
+html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions button{min-width:0!important;width:100%!important;padding:4px 6px!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-core .fyers-ref-actions .strategy-quick-actions button>span{font-size:13px!important;white-space:normal!important;letter-spacing:.01em!important;line-height:1.15!important}

@@ -97,7 +97,7 @@ try {
  },null,{timeout:15000});
  assert.match(await decision.innerText(),/WAITING/);
  assert.match(await decision.innerText(),/4\/7/);
- assert.equal(await buy.innerText(),'BUY CE');
+ assert.equal(await buy.innerText(),'PRACTICE BUY CE');
  assert.equal(await sell.isDisabled(),true);
  await buy.click();
  await page.waitForFunction(()=>{

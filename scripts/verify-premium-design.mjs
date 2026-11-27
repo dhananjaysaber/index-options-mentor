@@ -115,7 +115,7 @@ try {
         assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-actions input[type="checkbox"]').count(),0,
           'No duplicate scalp automation switches outside Settings');
         assert.equal(await buy.isDisabled(),true,'Isolated non-qualified scalp cannot buy');
-        assert.ok(/BUY (CE|PE)|BUY · WAIT/.test(await buy.innerText()),
+        assert.ok(/PRACTICE BUY (CE|PE)|PRACTICE BUY · WAIT/.test(await buy.innerText()),
           'Scalp BUY derives side from Mentor, not two selectable buttons');
         const dock=await page.locator('.fyers-ref-scalp .fyers-ref-actions').boundingBox();
         assert.ok(dock&&dock.x>=0&&dock.x+dock.width<=width+1,'Scalp controls remain accessible');

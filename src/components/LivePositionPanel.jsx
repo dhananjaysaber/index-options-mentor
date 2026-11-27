@@ -123,7 +123,7 @@ export default function LivePositionPanel({ position, onExit, history = [], snap
         <Essential label={isScalp ? 'Scalp plan' : 'Live gates'} value={isScalp ? `3m · ${position.scalpMaxHoldMinutes || 12}m max` : `${position.currentMandatoryPassCount ?? '—'}/5 · ${position.currentConfirmationPassCount ?? '—'}/8`} />
       </div>
 
-      <button className={`position-exit-button ${mentor.alertLevel === 'exit' ? 'urgent' : ''}`} onClick={() => onExit({ mentorState: mentor.title, reasonCode: mentor.reasonCode, reason: mentor.reason, rMultiple: mentor.rMultiple, closedBy: 'USER' })}>{mentor.alertLevel === 'exit' ? 'EXIT SIMULATED POSITION NOW' : 'EXIT SIMULATED TRADE'}</button>
+      <button className={`position-exit-button ${mentor.alertLevel === 'exit' ? 'urgent' : ''}`} onClick={() => onExit({ mentorState: mentor.title, reasonCode: mentor.reasonCode, reason: mentor.reason, rMultiple: mentor.rMultiple, closedBy: 'USER' })}>{mentor.alertLevel === 'exit' ? 'EXIT PRACTICE TRADE NOW' : 'EXIT PRACTICE TRADE'}</button>
     </aside>
   );
 }

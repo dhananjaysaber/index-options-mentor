@@ -36,18 +36,18 @@ export default function CoreQuickActions({ snapshot, liveQuote, marketDataReady 
   }
 
   return (
-    <div className="strategy-quick-actions core-quick-actions" role="group" aria-label="Fixed 13-point buy and sell research controls">
+    <div className="strategy-quick-actions core-quick-actions" role="group" aria-label="13-point practice buy and sell. These do not send real orders.">
       <div className="strategy-quick-status">
         <span>13-POINT</span>
         <strong>{qualification}</strong>
         <small>{position ? `${position.side || ''} ${position.strike || ''} · open` : Number.isFinite(Number(automatic?.score)) ? `Score ${automatic.score}/100` : 'Research only'}</small>
       </div>
       <button type="button" className="strategy-quick-buy" disabled={Boolean(position) || !manualReady} onClick={openManual}>
-        <span>BUY</span>
-        <small>{position ? 'Position open' : manualReady ? 'Open manual research' : 'Waiting'}</small>
+        <span>PRACTICE BUY</span>
+        <small>{position ? 'Position open' : manualReady ? 'Open practice trade' : 'Waiting'}</small>
       </button>
       <button type="button" className="strategy-quick-sell" disabled={!position} onClick={sell}>
-        <span>SELL</span>
+        <span>PRACTICE SELL</span>
         <small>{position ? 'Exit 13-point' : 'No 13-point open'}</small>
       </button>
     </div>

@@ -26,7 +26,7 @@ export default function PositionAlertBanner({ position, mentor, onExit, alertsEn
           rMultiple: mentor.rMultiple
         })}
       >
-        EXIT SIMULATED POSITION
+        EXIT PRACTICE TRADE
       </button>
     </section>
   );

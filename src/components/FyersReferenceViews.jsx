@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { classifyResearchSetup, calculateSimulationSizing } from '../engine/researchStrategy.js';
+import { scalpScreenStop } from '../engine/scalpPremiumEstimate.js';
 import { calculateTradeAmountSizing } from '../engine/tradeAmount.js';
 import { buildScalpTicket } from '../engine/scalpStrategy.js';
 import TraderMarketPanel from './TraderMarketPanel.jsx';
@@ -52,6 +53,9 @@ export function FyersMarketContext({ snapshot }) {
     <div className="fyers-ref-context-grid top">{values.map(([label,value])=><Value key={label} label={label} value={typeof value === 'number' ? fmt(value) : suffix(value)} tone={label === 'Retest' && value === 'HELD' ? 'positive' : ''}/>)}</div>
     <div className="fyers-ref-context-grid bottom">{levels.map(([label,value])=><Value key={label} label={label} value={fmt(value)}/>)}</div>
   </section>;
+}
+function PracticeNote() {
+  return <div className="fyers-ref-notice" role="note">PRACTICE ONLY · these buttons send nothing to FYERS. Real money: Settings → Your trading connection.</div>;
 }
 function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, marketDataReady, mode }) {
   const s = snapshot || {};
@@ -108,7 +112,7 @@ function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, on
       <strong>{position?.symbol || name + ' slot'}</strong><span>{position ? name + ' · ' + (position.initiatedBy || 'PAPER') : 'No position · watching'}</span>
       <span>{position?.quantity ?? '—'}</span><span>{position ? money(position.entry) : '—'}</span>
       <span title={position && !mark ? 'Stale or missing option quote; previous LTP is not live' : 'Current option last-traded price, not executable bid'}>{position ? mark ? money(mark.price) : '—' : '—'}</span><Pnl position={position} quote={liveQuote}/>
-      <button type="button" disabled={!position} title="Simulation only. This button does not submit a FYERS sell order." onClick={() => onExit(strategy, { closedBy:'USER', reasonCode:'MANUAL_EXIT', reason:'Manual simulated exit from positions table.' })}>SELL · PAPER</button>
+      <button type="button" disabled={!position} title="Simulation only. This button does not submit a FYERS sell order." onClick={() => onExit(strategy, { closedBy:'USER', reasonCode:'MANUAL_EXIT', reason:'Manual simulated exit from positions table.' })}>PRACTICE SELL</button>
     </div>})}
   </section>;
 }
@@ -127,6 +131,7 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketData
         {corePosition && <LivePositionPanel position={corePosition} onExit={meta=>onExit('core',meta)} history={history} snapshot={snapshot}/>}
         <div className="fyers-ref-actions">
 
+          <PracticeNote/>
           <CoreQuickActions snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={onTakeTrade} onExit={meta=>onExit('core',meta)}/>
         </div>
       </div>
@@ -140,6 +145,7 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
   const price = liveQuote && liveQuote.optionSymbol === option.symbol ? positive(liveQuote.optionPrice) : positive(option.ltp);
   const sizing = calculateTradeAmountSizing(settings, price, Number(option.lotSize));
   const selectedSide = ['CE', 'PE'].includes(ev.side) ? ev.side : null;
+  const scalpStop = scalpScreenStop({ price, niftySpot: ev.spot, niftyStop: ev.stop, option });
   const ready = Boolean(marketDataReady && ev.manualEligible && selectedSide && sizing.lots > 0 && !position);
   function manual() {
     // The Mentor alone chooses CE or PE; this button cannot override its direction.
@@ -160,17 +166,19 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
           <SectionHead title="FAST-ENTRY CHECKLIST · STRICT SCALP RULES" aside={count(checks,row=>row.pass) + '/' + checks.length}/>
           <div className="fyers-ref-dots scalp">{checks.map(c=><div key={c.id} title={c.detail} className={'fyers-ref-dot ' + (c.pass ? 'pass' : 'fail')}><span>{c.label}</span><strong>{c.pass?'PASS':'WAIT'}</strong></div>)}</div>
           {corePosition && <div className="fyers-ref-notice">13-point position still active · independent Core slot</div>}
-          <div className="fyers-ref-price-grid"><Value label="Entry" value={money(price)}/><Value label="Stop" value={money(option.estimatedPremiumStop)} tone="danger"/><Value label="Target 1R" value={money(option.estimatedPremiumTarget)} tone="positive"/><Value label="Max hold" value="12 min"/></div>
-          <div className="fyers-ref-invalidation">Lots {sizing.lots || '—'} · Qty {sizing.quantity || '—'} · Cost {money(sizing.premiumCost)} · NIFTY trigger {fmt(ev.trigger)}</div>
+          <div className="fyers-ref-price-grid"><Value label="Entry" value={money(price)}/><Value label="Est. stop" value={money(scalpStop)} tone="danger"/><Value label="NIFTY target 1R" value={fmt(ev.target)} tone="positive"/><Value label="Max hold" value="12 min"/></div>
+          <div className="fyers-ref-invalidation">Lots {sizing.lots || '—'} · Qty {sizing.quantity || '—'} · Cost {money(sizing.premiumCost)} · NIFTY trigger {fmt(ev.trigger)} · NIFTY stop {fmt(ev.stop)}</div>
+          <div className="fyers-ref-notice">Stop price is an estimate. For a real buy, check “Initial stop price” in Settings.</div>
           <p className="fyers-ref-mentor"><b>MENTOR SAYS · </b>{ev.reason || 'Waiting for confirmed three-minute scalp structure.'}</p>
         </section>
         <div className="fyers-ref-actions">
 
+          <PracticeNote/>
           <div className="fyers-ref-scalp-order-actions">
-            <button type="button" className="fyers-ref-scalp-buy" disabled={!ready} onClick={manual} aria-label={selectedSide ? `Buy Mentor-selected ${selectedSide} scalp` : 'Wait for Mentor scalp direction'}>
-              {selectedSide ? `BUY ${selectedSide}` : 'BUY · WAIT'}
+            <button type="button" className="fyers-ref-scalp-buy" disabled={!ready} onClick={manual} aria-label={selectedSide ? `Practice buy Mentor-selected ${selectedSide} scalp` : 'Practice buy: wait for Mentor scalp direction'}>
+              {selectedSide ? `PRACTICE BUY ${selectedSide}` : 'PRACTICE BUY · WAIT'}
             </button>
-            <button className="fyers-ref-scalp-sell" type="button" disabled={!position} onClick={()=>onExit('scalp',{closedBy:'USER',reasonCode:'MANUAL_EXIT',reason:'Manual scalp exit'})}>SELL</button>
+            <button className="fyers-ref-scalp-sell" type="button" disabled={!position} onClick={()=>onExit('scalp',{closedBy:'USER',reasonCode:'MANUAL_EXIT',reason:'Manual scalp exit'})}>PRACTICE SELL</button>
           </div>
         </div>
       </div>
@@ -211,7 +219,7 @@ export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPositi
   const completed = Array.isArray(history) ? history.filter(x=>x?.closedAt) : [];
   const today = completed.filter(x=>new Date(x.closedAt).toDateString()===new Date().toDateString());
   const total = today.reduce((sum,x)=>sum+Number(x.pnl||0),0);
-  return <div className="fyers-ref-page fyers-ref-positions"><h1>Positions</h1><p>Open paper positions · both strategies independent</p>
+  return <div className="fyers-ref-page fyers-ref-positions"><h1>Positions</h1><p>Practice positions only · real trades are listed in Settings → Your trading connection</p>
     <div className="fyers-ref-segment"><button type="button" className={slot==='core'?'active':''} onClick={()=>setSlot('core')}>13-Point · {corePosition?1:0}</button><button type="button" className={slot==='scalp'?'active':''} onClick={()=>setSlot('scalp')}>Scalp · {scalpPosition?1:0}</button></div>
     <div className="fyers-ref-position-active">
       {slot==='core'?<><PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('core',{...meta,closedBy:'USER'})}/><LivePositionPanel position={corePosition} onExit={meta=>onExit('core',meta)} history={history} snapshot={snapshot}/></>:<><PositionAlertBanner position={scalpPosition} mentor={scalpMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('scalp',{...meta,closedBy:'USER'})}/><LivePositionPanel position={scalpPosition} onExit={meta=>onExit('scalp',meta)} history={history} snapshot={snapshot}/></>}
