@@ -35,9 +35,8 @@ class Runtime:
                 id TEXT PRIMARY KEY, strategy TEXT NOT NULL, automatic INTEGER NOT NULL,
                 ticket TEXT NOT NULL, stop REAL NOT NULL, state TEXT NOT NULL, created REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS live_runtime_settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
-                CREATE TABLE IF NOT EXISTS live_entry_cancels (id TEXT PRIMARY KEY,state TEXT NOT NULL);''')
-            if 'sent_at' not in {r['name'] for r in db.execute('PRAGMA table_info(live_entry_cancels)')}:
-                db.execute('ALTER TABLE live_entry_cancels ADD COLUMN sent_at REAL NOT NULL DEFAULT 0')
+                CREATE TABLE IF NOT EXISTS live_entry_cancels (id TEXT PRIMARY KEY,state TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS live_entry_cancel_times (id TEXT PRIMARY KEY,sent_at REAL NOT NULL);''')
             db.execute('INSERT OR IGNORE INTO live_runtime_settings VALUES (1,?)',(encoded({'tradeAmount':float(self.max_amount),'mentorAutoOpen':False,'scalpAutoOpen':False,'controlledResearch':True,'experimentalResearch':False}),))
     def settings(self):
         with self.orders.transaction() as db:return json.loads(db.execute('SELECT payload FROM live_runtime_settings WHERE id=1').fetchone()[0])
@@ -214,9 +213,11 @@ class Runtime:
         if not entry['broker_id']:raise ValueError('ENTRY_OUTCOME_UNKNOWN_CHECK_BROKER')
         now=self.clock()
         with self.orders.transaction() as db:
-            prior=db.execute('SELECT sent_at FROM live_entry_cancels WHERE id=?',(entry['id'],)).fetchone()
+            prior=db.execute('SELECT sent_at FROM live_entry_cancel_times WHERE id=?',(entry['id'],)).fetchone()
             send=not prior or now-prior['sent_at']>=RESEND_AFTER
-            if send:db.execute('INSERT OR REPLACE INTO live_entry_cancels(id,state,sent_at) VALUES (?,?,?)',(entry['id'],'SUBMITTING',now))
+            if send:
+                db.execute('INSERT OR REPLACE INTO live_entry_cancels(id,state) VALUES (?,?)',(entry['id'],'SUBMITTING'))
+                db.execute('INSERT OR REPLACE INTO live_entry_cancel_times VALUES (?,?)',(entry['id'],now))
         if send:
             try:self.orders.broker.cancel_order(entry['broker_id'])
             except Exception:pass

@@ -2,7 +2,7 @@ import base64,hashlib,json,zlib
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 paths=[str(p.relative_to(ROOT)) for p in (ROOT/'aws/live').glob('*.py')]
-paths+=['aws/live/exitSignals.mjs','aws/live/liveFeedPublisher.mjs','netlify/functions/execution.mjs']
+paths+=['aws/live/exitSignals.mjs','aws/live/liveFeedPublisher.mjs','netlify/functions/execution.mjs','netlify/functions/lib/appAuth.mjs','netlify/functions/auth.mjs','tests/helpers/appSession.mjs']
 paths += ['src/engine/'+name for name in ['managedPosition.js','positionMentor.js','coreOptionTrail.js','scalpOptionTrail.js','coreTargetIndexTrail.js']]
 paths += [str(p.relative_to(ROOT)) for p in (ROOT/'tests').glob('live_*test.py')]
 paths += ['tests/execution-connection.test.mjs']

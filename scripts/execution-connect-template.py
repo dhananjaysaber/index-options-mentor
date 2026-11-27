@@ -8,7 +8,7 @@ PAYLOAD='PAYLOAD_PLACEHOLDER'
 DIGEST='HASH_PLACEHOLDER'
 BASE=Path('/opt/index-options-mentor')
 SERVICE='index-options-execution-check.service'
-NETLIFY='https://deploy-preview-28--optionsmentor.netlify.app'
+NETLIFY='https://optionsmentor.netlify.app'
 ROOT=Path('/var/lib/index-options-mentor/execution-check')
 
 

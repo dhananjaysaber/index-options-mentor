@@ -214,7 +214,7 @@ def check_simulation():
     body = json.dumps({'checkId': str(uuid.uuid4())}, separators=(',', ':')).encode()
     stamp, nonce = str(int(time.time())), uuid.uuid4().hex
     canonical = '\n'.join(['v1', stamp, nonce, owner, 'POST', path, hashlib.sha256(body).hexdigest()])
-    request = urllib.request.Request('https://deploy-preview-28--optionsmentor.netlify.app'+path,
+    request = urllib.request.Request('https://optionsmentor.netlify.app'+path,
         body, headers={'Content-Type': 'application/json', 'X-IOM-Time': stamp,
         'X-IOM-Nonce': nonce, 'X-IOM-Owner': owner,
         'X-IOM-Signature': hmac.new(secret.encode(), canonical.encode(), hashlib.sha256).hexdigest()})

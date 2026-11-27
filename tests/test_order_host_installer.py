@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -51,6 +52,39 @@ class HostInstallerTests(unittest.TestCase):
         self.assertEqual(self.site.read_text(),self.source);self.assertFalse(self.mod.HOST_CONFIG.exists())
         self.assertEqual(list(self.units.iterdir()),[])
         self.assertFalse(any(c[:2] in (['systemctl','enable'],['systemctl','restart']) for c in self.calls))
+    def test_signed_check_goes_to_the_single_main_address(self):
+        self.assertEqual(self.mod.NETLIFY,'https://optionsmentor.netlify.app')
+    def ledger(self,sold=0,outside=None):
+        self.mod.DATA.mkdir()
+        with sqlite3.connect(self.mod.DATA/'orders.sqlite3') as db:
+            db.execute('CREATE TABLE live_intents (id TEXT PRIMARY KEY,state TEXT,parent_id TEXT,filled_qty INTEGER)')
+            db.execute("INSERT INTO live_intents VALUES ('buy','FILLED',NULL,65)")
+            if sold:db.execute("INSERT INTO live_intents VALUES ('sale','FILLED','buy',?)",(sold,))
+            db.execute('CREATE TABLE live_external_closes (entry_id TEXT PRIMARY KEY,quantity INTEGER,noticed_at TEXT)')
+            if outside:db.execute("INSERT INTO live_external_closes VALUES ('buy',?,'now')",(outside,))
+        self.mod.HOST_CONFIG.write_text(json.dumps({'realMoneyEnabled':False,'operatorApprovedAppId':'TRADINGAPP-200'}))
+    def test_reinstall_while_a_trade_is_held_keeps_the_operator_approval(self):
+        self.ledger();before=self.mod.HOST_CONFIG.read_text()
+        with self.assertRaisesRegex(RuntimeError,'require review'):self.install()
+        self.assertEqual(self.mod.HOST_CONFIG.read_text(),before);self.assertEqual(self.site.read_text(),self.source);self.assertEqual(self.calls,[c for c in self.calls if c[:1]!=['systemctl']])
+    def test_part_sold_trade_still_counts_as_held(self):
+        self.ledger(outside=30)
+        with self.assertRaisesRegex(RuntimeError,'require review'):self.install()
+    def test_trade_confirmed_sold_outside_the_app_does_not_block_reinstall(self):
+        self.ledger(outside=65);self.install()
+        self.assertNotIn('operatorApprovedAppId',json.loads(self.mod.HOST_CONFIG.read_text()))
+    def test_every_local_import_is_inside_each_setup_package(self):
+        import ast,base64,posixpath,re,zlib
+        for name in ('order-host','execution-connect','live-connect'):
+            tree=ast.parse((ROOT/f'public/iom-{name}.py').read_text())
+            payload=next(n.value.value for n in tree.body if isinstance(n,ast.Assign) and getattr(n.targets[0],'id','')=='PAYLOAD')
+            files=json.loads(zlib.decompress(base64.b64decode(payload)))['files']
+            for path,source in files.items():
+                self.assertEqual(source,(ROOT/path).read_text() if path!='package.json' else source,f'{name}: {path} is out of date')
+                if not path.endswith(('.mjs','.js')):continue
+                for found in re.findall(r"(?:\bfrom\s*|\bimport\s*\(?\s*)['\"](\.{1,2}/[^'\"]+)['\"]",source):
+                    target=posixpath.normpath(posixpath.join(posixpath.dirname(path),found))
+                    self.assertIn(target,files,f'{name}: {path} needs {target}')
     def test_enabled_existing_host_is_not_overwritten(self):
         self.mod.HOST_CONFIG.write_text(json.dumps({'realMoneyEnabled':True}))
         with self.assertRaisesRegex(RuntimeError,'enabled order host'):self.install()

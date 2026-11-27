@@ -9,7 +9,7 @@ BASE=Path('/opt/index-options-mentor')
 DATA=Path('/var/lib/index-options-mentor/order-host')
 SERVICE='index-options-order-host.service'
 TIMER='index-options-order-backup.timer'
-NETLIFY='https://deploy-preview-30--optionsmentor.netlify.app'
+NETLIFY='https://optionsmentor.netlify.app'
 UNIT_DIR=Path('/etc/systemd/system')
 NGINX_DIRS=('/etc/nginx/sites-enabled','/etc/nginx/conf.d')
 HOST_CONFIG=Path('/etc/index-options-order-host.json')
@@ -73,7 +73,10 @@ def main():
                 if db.execute("SELECT 1 FROM sqlite_master WHERE name='live_intents'").fetchone():
                     db.row_factory=sqlite3.Row;rows=list(db.execute('SELECT * FROM live_intents'))
                     unresolved=any(r['state'] not in ('FILLED','BLOCKED','CANCELLED','REJECTED','EXPIRED') for r in rows)
-                    exposed=any(not r['parent_id'] and r['filled_qty']>sum(c['filled_qty'] for c in rows if c['parent_id']==r['id']) for r in rows)
+                    outside={}
+                    if db.execute("SELECT 1 FROM sqlite_master WHERE name='live_external_closes'").fetchone():
+                        outside={r['entry_id']:r['quantity'] for r in db.execute('SELECT * FROM live_external_closes')}
+                    exposed=any(not r['parent_id'] and r['filled_qty']>outside.get(r['id'],0)+sum(c['filled_qty'] for c in rows if c['parent_id']==r['id']) for r in rows)
                     if unresolved or exposed:raise RuntimeError('Existing broker intents require review; no service changes made.')
         account=secure_json('/etc/index-options-live-account.json');secret=secure_json('/etc/index-options-journal.json')['secret']
         owner=pinned_proof(secure_json('/var/lib/index-options-mentor/paper-owner.json'))

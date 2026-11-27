@@ -470,5 +470,10 @@ class ClosedOutsideTests(Case):
         self.assertEqual(broker.net_quantity('A'),0)
         rows[0]={**rows[0],'filledQty':'65'}
         with self.assertRaises(ValueError):broker.orders_for_symbol('A')
+    def test_old_database_tables_are_unchanged_so_a_rollback_can_still_write(self):
+        with self.runtime.orders.transaction() as db:
+            # The previous version inserts into these two tables by position.
+            db.execute('INSERT INTO live_stop_actions VALUES (?,?,?,?,?)',('old','t','CANCEL','{}','SUBMITTING'))
+            db.execute('INSERT INTO live_entry_cancels VALUES (?,?)',('old','SUBMITTING'))
 
 if __name__=='__main__':unittest.main()

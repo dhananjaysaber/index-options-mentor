@@ -16,8 +16,9 @@ class Protection:
             db.execute('''CREATE TABLE IF NOT EXISTS live_stop_actions (
                 id TEXT PRIMARY KEY, target TEXT NOT NULL, kind TEXT NOT NULL,
                 request TEXT NOT NULL, state TEXT NOT NULL)''')
-            if 'sent_at' not in {r['name'] for r in db.execute('PRAGMA table_info(live_stop_actions)')}:
-                db.execute('ALTER TABLE live_stop_actions ADD COLUMN sent_at REAL NOT NULL DEFAULT 0')
+            # Send times live in their own table: the older version writes the
+            # table above by position, so a rollback needs it to stay unchanged.
+            db.execute('CREATE TABLE IF NOT EXISTS live_stop_times (id TEXT PRIMARY KEY, sent_at REAL NOT NULL)')
     def book(self, intent_id):
         current=self.orders.reconcile(intent_id); payload=json.loads(current['payload'])
         if not current['parent_id'] or payload['type']!=4: raise ValueError('NOT_OWNED_PROTECTION')
@@ -53,20 +54,23 @@ class Protection:
         text=encoded(request); action=hashlib.sha256((target+':'+kind+':'+text).encode()).hexdigest()
         now=self.execution.planner.clock()
         with self.orders.transaction() as db:
-            prior=db.execute('SELECT * FROM live_stop_actions WHERE id=?',(action,)).fetchone()
+            prior=db.execute('''SELECT a.*,COALESCE(t.sent_at,0) AS sent_at FROM live_stop_actions a
+                LEFT JOIN live_stop_times t ON t.id=a.id WHERE a.id=?''',(action,)).fetchone()
             if prior:
                 # Cancelling twice cannot create exposure. A change is repeated
                 # only when the broker refused it or it was given up on.
                 again=(prior['state']!='CONFIRMED' if kind=='CANCEL' else prior['state'] in ('REFUSED','ABANDONED'))
                 if again and now-prior['sent_at']>=RESEND_AFTER:
-                    db.execute("UPDATE live_stop_actions SET state='SUBMITTING',sent_at=? WHERE id=?",(now,action))
+                    db.execute("UPDATE live_stop_actions SET state='SUBMITTING' WHERE id=?",(action,))
+                    db.execute('INSERT OR REPLACE INTO live_stop_times VALUES (?,?)',(action,now))
                     return {'id':action,'state':'SUBMITTING'},True
                 return dict(prior),False
             if kind!='CANCEL':
-                db.execute("UPDATE live_stop_actions SET state='ABANDONED' WHERE target=? AND state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN') AND ?-sent_at>=?",(target,now,ABANDON_AFTER))
+                db.execute("UPDATE live_stop_actions SET state='ABANDONED' WHERE target=? AND state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN') AND ?-COALESCE((SELECT sent_at FROM live_stop_times t WHERE t.id=live_stop_actions.id),0)>=?",(target,now,ABANDON_AFTER))
                 if db.execute("SELECT 1 FROM live_stop_actions WHERE target=? AND state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN')",(target,)).fetchone():
                     raise ValueError('PROTECTION_CHANGE_UNRESOLVED')
-            db.execute('INSERT INTO live_stop_actions(id,target,kind,request,state,sent_at) VALUES (?,?,?,?,?,?)',(action,target,kind,text,'SUBMITTING',now))
+            db.execute('INSERT INTO live_stop_actions(id,target,kind,request,state) VALUES (?,?,?,?,?)',(action,target,kind,text,'SUBMITTING'))
+            db.execute('INSERT OR REPLACE INTO live_stop_times VALUES (?,?)',(action,now))
             return {'id':action,'state':'SUBMITTING'},True
     def cancel_exit(self, intent_id):
         """Cancel an unfilled ordinary sale so it can be replaced."""

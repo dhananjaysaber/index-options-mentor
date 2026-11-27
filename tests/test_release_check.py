@@ -131,7 +131,7 @@ class ReleaseCheckTests(unittest.TestCase):
             opener=Opener(valid)
             with patch.object(check.urllib.request,'build_opener',return_value=opener):
                 self.assertTrue(check.check_simulation()['passed'])
-            self.assertEqual(opener.request.full_url,'https://deploy-preview-28--optionsmentor.netlify.app/api/execution/maintenance')
+            self.assertEqual(opener.request.full_url,'https://optionsmentor.netlify.app/api/execution/maintenance')
             self.assertEqual(opener.request.get_method(),'POST')
             self.assertEqual(set(json.loads(opener.request.data)),{'checkId'})
             for changed in ({'realMoneyEnabled':True},{'productionJournalTouched':True},

@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 
 sys.dont_write_bytecode = True
-PREVIEW = 'https://deploy-preview-30--optionsmentor.netlify.app'
+MAIN_APP = 'https://optionsmentor.netlify.app'
 LOCAL = 'http://127.0.0.1:9078'
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -22,7 +22,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def status_request(base, path, secret, owner, opener=None):
     if (base, path) not in {
         (LOCAL, '/monitor/orders/status'),
-        (PREVIEW, '/api/orders/maintenance-status'),
+        (MAIN_APP, '/api/orders/maintenance-status'),
     }:
         raise ValueError('STATUS_ROUTE_ONLY')
     body = b'{}'
@@ -89,8 +89,8 @@ def main():
         local = status_request(LOCAL, '/monitor/orders/status', secret, account['ownerProof'])
         report['aws'] = safe_status(local)
         step = 'DEPLOYED_APP_CONNECTION'
-        remote = status_request(PREVIEW, '/api/orders/maintenance-status', secret, account['ownerProof'])
-        report['preview'] = safe_status(remote)
+        remote = status_request(MAIN_APP, '/api/orders/maintenance-status', secret, account['ownerProof'])
+        report['mainApp'] = safe_status(remote)
         step = 'SHARED_FEED'
         try:
             quotes = Feed('/var/lib/index-options-mentor/live-feed')._read()
@@ -102,7 +102,7 @@ def main():
             and report['freshNiftyFeed'] and not report['aws']['attentionRequired']
             and report['aws']['activeOwnedPositions'] == 0
             and not report['aws']['realMoneyEnabled']
-            and not report['preview']['realMoneyEnabled'])
+            and not report['mainApp']['realMoneyEnabled'])
         report['ok'] = True
     except Exception as error:
         reason = str(error)
