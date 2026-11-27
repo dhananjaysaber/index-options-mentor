@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import journalMaintenance from '../netlify/functions/journal-maintenance.mjs';
 import auth from '../netlify/functions/auth.mjs';
 import journal from '../netlify/functions/journal.mjs';
 import orders from '../netlify/functions/orders.mjs';
@@ -206,3 +208,21 @@ test('the sign-in setup page gives out no secrets', async () => {
   assert.deepEqual(Object.keys(data).sort(), ['clientId', 'configured', 'nonce']);
   assert.equal(data.clientId, CLIENT_ID);
 });
+
+test('no server function is left open: each needs the app sign-in or a server signature', () => noNetwork(async () => {
+  const files = readdirSync(new URL('../netlify/functions/', import.meta.url)).filter(name => name.endsWith('.mjs'));
+  // fyersErrors only holds messages; auth is the sign-in itself. A new file fails here until it is checked.
+  assert.deepEqual(files.sort(), [...Object.keys(handlers), 'auth', 'journal-maintenance', 'fyersErrors'].map(n => n + '.mjs').sort());
+  const machine = [
+    [journalMaintenance, '/api/journal-maintenance', 401],
+    [orders, '/api/orders/maintenance-status', 403],
+    [execution, '/api/execution/maintenance', 403]
+  ];
+  process.env.AWS_PAPER_SYNC_SECRET ||= 'test-key-'.repeat(8);
+  process.env.AWS_PAPER_SYNC_BASE ||= 'https://api.optionsmentor.in';
+  for (const [handler, path, refused] of machine) {
+    const body = path.includes('journal') ? '{"action":"list_trades"}' : path.includes('execution') ? JSON.stringify({ checkId: crypto.randomUUID() }) : '{}';
+    const response = await handler(new Request(url(path), { method: 'POST', body }));
+    assert.equal(response.status, refused, path);
+  }
+}));
