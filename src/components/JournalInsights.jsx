@@ -1,12 +1,13 @@
 // Read-only summary of the trades currently shown in the journal.
 import { buildCohortAnalysis } from '../services/researchAnalysis.js';
+import { countedTrades } from '../engine/researchHours.js';
 
 const rupees = value => `${value < 0 ? '−' : '+'}₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const known = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const show = (value, make = String) => (known(value) ? make(Number(value)) : '—');
 
 export default function JournalInsights({ trades, onNavigate }) {
-  const latest = trades.find(trade => trade.closedAt) || null;
+  const latest = countedTrades(trades).find(trade => trade.closedAt) || null;
   const groups = buildCohortAnalysis(trades).filter(group => group.stats.total);
   const largest = Math.max(1, ...groups.map(group => Math.abs(group.stats.pnl)));
   return <aside className="fyers-ref-journal-insights" aria-label="Journal insights">

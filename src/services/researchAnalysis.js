@@ -1,3 +1,5 @@
+import { countedTrades, resultExclusion } from '../engine/researchHours.js';
+
 export const COHORTS = [
   { id: 'legacy', label: 'Legacy Mentor', short: 'Legacy', copy: 'Earlier Mentor simulation records using the older target/target-zone position manager.' },
   { id: 'shadow', label: '13-point Shadow Research', short: 'Shadow', copy: 'Background research positions opened by the research engine even when the visible Mentor did not fully approve the setup.' },
@@ -50,7 +52,7 @@ export function buildCohortAnalysis(history = []) {
 }
 
 export function summariseTrades(trades = []) {
-  const rows = trades.filter(Boolean);
+  const rows = countedTrades(trades);
   const total = rows.length;
   const pnlValues = rows.map(row => finite(row?.pnl)).filter(value => value != null);
   const rValues = rows.map(row => finite(row?.rAchieved)).filter(value => value != null);
@@ -85,6 +87,13 @@ export function summariseTrades(trades = []) {
 export function explainTrade(trade) {
   const cohort = classifyTradeCohort(trade);
   const reasons = [];
+
+  const excluded = resultExclusion(trade);
+  if (excluded) {
+    return { cohort, cohortLabel: COHORTS.find(row => row.id === cohort)?.label || cohort, reasons: [excluded === 'Missed close'
+      ? 'No check closed this research trade in time, so it has no result and is left out of totals.'
+      : 'This research trade was carried overnight, so its saved profit or loss is left out of totals. The record is not changed.'] };
+  }
 
   if (cohort === 'legacy') {
     reasons.push('This is an earlier Mentor simulation record, not a manual user trade.');
@@ -200,7 +209,7 @@ export function buildMarketEvidence(fiveMinute = [], threeMinute = []) {
 
 export function analyseExpiryProxy(trades = []) {
   const groups = { tuesday: [], other: [] };
-  for (const trade of dedupe(trades)) {
+  for (const trade of countedTrades(dedupe(trades))) {
     const time = new Date(trade?.openedAt || trade?.closedAt || 0).getTime();
     if (!Number.isFinite(time) || time <= 0) continue;
     const key = weekdayIST(time) === 2 ? 'tuesday' : 'other';

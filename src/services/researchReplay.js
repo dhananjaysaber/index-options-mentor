@@ -1,3 +1,4 @@
+import { countedTrades } from '../engine/researchHours.js';
 const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
   year: 'numeric',
@@ -96,7 +97,7 @@ export function buildReplayLab(history = [], fiveMinute = [], threeMinute = []) 
 export function buildJournalCounterfactual(history = [], fiveMinute = [], threeMinute = []) {
   const five = normaliseCandles(fiveMinute);
   const three = normaliseCandles(threeMinute);
-  const rows = dedupeTrades(history);
+  const rows = countedTrades(dedupeTrades(history));
   const cases = [];
   const fiveSessions = new Map(groupSessions(five).map(session => [session.date, session.rows]));
   const threeSessions = new Map(groupSessions(three).map(session => [session.date, session.rows]));

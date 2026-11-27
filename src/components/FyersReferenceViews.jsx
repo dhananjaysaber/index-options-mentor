@@ -13,6 +13,7 @@ import { freshOptionMark } from '../services/optionQuoteFreshness.js';
 import History, { dedupeHistory } from './History.jsx';
 import { filterJournal, STRATEGY_FILTERS, SOURCE_FILTERS, TAG_FILTERS, isScalpRecord, tradeSource } from '../services/journalFilters.js';
 import JournalInsights from './JournalInsights.jsx';
+import { countedTrades, resultExclusion } from '../engine/researchHours.js';
 import SettingsPanel from './SettingsPanel.jsx';
 
 const fmt = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
@@ -118,7 +119,7 @@ function FyersPositionStrip({ corePosition, scalpPosition, coreMentor, scalpMent
       <div role="tablist" aria-label="Positions, trades and alerts">{[['open','Open positions',Number(Boolean(core)) + Number(Boolean(scalp))],['today',"Today's trades",today.length],['alerts','Alerts',alerts.length]].map(([id,text,total])=><button type="button" role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>setTab(id)} key={id}>{text} · {total}</button>)}</div>
       <button type="button" className="fyers-ref-open-all" onClick={onOpen}>All positions ›</button>
     </div>
-    {tab==='today' && (today.length ? today.map((row,index)=><div className="fyers-ref-list-row" key={row.id||index}><strong>{row.symbol}</strong><span>{isScalpRecord(row)?'Scalp':'13-Point'} · {tradeSource(row).toUpperCase()}</span><span className={Number(row.pnl)>=0?'positive':'danger'}>{Number(row.pnl)>=0?'+':'−'}{money(Math.abs(Number(row.pnl)||0))}</span></div>) : <p className="fyers-ref-list-empty">No completed practice trades today.</p>)}
+    {tab==='today' && (today.length ? today.map((row,index)=><div className="fyers-ref-list-row" key={row.id||index}><strong>{row.symbol}</strong><span>{isScalpRecord(row)?'Scalp':'13-Point'} · {tradeSource(row).toUpperCase()}</span>{resultExclusion(row) ? <span>{resultExclusion(row)} · not counted</span> : <span className={Number(row.pnl)>=0?'positive':'danger'}>{Number(row.pnl)>=0?'+':'−'}{money(Math.abs(Number(row.pnl)||0))}</span>}</div>) : <p className="fyers-ref-list-empty">No completed practice trades today.</p>)}
     {tab==='alerts' && (alerts.length ? alerts.map(([name,position,mentor])=><div className="fyers-ref-list-row" key={name}><strong>{mentor.title}</strong><span>{name} · {position.symbol}</span><span>{mentor.reason || mentor.copy || ''}</span></div>) : <p className="fyers-ref-list-empty">No alerts for open practice positions.</p>)}
     {tab==='open' && <><div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>Fresh LTP</span><span>Est. P&L</span><span></span></div>
     {rows.map(([name,position,strategy])=>{
@@ -234,7 +235,7 @@ export function FyersTicket({ snapshot, settings, liveQuote, onBack }) {
 }
 export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPosition, history, snapshot, coreMentor, scalpMentor, alertsEnabled, onExit }) {
   const [slot,setSlot] = useState(defaultSlot);
-  const completed = Array.isArray(history) ? history.filter(x=>x?.closedAt) : [];
+  const completed = countedTrades(history).filter(x=>x.closedAt);
   const today = completed.filter(x=>new Date(x.closedAt).toDateString()===new Date().toDateString());
   const total = today.reduce((sum,x)=>sum+Number(x.pnl||0),0);
   return <div className="fyers-ref-page fyers-ref-positions"><h1>Positions</h1><p>Practice positions only · real trades are listed in Settings → Your trading connection</p>

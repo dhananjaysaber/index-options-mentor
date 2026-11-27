@@ -1,12 +1,13 @@
 import { derivePositionMentor, deriveScalpPositionMentor, fmt, formatR } from '../engine/positionMentor.js';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import { freshOptionMark } from '../services/optionQuoteFreshness.js';
+import { countedTrades } from '../engine/researchHours.js';
 
 export default function LivePositionPanel({ position, onExit, history = [], snapshot = null, sticky = false }) {
   const liveQuote = useLiveQuote();
   if (!position) {
     const today = new Date().toDateString();
-    const todayTrades = history.filter(t => new Date(t.closedAt).toDateString() === today);
+    const todayTrades = countedTrades(history).filter(t => new Date(t.closedAt).toDateString() === today);
     const pnl = todayTrades.reduce((sum, t) => sum + Number(t.pnl || 0), 0);
     const wins = todayTrades.filter(t => Number(t.pnl) > 0).length;
     const losses = todayTrades.filter(t => Number(t.pnl) < 0).length;

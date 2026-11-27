@@ -1,4 +1,5 @@
 import { derivePositionMentor } from './positionMentor.js';
+import { missedCloseExit, missedCloseFields, researchCloseTiming, researchEntryOpen } from './researchHours.js';
 
 const HARD_SAFETY_IDS = ['risk', 'liquidity'];
 const MIN_RESEARCH_SCORE = 72;
@@ -71,6 +72,7 @@ export function buildShadowResearchTrade(snapshot, classification = classifyShad
   if (!classification?.eligible) return null;
 
   const now = snapshot?.generatedAt || new Date().toISOString();
+  if (!researchEntryOpen(now)) return null;
   const market = snapshot.market || {};
   const structure = snapshot.structure || {};
   const option = snapshot.option || {};
@@ -151,6 +153,10 @@ export function buildShadowResearchTrade(snapshot, classification = classifyShad
 export function advanceShadowResearchTrade(trade, snapshot) {
   if (!trade || trade.status !== 'OPEN' || !snapshot?.market) return { trade, exit: null };
 
+  // Checked first, so a later price never moves this trade's stop, target or best/worst figures.
+  const timing = researchCloseTiming(trade.openedAt, snapshot.generatedAt || new Date().toISOString());
+  if (timing === 'missed') return { trade, exit: missedCloseExit() };
+
   const currentUnderlying = Number(snapshot.market.spot);
   if (!Number.isFinite(currentUnderlying)) return { trade, exit: null };
 
@@ -183,6 +189,13 @@ export function advanceShadowResearchTrade(trade, snapshot) {
     currentScore: snapshot?.decision?.score,
     lastMentorAt: snapshot?.generatedAt || new Date().toISOString()
   };
+
+  if (timing === 'close') {
+    return {
+      trade: updated,
+      exit: { reasonCode: 'SESSION_END', title: 'SESSION EXIT', reason: 'Research trades are closed from 3:18 PM.', rMultiple: currentR }
+    };
+  }
 
   if (targetReached(updated, currentUnderlying)) {
     return {
@@ -242,6 +255,7 @@ export function closeShadowResearchTrade(trade, snapshot, exitMeta, optionExit =
     rAchieved: Number.isFinite(Number(exitMeta?.rMultiple)) ? Number(exitMeta.rMultiple) : trade.currentR,
     heldMinutes,
     closedAt,
+    ...(exitMeta?.reasonCode === 'MISSED_CLOSE' ? missedCloseFields(trade) : {}),
     closedBy: 'RESEARCH_ENGINE',
     exitReasonCode: exitMeta?.reasonCode || 'RESEARCH_EXIT',
     exitReason: exitMeta?.reason || 'Shadow research exit.',

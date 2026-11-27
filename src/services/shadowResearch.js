@@ -1,5 +1,6 @@
 import { readTradingJson, writeTradingJson } from './tradingStorage.js';
 import { derivePositionMentor } from '../engine/positionMentor.js';
+import { missedCloseExit, missedCloseFields, researchCloseTiming, researchEntryOpen } from '../engine/researchHours.js';
 
 const SETTINGS_KEY = 'index-options-mentor-settings-v2';
 const HISTORY_KEY = 'index-options-mentor-history-v05';
@@ -61,7 +62,7 @@ async function processSnapshot(snapshot) {
   const opened = [];
 
   const candidate = classifyShadowEntry(snapshot, settings);
-  if (candidate.eligible && active.length < MAX_ACTIVE && !ledger[candidate.setupId]) {
+  if (candidate.eligible && researchEntryOpen(snapshot.generatedAt) && active.length < MAX_ACTIVE && !ledger[candidate.setupId]) {
     const ticket = buildShadowTicket(snapshot, candidate, settings);
     if (ticket) {
       active.push(ticket);
@@ -84,12 +85,18 @@ async function processSnapshot(snapshot) {
     return;
   }
 
-  active = await refreshQuotes(active, snapshot);
   const stillOpen = [];
   const closed = [];
+  // Missed closes are settled before quotes are refreshed, so no later price touches them.
+  const late = active.filter(position => researchCloseTiming(position.openedAt, snapshot.generatedAt) === 'missed');
+  for (const position of late) closed.push(closeShadowPosition(position, snapshot, missedCloseExit()));
+  active = await refreshQuotes(active.filter(position => !late.includes(position)), snapshot);
 
   for (const position of active) {
-    const decision = deriveShadowExit(position, snapshot);
+    const timed = researchCloseTiming(position.openedAt, snapshot.generatedAt) === 'close';
+    const decision = timed
+      ? { exit: true, reasonCode: 'SESSION_EXIT', title: 'SESSION EXIT', reason: 'Research trades are closed from 3:18 PM.', rMultiple: null }
+      : deriveShadowExit(position, snapshot);
     if (!decision.exit) {
       stillOpen.push(updateResearchMetrics(position, snapshot));
       continue;
@@ -350,6 +357,7 @@ function closeShadowPosition(position, snapshot, decision) {
     rAchieved,
     heldMinutes,
     closedAt,
+    ...(decision.reasonCode === 'MISSED_CLOSE' ? missedCloseFields(position) : {}),
     closedBy: 'SHADOW_RESEARCH',
     exitReasonCode: decision.reasonCode,
     exitReason: decision.reason,

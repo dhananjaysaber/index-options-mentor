@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { explainTrade } from '../services/researchAnalysis.js';
 import { tradeSource } from '../services/journalFilters.js';
+import { countedTrades, resultExclusion } from '../engine/researchHours.js';
 
 export default function History({ history }) {
   const [filter, setFilter] = useState('all');
@@ -30,6 +31,8 @@ export default function History({ history }) {
         <SummaryMetric label="Avg R" value={formatR(summary.avgR)} tone={summary.avgR >= 0 ? 'positive' : 'negative'} />
       </div>
 
+      {displayHistory.length > summary.total && <p className="history-excluded-note" role="note">{displayHistory.length - summary.total} research {displayHistory.length - summary.total === 1 ? 'trade is' : 'trades are'} not counted in these totals (carried overnight or missed close). Saved records are not changed.</p>}
+
       <div className="premium-history-columns" aria-hidden="true"><span>Strategy / contract</span><span>Entry / exit</span><span>Quantity / source</span><span>Profit / loss</span><span>Details</span></div>
       {displayHistory.length === 0 ? (
         <div className="empty-state"><p>No completed trades are available yet. Saved journal history will appear here after it syncs.</p></div>
@@ -41,9 +44,11 @@ export default function History({ history }) {
                 <summary className="history-card-summary">
                   <div className="history-card-head">
                     <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
-                    <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
+                    {resultExclusion(trade)
+                      ? <div className="history-pnl excluded"><span>{resultExclusion(trade)}</span><strong>Not counted</strong>{Number.isFinite(trade.pnl) && <small>Saved ₹{formatMoney(trade.pnl)} · {formatR(trade.rAchieved)}</small>}</div>
+                      : <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>}
                   </div>
-                  <div className="premium-history-prices"><span>₹{formatMoney(trade.entry)}</span><small>→ ₹{formatMoney(trade.exit)}</small></div>
+                  <div className="premium-history-prices"><span>₹{formatMoney(trade.entry)}</span><small>→ {resultExclusion(trade) === 'Missed close' ? 'no exit result' : `₹${formatMoney(trade.exit)}`}</small></div>
                   <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{tradeSource(trade).toUpperCase()} · {trade.executionMode === 'LIVE' || trade.mode === 'LIVE' ? 'REAL' : 'PAPER'}</small></div>
                   <div className="history-card-open-hint"><span>View position details</span><i aria-hidden="true" /></div>
                 </summary>
@@ -62,7 +67,7 @@ export default function History({ history }) {
                         <Metric label="3m body" value={formatPercent01(trade.scalpBodyRatioAtEntry)} />
                         <Metric label="Extension" value={formatNumber(trade.scalpExtensionAtEntry)} />
                         <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
-                        <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                        <Metric label={resultExclusion(trade) === 'Missed close' ? 'Last price seen · not an exit' : 'Exit'} value={`₹${formatMoney(trade.exit)}`} />
                         <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
                       </>
                     ) : (
@@ -71,7 +76,7 @@ export default function History({ history }) {
                         <Metric label="Entry gates" value={trade.entryMandatoryPassCount != null ? `${trade.entryMandatoryPassCount}/5` : '—'} />
                         <Metric label="Entry confirms" value={trade.entryConfirmationPassCount != null ? `${trade.entryConfirmationPassCount}/8` : '—'} />
                         <Metric label="Entry" value={`₹${formatMoney(trade.entry)}`} />
-                        <Metric label="Exit" value={`₹${formatMoney(trade.exit)}`} />
+                        <Metric label={resultExclusion(trade) === 'Missed close' ? 'Last price seen · not an exit' : 'Exit'} value={`₹${formatMoney(trade.exit)}`} />
                         <Metric label="Held" value={trade.heldMinutes != null ? `${trade.heldMinutes} min` : '—'} />
                       </>
                     )}
@@ -142,7 +147,8 @@ function isScalpTrade(trade) {
   return trade?.strategyFamily === 'SCALP' || trade?.strategyTier === 'SCALP' || /scalp/i.test(String(trade?.strategyTierLabel || ''));
 }
 
-function summariseHistory(rows) {
+function summariseHistory(allRows) {
+  const rows = countedTrades(allRows);
   const total = rows.length;
   const pnl = rows.reduce((sum, trade) => sum + (Number(trade?.pnl) || 0), 0);
   const wins = rows.filter(trade => Number(trade?.pnl) > 0).length;
@@ -229,6 +235,7 @@ function formatDateTime(value) { if (!value) return '—'; const d = new Date(va
 function humanReason(code) {
   const map = {
     STRUCTURE_INVALIDATED: 'Hard stop / structure invalidated',
+    MISSED_CLOSE: 'Missed close · no result counted',
     STRATEGY_DETERIORATION: 'Strategy deterioration',
     PROFIT_PROTECTION_EXIT: 'Runner profit protection',
     CORE_OPTION_PROFIT_TRAIL: '13-Point runner option-profit trailing exit',

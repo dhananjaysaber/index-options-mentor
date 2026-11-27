@@ -296,7 +296,8 @@ async function finaliseShadowExit(tradeId, snapshot, exitMeta) {
   const trade = shadowTrades[tradeId];
   if (!trade || (trade.status !== 'CLOSING' && trade.status !== 'OPEN')) return;
 
-  const optionExit = await quoteOptionWithTimeout(trade.symbol);
+  // After a missed close there is no fair price to fetch.
+  const optionExit = exitMeta?.reasonCode === 'MISSED_CLOSE' ? null : await quoteOptionWithTimeout(trade.symbol);
   const closed = closeShadowResearchTrade(trade, snapshot, exitMeta, optionExit);
   shadowTrades[tradeId] = closed;
   writeJson(SHADOW_TRADES_KEY, shadowTrades);
