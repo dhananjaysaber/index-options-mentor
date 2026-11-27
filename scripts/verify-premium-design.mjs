@@ -35,16 +35,14 @@ try {
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.fyers-ref-decision:visible').waitFor();
   await page.waitForTimeout(1500);
-  await page.locator('.fyers-ref-core .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
-  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-body').count() >= 1,
-    '13-point chart renders OHLC candle bodies');
-  assert.ok(await page.locator('.fyers-ref-core .nifty-candle-wick').count() >= 1,
-    '13-point chart renders candle high-low wicks');
-  assert.equal(await page.locator('.fyers-ref-core .fyers-ref-price-line').count(),0,
-    '13-point chart no longer renders line graph');
+  await page.locator('.fyers-ref-core .nifty-chart-canvas canvas').first().waitFor({state:'visible',timeout:10000});
+  assert.ok(Number(await page.locator('.fyers-ref-core .nifty-chart-canvas').getAttribute('data-candle-count'))>=24,
+    'core candlestick chart receives the candles');
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-zoom button').count(),3,
+    'core chart has zoom out, zoom in and latest buttons');
 
-  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),3,
-    'Reference Core chart keeps 3m, 5m and 15m without a 1m tab');
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),4,
+    'Core chart offers 1m, 3m, 5m and 15m');
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
@@ -87,16 +85,14 @@ try {
         assert.ok(boxes.every(b=>b.width>=44&&b.height>=44),'Navigation tap targets');
       }
       if(label==='scalp'){
-        await page.locator('.fyers-ref-scalp .nifty-candle-body').first().waitFor({state:'visible',timeout:10000});
-        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-body').count() >= 1,
-          'Scalp chart renders OHLC candle bodies');
-        assert.ok(await page.locator('.fyers-ref-scalp .nifty-candle-wick').count() >= 1,
-          'Scalp chart renders candle high-low wicks');
-        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-price-line').count(),0,
-          'Scalp chart no longer renders line graph');
+        await page.locator('.fyers-ref-scalp .nifty-chart-canvas canvas').first().waitFor({state:'visible',timeout:10000});
+  assert.ok(Number(await page.locator('.fyers-ref-scalp .nifty-chart-canvas').getAttribute('data-candle-count'))>=24,
+    'scalp candlestick chart receives the candles');
+  assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-zoom button').count(),3,
+    'scalp chart has zoom out, zoom in and latest buttons');
 
-        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
-          'Scalp reference chart keeps 3m and 5m without a 1m tab');
+        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),3,
+          'Scalp chart offers 1m, 3m and 5m');
         const cards=page.locator('.fyers-ref-scalp .fyers-ref-dots.scalp .fyers-ref-dot');
         assert.equal(await cards.count(),7,'Scalp maintains all seven qualifying checks');
         const grid=await cards.evaluateAll(nodes=>nodes.map(node=>{
@@ -112,8 +108,8 @@ try {
         const sell=page.locator('.fyers-ref-scalp-order-actions .fyers-ref-scalp-sell');
         assert.equal(await buy.count(),1,'Only one Mentor-directed Scalp BUY button');
         assert.equal(await sell.count(),1,'Independent Scalp SELL remains available');
-        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-actions input[type="checkbox"]').count(),0,
-          'No duplicate scalp automation switches outside Settings');
+        assert.equal(await page.locator('.fyers-ref-scalp .fyers-ref-actions input[role="switch"]').count(),2,
+          'Scalp shows the two practice automation switches from the design');
         assert.equal(await buy.isDisabled(),true,'Isolated non-qualified scalp cannot buy');
         assert.ok(/PRACTICE BUY (CE|PE)|PRACTICE BUY · WAIT/.test(await buy.innerText()),
           'Scalp BUY derives side from Mentor, not two selectable buttons');
@@ -122,8 +118,8 @@ try {
         if(mobile){console.log('Dock geometry',JSON.stringify({width,dock,nav:bounds}));assert.ok(dock.y+dock.height<=bounds.y+1,'Action dock is above bottom navigation');}
       }
       if(label==='core'){
-        assert.equal(await page.locator('.fyers-ref-core .fyers-ref-actions input[type="checkbox"]').count(),0,
-          'Core automation switches only live in Settings');
+        assert.equal(await page.locator('.fyers-ref-core .fyers-ref-actions input[role="switch"]').count(),2,
+          '13-point shows the two practice automation switches from the design');
       }
       if(label==='core' && mobile){
         const chart=await page.locator('.fyers-ref-chart .nifty-chart-canvas').boundingBox();

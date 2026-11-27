@@ -49,6 +49,7 @@ import './premium-design-v60.css';
 import './fyers-reference-v61.css';
 import './fyers-reference-v62.css';
 import './fyers-reference-v63.css';
+import './fyers-redesign-v64.css';
 import SignInScreen from './components/SignInScreen.jsx';
 import TradingLoginReturn from './components/TradingLoginReturn.jsx';
 import { RETURN_PATH } from './services/tradingLogin.js';

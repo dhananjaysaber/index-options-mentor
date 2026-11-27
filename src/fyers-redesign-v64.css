@@ -1,0 +1,68 @@
+/* Redesign layer: loaded last. */
+html[data-theme] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-canvas-wrap{height:auto!important;max-height:none!important;min-height:0!important;overflow:visible!important;background:transparent!important;touch-action:pan-y!important}
+html[data-theme] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-canvas-wrap .nifty-chart-canvas{width:100%!important;min-width:0!important;height:340px!important;min-height:340px!important;max-height:340px!important;aspect-ratio:auto!important;color:#9AA3B2;touch-action:pan-y!important}
+html[data-theme='light'] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-canvas-wrap .nifty-chart-canvas{color:#4b5565}
+html[data-theme] #root .premium-design-shell .nifty-chart-zoom{display:flex;gap:6px;justify-content:flex-end;padding:6px 4px}
+html[data-theme] #root .premium-design-shell .nifty-chart-zoom button{min-width:40px;min-height:32px;border-radius:8px;border:1px solid rgba(138,148,166,.35);background:transparent;color:inherit;font-weight:700;font-size:13px;padding:4px 10px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters button small{opacity:.65;margin-left:2px}
+@media (max-width:700px){html[data-theme] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-canvas-wrap .nifty-chart-canvas{height:290px!important;min-height:290px!important;max-height:290px!important}}
+/* Chart toolbar: all timeframes on one row */
+html[data-theme] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-timeframe-tabs{display:flex!important;flex-wrap:nowrap!important;width:auto!important;flex:none!important}
+/* Practice automation switches beside the practice buttons */
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-row{display:flex;gap:18px;flex-wrap:wrap;margin:6px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch{display:flex;align-items:center;gap:8px;min-height:32px;font-size:12px;position:relative;cursor:pointer}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch input{position:absolute;opacity:0;width:36px;height:22px;margin:0;cursor:pointer}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch i{width:36px;height:20px;border-radius:12px;background:#394252;position:relative;flex:none}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch i::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch input:checked+i{background:#2ECC8F}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch input:checked+i::after{left:19px}
+html[data-theme] #root .premium-design-shell .fyers-ref-auto-switch input:focus-visible+i{outline:2px solid #8FB0FF;outline-offset:2px}
+html[data-theme] #root .premium-design-shell .fyers-ref-scalp-buy small{display:block;font-size:11px;font-weight:600}
+/* Desktop bottom table tabs */
+html[data-theme] #root .premium-design-shell .fyers-ref-position-head [role='tablist']{display:flex;gap:6px}
+html[data-theme] #root .premium-design-shell .fyers-ref-position-head [role='tab']:not(.active),html[data-theme] #root .premium-design-shell .fyers-ref-position-head .fyers-ref-open-all{background:transparent!important;color:#9AA3B2!important}
+html[data-theme] #root .premium-design-shell .fyers-ref-list-row{display:grid;grid-template-columns:1.4fr 1fr 1.6fr;gap:10px;padding:12px 4px;border-top:1px solid rgba(138,148,166,.18);font-size:12px}
+html[data-theme] #root .premium-design-shell .fyers-ref-list-empty{padding:16px 4px;opacity:.7;font-size:12px}
+/* Journal: labelled filter rows, then list + insights */
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters>div{align-items:center}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters>div>b{font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.65;min-width:92px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:start}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights{display:grid;gap:12px;min-width:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights h3{font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin:0 0 8px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights p{font-size:12px;margin:6px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights .fyers-ref-card{padding:14px}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights dl{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights dt{font-size:11px;opacity:.65}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights dd{margin:2px 0 0;font-weight:700}
+html[data-theme] #root .premium-design-shell .fyers-ref-type-row{display:grid;grid-template-columns:96px 34px 1fr auto;gap:8px;align-items:center;font-size:12px;padding:5px 0}
+html[data-theme] #root .premium-design-shell .fyers-ref-type-row i{height:5px;border-radius:3px;background:rgba(138,148,166,.2);overflow:hidden}
+html[data-theme] #root .premium-design-shell .fyers-ref-type-row i b{display:block;height:100%}
+html[data-theme] #root .premium-design-shell .fyers-ref-type-row i b.up{background:#2ECC8F}
+html[data-theme] #root .premium-design-shell .fyers-ref-type-row i b.down{background:#F0616D}
+html[data-theme] #root .premium-design-shell .fyers-ref-journal-insights button{margin-top:8px;background:transparent;border:0;color:#6f96ff;padding:6px 0;font-size:12px;text-align:left}
+@media (min-width:1200px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal-layout{grid-template-columns:minmax(0,1fr) 340px}
+ /* The narrower list keeps its columns readable */
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal-layout .history-pnl strong{white-space:nowrap;font-size:14px}
+}
+/* Desktop pages that were not in the mock-ups use the full workspace */
+@media (min-width:1024px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-page.fyers-ref-positions{max-width:none}
+ html[data-theme] #root .premium-design-shell .fyers-ref-page.fyers-ref-settings{max-width:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;align-items:start}
+ html[data-theme] #root .premium-design-shell .fyers-ref-settings>h1,html[data-theme] #root .premium-design-shell .fyers-ref-settings>p,html[data-theme] #root .premium-design-shell .fyers-ref-settings>:not(.fyers-ref-settings-group):not(h1):not(p){grid-column:1/-1}
+ html[data-theme] #root .premium-design-shell .fyers-ref-page.fyers-ref-detail,html[data-theme] #root .premium-design-shell .fyers-ref-page.fyers-ref-ticket{max-width:900px;margin-inline:auto}
+}
+/* Phone: market context in the header, shorter chart, one swipeable row per filter */
+@media (max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-context{display:flex!important;gap:10px;font-size:10px;white-space:nowrap}
+ html[data-theme] #root .premium-design-shell .nifty-strategy-chart .nifty-chart-canvas-wrap .nifty-chart-canvas{height:240px!important;min-height:240px!important;max-height:240px!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters>div{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters>div>b{min-width:62px;flex:none}
+ html[data-theme] #root .premium-design-shell .fyers-ref-journal-filters button{flex:none;white-space:nowrap}
+ html[data-theme] #root .premium-design-shell .fyers-ref-auto-row{gap:12px;margin:2px 0}
+}
+@media (max-width:900px){
+ html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-ticker{gap:0!important}
+ html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-context{position:static!important;order:2!important;width:auto!important;height:auto!important;margin:0!important;line-height:1.2;color:#9AA3B2}
+ html[data-theme] #root .premium-design-shell .fyers-ref-mobile-header .premium-market-symbol{line-height:1.15}
+}

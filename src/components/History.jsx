@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { explainTrade } from '../services/researchAnalysis.js';
+import { tradeSource } from '../services/journalFilters.js';
 
 export default function History({ history }) {
   const [filter, setFilter] = useState('all');
@@ -43,7 +44,7 @@ export default function History({ history }) {
                     <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>
                   </div>
                   <div className="premium-history-prices"><span>₹{formatMoney(trade.entry)}</span><small>→ ₹{formatMoney(trade.exit)}</small></div>
-                  <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{trade.entryMethod || (trade.initiatedBy === 'MENTOR' ? 'AUTO' : trade.initiatedBy === 'USER' ? 'MANUAL' : 'UNSPECIFIED')} · {trade.executionMode === 'LIVE' || trade.mode === 'LIVE' ? 'REAL' : 'PAPER'}</small></div>
+                  <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{tradeSource(trade).toUpperCase()} · {trade.executionMode === 'LIVE' || trade.mode === 'LIVE' ? 'REAL' : 'PAPER'}</small></div>
                   <div className="history-card-open-hint"><span>View position details</span><i aria-hidden="true" /></div>
                 </summary>
 
@@ -155,7 +156,7 @@ function SummaryMetric({ label, value, tone = '' }) {
   return <div className={`history-summary-card ${tone}`}><span>{label}</span><strong>{value}</strong></div>;
 }
 
-function dedupeHistory(history) {
+export function dedupeHistory(history) {
   const rows = Array.isArray(history) ? history : [];
   const map = new Map();
 

@@ -10,7 +10,9 @@ import CoreQuickActions from './CoreQuickActions.jsx';
 import PositionAlertBanner from './PositionAlertBanner.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import { freshOptionMark } from '../services/optionQuoteFreshness.js';
-import History from './History.jsx';
+import History, { dedupeHistory } from './History.jsx';
+import { filterJournal, STRATEGY_FILTERS, SOURCE_FILTERS, TAG_FILTERS, isScalpRecord, tradeSource } from '../services/journalFilters.js';
+import JournalInsights from './JournalInsights.jsx';
 import SettingsPanel from './SettingsPanel.jsx';
 
 const fmt = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value))
@@ -57,6 +59,11 @@ export function FyersMarketContext({ snapshot }) {
 function PracticeNote() {
   return <div className="fyers-ref-notice" role="note">PRACTICE ONLY · these buttons send nothing to FYERS. Real money: Settings → Your trading connection.</div>;
 }
+// Same saved practice settings as Settings → Paper automation. Real automatic buying is a separate server switch.
+function PracticeAutoSwitches({ settings, onSetting, openKey, closeKey, openOn, closeOn, name }) {
+  const item = (key, text, isOn) => <label className="fyers-ref-auto-switch"><input type="checkbox" role="switch" checked={Boolean(isOn)} aria-label={`${name} practice ${text}`} onChange={event=>onSetting?.(key,event.target.checked)}/><i aria-hidden="true"/><span>Practice {text}</span></label>;
+  return <div className="fyers-ref-auto-row">{item(openKey,'auto entry',openOn)}{item(closeKey,'auto close',closeOn)}</div>;
+}
 function FyersCoreDecision({ snapshot, liveQuote, settings, onDetail, onTicket, marketDataReady, mode }) {
   const s = snapshot || {};
   const classification = classifyResearchSetup(snapshot);
@@ -100,12 +107,20 @@ function Pnl({ position, quote }) {
   const pnl = last != null && entry != null ? (last - entry) * Number(position.quantity || 0) : null;
   return <strong title={pnl == null ? 'Option quote is stale or missing. Previous profit is not live.' : 'Estimated paper P&L at last-traded price, before charges; not a guaranteed broker fill.'} className={pnl == null ? '' : pnl >= 0 ? 'positive' : 'danger'}>{pnl == null ? '—' : (pnl >= 0 ? '+' : '−') + money(Math.abs(pnl))}</strong>;
 }
-function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, onExit }) {
+function FyersPositionStrip({ corePosition, scalpPosition, coreMentor, scalpMentor, history, liveQuote, onOpen, onExit }) {
+  const [tab,setTab] = useState('open');
+  const today = dedupeHistory(history).filter(row=>row.closedAt && new Date(row.closedAt).toDateString()===new Date().toDateString());
+  const alerts = [['13-POINT',corePosition,coreMentor],['SCALP',scalpPosition,scalpMentor]].filter(([,position,mentor])=>position && mentor?.alertLevel && mentor.alertLevel!=='none');
   const core = corePosition, scalp = scalpPosition;
   const rows = [['13-POINT',core,'core'],['SCALP',scalp,'scalp']];
   return <section className="fyers-ref-card fyers-ref-position-strip">
-    <div className="fyers-ref-position-head"><button type="button" onClick={onOpen}>Open positions · {Number(Boolean(core)) + Number(Boolean(scalp))}</button><span>Core and Scalp · independent slots</span></div>
-    <div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>Fresh LTP</span><span>Est. P&L</span><span></span></div>
+    <div className="fyers-ref-position-head">
+      <div role="tablist" aria-label="Positions, trades and alerts">{[['open','Open positions',Number(Boolean(core)) + Number(Boolean(scalp))],['today',"Today's trades",today.length],['alerts','Alerts',alerts.length]].map(([id,text,total])=><button type="button" role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>setTab(id)} key={id}>{text} · {total}</button>)}</div>
+      <button type="button" className="fyers-ref-open-all" onClick={onOpen}>All positions ›</button>
+    </div>
+    {tab==='today' && (today.length ? today.map((row,index)=><div className="fyers-ref-list-row" key={row.id||index}><strong>{row.symbol}</strong><span>{isScalpRecord(row)?'Scalp':'13-Point'} · {tradeSource(row).toUpperCase()}</span><span className={Number(row.pnl)>=0?'positive':'danger'}>{Number(row.pnl)>=0?'+':'−'}{money(Math.abs(Number(row.pnl)||0))}</span></div>) : <p className="fyers-ref-list-empty">No completed practice trades today.</p>)}
+    {tab==='alerts' && (alerts.length ? alerts.map(([name,position,mentor])=><div className="fyers-ref-list-row" key={name}><strong>{mentor.title}</strong><span>{name} · {position.symbol}</span><span>{mentor.reason || mentor.copy || ''}</span></div>) : <p className="fyers-ref-list-empty">No alerts for open practice positions.</p>)}
+    {tab==='open' && <><div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>Fresh LTP</span><span>Est. P&L</span><span></span></div>
     {rows.map(([name,position,strategy])=>{
       const mark = position ? freshOptionMark(liveQuote, position.symbol) : null;
       return <div className="fyers-ref-position-row" key={strategy}>
@@ -113,16 +128,16 @@ function FyersPositionStrip({ corePosition, scalpPosition, liveQuote, onOpen, on
       <span>{position?.quantity ?? '—'}</span><span>{position ? money(position.entry) : '—'}</span>
       <span title={position && !mark ? 'Stale or missing option quote; previous LTP is not live' : 'Current option last-traded price, not executable bid'}>{position ? mark ? money(mark.price) : '—' : '—'}</span><Pnl position={position} quote={liveQuote}/>
       <button type="button" disabled={!position} title="Simulation only. This button does not submit a FYERS sell order." onClick={() => onExit(strategy, { closedBy:'USER', reasonCode:'MANUAL_EXIT', reason:'Manual simulated exit from positions table.' })}>PRACTICE SELL</button>
-    </div>})}
+    </div>})}</>}
   </section>;
 }
-export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, history, onTakeTrade, onExit, onNavigate, alertsEnabled }) {
+export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketDataReady, corePosition, scalpPosition, coreMentor, scalpMentor, history, onTakeTrade, onExit, onNavigate, onSetting, alertsEnabled }) {
   return <div className="fyers-ref-page fyers-ref-core">
     <div className="fyers-ref-trade-grid">
       <div className="fyers-ref-chart-column">
-        <div className="fyers-ref-chart"><TraderMarketPanel snapshot={snapshot} availableTimeframes={['3','5','15']} /></div>
+        <div className="fyers-ref-chart"><TraderMarketPanel snapshot={snapshot} availableTimeframes={['1','3','5','15']} /></div>
         <div className="fyers-ref-livepath"><MentorWorkflow snapshot={snapshot}/></div>
-        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={scalpPosition} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
+        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={scalpPosition} coreMentor={coreMentor} scalpMentor={scalpMentor} history={history} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
       </div>
       <div className="fyers-ref-decision-column">
         {corePosition && <PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('core',{...meta,closedBy:'USER'})}/>}
@@ -132,13 +147,14 @@ export function FyersCoreTrade({ snapshot, liveQuote, settings, mode, marketData
         <div className="fyers-ref-actions">
 
           <PracticeNote/>
+          <PracticeAutoSwitches name="13-Point" settings={settings} onSetting={onSetting} openKey="mentorAutoOpen" closeKey="mentorAutoClose" openOn={settings.mentorAutoOpen} closeOn={settings.mentorAutoClose}/>
           <CoreQuickActions snapshot={snapshot} liveQuote={liveQuote} marketDataReady={marketDataReady} settings={settings} position={corePosition} onTakeTrade={onTakeTrade} onExit={meta=>onExit('core',meta)}/>
         </div>
       </div>
     </div>
   </div>;
 }
-export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, liveQuote, history, alertsEnabled, onTakeTrade, onExit, onNavigate }) {
+export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, positionMentor, marketDataReady, settings, liveQuote, history, alertsEnabled, coreMentor, onTakeTrade, onExit, onNavigate, onSetting }) {
   const ev = evaluation || {};
   const checks = Array.isArray(ev.checks) ? ev.checks : [];
   const option = snapshot?.option || {};
@@ -156,8 +172,8 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
   return <div className="fyers-ref-page fyers-ref-scalp">
     <div className="fyers-ref-scalp-grid">
       <div className="fyers-ref-chart-column">
-        <section className="fyers-ref-card fyers-ref-scalp-chart"><NiftyStrategyChart snapshot={snapshot} position={position} defaultTimeframe="3" strategyNote="5m context · 3m execution" availableTimeframes={['3','5']} /></section>
-        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={position} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
+        <section className="fyers-ref-card fyers-ref-scalp-chart"><NiftyStrategyChart snapshot={snapshot} position={position} defaultTimeframe="3" strategyNote="5m context · 3m execution" availableTimeframes={['1','3','5']} /></section>
+        <div className="fyers-ref-desktop-positions"><FyersPositionStrip corePosition={corePosition} scalpPosition={position} coreMentor={coreMentor} scalpMentor={positionMentor} history={history} liveQuote={liveQuote} onOpen={()=>onNavigate('position')} onExit={onExit}/></div>
       </div>
       <div className="fyers-ref-decision-column">
         {position && <><PositionAlertBanner position={position} mentor={positionMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('scalp',{...meta,closedBy:'USER'})}/><LivePositionPanel position={position} onExit={meta=>onExit('scalp',meta)} history={history} snapshot={snapshot}/></>}
@@ -174,9 +190,11 @@ export function FyersScalpTrade({ snapshot, evaluation, position, corePosition, 
         <div className="fyers-ref-actions">
 
           <PracticeNote/>
+          <PracticeAutoSwitches name="Scalp" settings={settings} onSetting={onSetting} openKey="scalpAutoOpen" closeKey="scalpAutoClose" openOn={settings.scalpAutoOpen !== false} closeOn={settings.scalpAutoClose !== false}/>
           <div className="fyers-ref-scalp-order-actions">
             <button type="button" className="fyers-ref-scalp-buy" disabled={!ready} onClick={manual} aria-label={selectedSide ? `Practice buy Mentor-selected ${selectedSide} scalp` : 'Practice buy: wait for Mentor scalp direction'}>
-              {selectedSide ? `PRACTICE BUY ${selectedSide}` : 'PRACTICE BUY · WAIT'}
+              <span>{selectedSide ? `PRACTICE BUY ${selectedSide}` : 'PRACTICE BUY · WAIT'}</span>
+              {ready && <small>{sizing.lots} {sizing.lots === 1 ? 'lot' : 'lots'} · {money(sizing.premiumCost)}</small>}
             </button>
             <button className="fyers-ref-scalp-sell" type="button" disabled={!position} onClick={()=>onExit('scalp',{closedBy:'USER',reasonCode:'MANUAL_EXIT',reason:'Manual scalp exit'})}>PRACTICE SELL</button>
           </div>
@@ -231,17 +249,19 @@ export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPositi
 export function FyersJournal({ history, onNavigate }) {
   const [source,setSource]=useState('all');
   const [strategy,setStrategy]=useState('all');
-  const rows=Array.isArray(history)?Array.from(new Map(history.filter(x=>x?.id).map(x=>[x.id,x])).values()):[];
-  const filtered=rows.filter(row=>{
-    const scalp = row.strategyFamily==='SCALP'||row.strategyTier==='SCALP';
-    const src = row.entryMethod || (row.initiatedBy==='MENTOR'?'AUTO':row.initiatedBy==='USER'?'MANUAL':'');
-    const shadow = /SHADOW/i.test(String(row.source||'')+' '+String(row.strategyTier||'')+' '+String(row.initiatedBy||''));
-    return (strategy==='all'||(strategy==='scalp'?scalp:!scalp)) && (source==='all'||(source==='shadow'?shadow:source===src.toLowerCase()&&!shadow));
-  });
+  const [tag,setTag]=useState('all');
+  // Remove repeated copies first, then filter, so the filtered counts add up to "All".
+  const rows=dedupeHistory(history);
+  const filtered=filterJournal(rows,{strategy,source,tag});
+  const pills=(label,options,value,choose,countKey)=><div role="group" aria-label={label}><b>{label}</b>{options.map(([v,text])=>{
+    const count=filterJournal(rows,{strategy,source,tag,[countKey]:v}).length;
+    if(v==='other'&&!count&&value!==v) return null;
+    return <button type="button" className={value===v?'active':''} aria-pressed={value===v} onClick={()=>choose(v)} key={v}>{text} <small>{count}</small></button>;
+  })}</div>;
   return <div className="fyers-ref-page fyers-ref-journal"><div className="fyers-ref-journal-title"><h1>Trade journal</h1><p>Permanent learning loop</p></div>
     <div className="fyers-ref-segment"><button className="active" type="button">Journal</button><button type="button" onClick={()=>onNavigate('analysis')}>Analysis</button></div>
-    <div className="fyers-ref-journal-filters"><div>{[['all','All'],['core','13-point'],['scalp','Scalp']].map(([v,label])=><button type="button" className={strategy===v?'active':''} onClick={()=>setStrategy(v)} key={v}>{label}</button>)}</div><div>{[['all','Any source'],['auto','Auto'],['shadow','Shadow'],['manual','Manual']].map(([v,label])=><button type="button" className={source===v?'active':''} onClick={()=>setSource(v)} key={v}>{label}</button>)}</div></div>
-    <History history={filtered}/>
+    <div className="fyers-ref-journal-filters">{pills('Strategy',STRATEGY_FILTERS,strategy,setStrategy,'strategy')}{pills('Source',SOURCE_FILTERS,source,setSource,'source')}{pills('Strategy tag',TAG_FILTERS,tag,setTag,'tag')}</div>
+    <div className="fyers-ref-journal-layout"><History history={filtered}/><JournalInsights trades={filtered} onNavigate={onNavigate}/></div>
   </div>;
 }
 export function FyersSettings({ settings, onSave, brokerStatus, mode }) {

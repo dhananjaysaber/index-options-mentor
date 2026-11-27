@@ -44,7 +44,7 @@ export default function CoreQuickActions({ snapshot, liveQuote, marketDataReady 
       </div>
       <button type="button" className="strategy-quick-buy" disabled={Boolean(position) || !manualReady} onClick={openManual}>
         <span>PRACTICE BUY</span>
-        <small>{position ? 'Position open' : manualReady ? 'Open practice trade' : 'Waiting'}</small>
+        <small>{position ? 'Position open' : manualReady ? `${snapshot?.option?.optionType || ''} · ${sizing.lots} ${sizing.lots === 1 ? 'lot' : 'lots'} · ₹${Number(sizing.premiumCost || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : 'Waiting'}</small>
       </button>
       <button type="button" className="strategy-quick-sell" disabled={!position} onClick={sell}>
         <span>PRACTICE SELL</span>

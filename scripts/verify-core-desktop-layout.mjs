@@ -18,6 +18,7 @@ try{
     const path=new URL(route.request().url()).pathname;
     let data={ok:true,trades:[],candles:[]};
     if(path.endsWith('/status'))data={configured:true,authenticated:true};
+    if(path.endsWith('/history'))data={candles:Array.from({length:24},(_,i)=>[Math.floor(Date.now()/1000)-((24-i)*300),25520+i,25530+i,25515+i,25525+i,1000])};
     if(path.endsWith('/mentor-snapshot'))data={ok:true,live:true,generatedAt:new Date().toISOString(),market:{phase:'LIVE',sessionDate:'2026-11-25',spot:25550,vwap:25540,orh:25580,orl:25520,pdh:25600,pdl:25400,atr5:25},decision:{state:'WAIT',side:'CE',score:50,rr:1,canSuggestTrade:false,reasons:['Synthetic layout fixture']},option:{symbol:'NSE:NIFTY26D0126000CE',optionType:'CE',strike:26000,ltp:150,lotSize:65},setup:{},structure:{underlyingStop:25520,underlyingTarget:25580,riskPoints:30},parameters:['chop','trend','vwap','risk','liquidity','orb','close','retest','pd','volume','momentum','htf','time'].map((id,i)=>({id,label:id,mandatory:i<5,value:50,status:'red',gatePassed:false}))};
     if(path.endsWith('/quote'))data={d:[{n:'NSE:NIFTY50-INDEX',v:{lp:25550}},{n:'NSE:NIFTY26D0126000CE',v:{lp:150}}]};
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -60,11 +61,12 @@ try{
   const box=await canvas.boundingBox();
   assert.ok(box,'Live chart is visible');
   await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  // Like a trading chart: the wheel over the chart zooms it, and the page stays where it is.
+  await page.locator('.fyers-ref-chart .nifty-chart-canvas canvas').first().waitFor({state:'visible'});
   const beforeScroll=await page.evaluate(()=>scrollY);
   await page.mouse.wheel(0,260);
-  await page.waitForFunction(before=>scrollY>before+25,beforeScroll);
-  const chain=await canvas.evaluate(svg=>getComputedStyle(svg.parentElement).overscrollBehaviorY);
-  assert.equal(chain,'auto','Chart must not trap wheel scrolling');
+  await page.waitForTimeout(400);
+  assert.ok(Math.abs(await page.evaluate(()=>scrollY)-beforeScroll)<25,'Wheel over the chart zooms instead of scrolling the page');
   await page.setViewportSize({width:390,height:844});
   await page.locator('.fyers-ref-decision').waitFor({state:'visible'});
   const mb=await plan.boundingBox(), cb=await chart.boundingBox();

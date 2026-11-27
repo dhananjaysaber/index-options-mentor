@@ -1,18 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import CandleCanvas from './CandleCanvas.jsx';
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import { FYERS_REFRESH, isNseMarketHours } from '../services/fyersRefreshPolicy.js';
 import { assessMarketFreshness } from '../services/marketFreshness.js';
 
+// Display only. visibleCandles is the starting zoom; the user can zoom and scroll from there.
 const TIMEFRAMES = {
-  '3': { label: '3m', shortLabel: '3m', seconds: 180, maxCandles: 84, visibleCandles: 56, rightPaddingSlots: 7 },
-  '5': { label: '5m', shortLabel: '5m', seconds: 300, maxCandles: 64, visibleCandles: 48, rightPaddingSlots: 6 },
-  '15': { label: '15m', shortLabel: '15m', seconds: 900, maxCandles: 32, visibleCandles: 28, rightPaddingSlots: 5 }
+  '1': { label: '1m', shortLabel: '1m', seconds: 60, maxCandles: 1900, visibleCandles: 60 },
+  '3': { label: '3m', shortLabel: '3m', seconds: 180, maxCandles: 700, visibleCandles: 56 },
+  '5': { label: '5m', shortLabel: '5m', seconds: 300, maxCandles: 420, visibleCandles: 48 },
+  '15': { label: '15m', shortLabel: '15m', seconds: 900, maxCandles: 160, visibleCandles: 40 }
 };
+// Calendar days of earlier candles to load, so there is something to scroll back to over a weekend.
+const LOOKBACK_DAYS = 5;
+const NO_CANDLES = [];
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', lineMode = false, availableTimeframes = ['3', '5'] }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', availableTimeframes = ['1', '3', '5'] }) {
   const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
-  const [candles, setCandles] = useState([]);
+  const [loaded, setLoaded] = useState({ key: '', rows: [] });
+  const [hovered, setHovered] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now());
@@ -24,9 +31,13 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     return () => window.clearInterval(timer);
   }, []);
 
+  const viewKey = `${sessionDate}:${timeframe}`;
+  // Never draw one timeframe's candles under another timeframe's button.
+  const candles = loaded.key === viewKey ? loaded.rows : NO_CANDLES;
+
   useEffect(() => {
     if (!sessionDate) {
-      setCandles([]);
+      setLoaded({ key: '', rows: [] });
       setError('');
       return undefined;
     }
@@ -34,12 +45,12 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     let cancelled = false;
 
     const load = async () => {
-      setLoading(current => current || candles.length === 0);
+      setLoading(true);
       try {
         const params = new URLSearchParams({
           symbol: 'NSE:NIFTY50-INDEX',
           resolution: timeframe,
-          from: sessionDate,
+          from: daysBefore(sessionDate, LOOKBACK_DAYS),
           to: sessionDate
         });
         const response = await fetch(`/api/fyers/history?${params.toString()}`, { cache: 'no-store' });
@@ -51,7 +62,7 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
           .filter(Boolean)
           .slice(-timeframeConfig.maxCandles);
         if (!cancelled) {
-          setCandles(parsed);
+          setLoaded({ key: viewKey, rows: parsed });
           setError(parsed.length ? '' : `No ${timeframeConfig.label} candles are available yet.`);
         }
       } catch (err) {
@@ -75,17 +86,19 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
     ?? priceOrNull(position?.underlyingCurrent)
     ?? priceOrNull(snapshot?.market?.spot);
   const liveTimestamp = liveQuote?.at ? new Date(liveQuote.at).getTime() : now;
+  const marketOpen = isNseMarketHours();
+  // Outside market hours the last price must not be drawn as a new candle.
   const displayCandles = useMemo(
-    () => mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles),
-    [candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
+    () => (candles.length && marketOpen
+      ? mergeLiveCandle(candles, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles)
+      : candles),
+    [candles, marketOpen, liveSpot, liveTimestamp, timeframeConfig.seconds, timeframeConfig.maxCandles]
   );
-  const chart = useMemo(
-    () => buildChartModel(displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots),
-    [displayCandles, snapshot, position, timeframeConfig.visibleCandles, timeframeConfig.rightPaddingSlots]
-  );
+  const levels = strategyLevels(snapshot, position);
   const side = position?.side || snapshot?.decision?.side || '';
   const retest = snapshot?.setup?.retestStatus || 'NOT_STARTED';
   const latest = displayCandles.at(-1) || null;
+  const shown = hovered || latest;
   const countdown = formatCountdown(secondsToBoundary(now, timeframeConfig.seconds));
   const change = latest ? latest.close - latest.open : null;
   const changePct = latest && latest.open ? (change / latest.open) * 100 : null;
@@ -124,12 +137,12 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         <span className="nifty-live-countdown">CANDLE {countdown}</span>
       </div>
 
-      {latest && (
+      {shown && (
         <div className="nifty-ohlc-strip">
-          <span>O <strong>{formatPrice(latest.open)}</strong></span>
-          <span>H <strong>{formatPrice(latest.high)}</strong></span>
-          <span>L <strong>{formatPrice(latest.low)}</strong></span>
-          <span>C <strong>{formatPrice(latest.close)}</strong></span>
+          <span>O <strong>{formatPrice(shown.open)}</strong></span>
+          <span>H <strong>{formatPrice(shown.high)}</strong></span>
+          <span>L <strong>{formatPrice(shown.low)}</strong></span>
+          <span>C <strong>{formatPrice(shown.close)}</strong></span>
         </div>
       )}
 
@@ -137,53 +150,10 @@ export default function NiftyStrategyChart({ snapshot, position = null, compact 
         <div className="nifty-chart-empty">Loading {timeframeConfig.label} candles…</div>
       ) : error && !displayCandles.length ? (
         <div className="nifty-chart-empty">{error}</div>
-      ) : chart ? (
+      ) : displayCandles.length ? (
         <>
-          <div className="nifty-chart-canvas-wrap">
-            <svg className="nifty-chart-canvas" viewBox="0 0 920 390" preserveAspectRatio="xMidYMid meet" role="img" aria-label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`}>
-              <rect x="0" y="0" width="920" height="390" className="nifty-chart-bg" />
-
-              {chart.grid.map((row, index) => (
-                <g key={`grid-${index}`}>
-                  <line x1="42" x2="824" y1={row.y} y2={row.y} className="nifty-chart-grid" />
-                  <text x="840" y={row.y + 4} className="nifty-chart-price-label">{formatPrice(row.value)}</text>
-                </g>
-              ))}
-
-              {chart.levels.map(level => (
-                <g key={level.key} className={`nifty-level nifty-level-${level.kind}`}>
-                  <line x1="42" x2="824" y1={level.y} y2={level.y} className="nifty-level-line" />
-                  <rect x="48" y={level.y - 9} width={level.labelWidth} height="18" rx="5" className="nifty-level-pill" />
-                  <text x="54" y={level.y + 3} className="nifty-level-label">{level.label}</text>
-                </g>
-              ))}
-
-              {lineMode ? (
-                <polyline className="fyers-ref-price-line"
-                  points={chart.candles.map(candle => `${candle.x},${candle.close >= candle.open ? candle.bodyY : candle.bodyY + candle.bodyHeight}`).join(' ')}
-                  fill="none" stroke="#2ECC8F" strokeWidth="2.8" strokeLinejoin="round" strokeLinecap="round"
-                />
-              ) : chart.candles.map(candle => (
-                <g key={candle.key} className={candle.close >= candle.open ? 'nifty-candle bullish' : 'nifty-candle bearish'}>
-                  <line x1={candle.x} x2={candle.x} y1={candle.highY} y2={candle.lowY} className="nifty-candle-wick" />
-                  <rect x={candle.x - candle.bodyWidth / 2} y={candle.bodyY} width={candle.bodyWidth} height={candle.bodyHeight} rx="1" className="nifty-candle-body" />
-                </g>
-              ))}
-
-              {chart.timeLabels.map(label => (
-                <text key={label.key} x={label.x} y="374" textAnchor="middle" className="nifty-chart-time-label">{label.label}</text>
-              ))}
-
-              {chart.current && (
-                <g className="nifty-current-price-line">
-                  <line x1="42" x2="824" y1={chart.current.y} y2={chart.current.y} />
-                  <rect x="824" y={chart.current.y - 22} width="92" height="44" rx="5" />
-                  <text x="832" y={chart.current.y - 3} className="nifty-current-price-value">{formatPrice(chart.current.value)}</text>
-                  <text x="832" y={chart.current.y + 14} className="nifty-current-countdown">{countdown}</text>
-                </g>
-              )}
-            </svg>
-          </div>
+          <CandleCanvas candles={displayCandles} levels={levels} viewKey={viewKey} visibleCandles={timeframeConfig.visibleCandles}
+            onHover={setHovered} label={`NIFTY ${timeframeConfig.label} candlestick chart with strategy levels`} />
 
           <div className="nifty-chart-level-strip">
             <LevelChip label="VWAP" value={snapshot?.market?.vwap} />
@@ -240,92 +210,22 @@ function mergeLiveCandle(rows, spot, timestampMs, timeframeSeconds, maxCandles) 
   return next.slice(-maxCandles);
 }
 
-function buildChartModel(rows, snapshot, position, visibleCount = 52, rightPaddingSlots = 6) {
-  if (!rows.length) return null;
+function strategyLevels(snapshot, position) {
+  return [
+    ['vwap', 'VWAP', snapshot?.market?.vwap],
+    ['orh', 'ORH', snapshot?.market?.orh],
+    ['orl', 'ORL', snapshot?.market?.orl],
+    ['entry', position ? 'ENTRY' : 'TRIGGER', position?.underlyingEntry ?? snapshot?.structure?.trigger],
+    ['stop', 'STOP', position?.underlyingStop ?? snapshot?.structure?.underlyingStop],
+    ['target', 'TARGET', position?.underlyingTarget ?? snapshot?.structure?.underlyingTarget]
+  ].map(([key, name, value]) => ({ key, name, value: priceOrNull(value) })).filter(level => level.value != null);
+}
 
-  const visibleRows = rows.slice(-visibleCount);
-  const width = 782;
-  const left = 42;
-  const right = 824;
-  const top = 18;
-  const bottom = 350;
-  const plotHeight = bottom - top;
-  const lows = visibleRows.map(row => row.low).filter(value => Number.isFinite(value) && value > 0);
-  const highs = visibleRows.map(row => row.high).filter(value => Number.isFinite(value) && value > 0);
-  if (!lows.length || !highs.length) return null;
-
-  let min = Math.min(...lows);
-  let max = Math.max(...highs);
-  const rawRange = Math.max(8, max - min);
-  min -= rawRange * 0.1;
-  max += rawRange * 0.1;
-  const range = Math.max(1, max - min);
-  const yFor = value => top + ((max - value) / range) * plotHeight;
-
-  // Keep a small "future" area to the right, like a broker chart.
-  // This keeps the newest candle clearly visible instead of pinning it
-  // underneath the live-price marker / right-hand price scale.
-  const dataSlots = visibleCount;
-  const futureSlots = Math.max(4, Number(rightPaddingSlots) || 6);
-  const totalSlots = dataSlots + futureSlots;
-  const spacing = width / totalSlots;
-  const offsetSlots = Math.max(0, dataSlots - visibleRows.length);
-  const bodyWidth = Math.max(4, Math.min(10, spacing * 0.62));
-
-  const candles = visibleRows.map((row, index) => {
-    const x = left + spacing * (offsetSlots + index) + spacing / 2;
-    const openY = yFor(row.open);
-    const closeY = yFor(row.close);
-    return {
-      ...row,
-      key: `${row.time}-${index}`,
-      x,
-      highY: yFor(row.high),
-      lowY: yFor(row.low),
-      bodyY: Math.min(openY, closeY),
-      bodyHeight: Math.max(2.2, Math.abs(openY - closeY)),
-      bodyWidth
-    };
-  });
-
-  const levelSpecs = [
-    ['vwap', 'VWAP', snapshot?.market?.vwap, 'context'],
-    ['orh', 'ORH', snapshot?.market?.orh, 'range'],
-    ['orl', 'ORL', snapshot?.market?.orl, 'range'],
-    ['trigger', position ? 'ENTRY' : 'TRIGGER', position?.underlyingEntry ?? snapshot?.structure?.trigger, 'entry'],
-    ['stop', 'INVALIDATION', position?.underlyingStop ?? snapshot?.structure?.underlyingStop, 'stop'],
-    ['target', 'TARGET', position?.underlyingTarget ?? snapshot?.structure?.underlyingTarget, 'target']
-  ];
-
-  const levels = levelSpecs
-    .map(([key, name, value, kind]) => ({ key, name, value: priceOrNull(value), kind }))
-    .filter(level => level.value != null && level.value >= min && level.value <= max)
-    .map(level => {
-      const label = `${level.name} ${formatPrice(level.value)}`;
-      return { ...level, y: yFor(level.value), label, labelWidth: Math.max(68, Math.min(148, 10 + label.length * 5.8)) };
-    });
-
-  const grid = Array.from({ length: 6 }, (_, index) => {
-    const value = max - (range * index) / 5;
-    return { value, y: yFor(value) };
-  });
-
-  const lastIndex = visibleRows.length - 1;
-  const timeIndexes = [...new Set([0, Math.floor(lastIndex / 3), Math.floor((lastIndex * 2) / 3), lastIndex])].filter(index => index >= 0);
-  const timeLabels = timeIndexes.map(index => ({
-    key: `time-${visibleRows[index].time}-${index}`,
-    x: left + spacing * (offsetSlots + index) + spacing / 2,
-    label: formatTime(visibleRows[index].time)
-  }));
-  const last = candles.at(-1);
-
-  return {
-    candles,
-    levels,
-    grid,
-    timeLabels,
-    current: { x: last.x, y: yFor(last.close), value: last.close }
-  };
+function daysBefore(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime())) return dateKey;
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
 }
 
 function secondsToBoundary(nowMs, intervalSeconds) {
@@ -339,12 +239,6 @@ function formatCountdown(seconds) {
   const min = Math.floor(value / 60);
   const sec = String(value % 60).padStart(2, '0');
   return `${String(min).padStart(2, '0')}:${sec}`;
-}
-
-function formatTime(epochSeconds) {
-  try {
-    return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(epochSeconds * 1000));
-  } catch { return ''; }
 }
 
 function formatPrice(value) {

@@ -754,13 +754,15 @@ export default function AppV3() {
               <FyersScalpTrade snapshot={snapshot} evaluation={scalpStatus} position={scalpPosition}
                 corePosition={corePosition} positionMentor={scalpMentor} marketDataReady={marketDataReady}
                 settings={settings} liveQuote={liveQuote} history={history}
-                alertsEnabled={alertsEnabled} onTakeTrade={takeTrade} onExit={exitStrategy} onNavigate={navigate} />
+                coreMentor={coreMentor} alertsEnabled={alertsEnabled} onTakeTrade={takeTrade} onExit={exitStrategy} onNavigate={navigate}
+                onSetting={(key,value)=>setSettings(previous=>({ ...previous, [key]:value }))} />
             ) : (
               <FyersCoreTrade snapshot={snapshot} liveQuote={liveQuote} settings={settings} mode={mode}
                 marketDataReady={marketDataReady}
                 corePosition={corePosition} scalpPosition={scalpPosition} coreMentor={coreMentor}
                 history={history} onTakeTrade={takeTrade} onExit={exitStrategy}
-                onNavigate={navigate} alertsEnabled={alertsEnabled}/>
+                scalpMentor={scalpMentor} onNavigate={navigate} alertsEnabled={alertsEnabled}
+                onSetting={(key,value)=>setSettings(previous=>({ ...previous, [key]:value }))}/>
             )}
           </>
         )}
