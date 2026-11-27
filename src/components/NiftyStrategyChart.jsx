@@ -6,7 +6,6 @@ import { assessMarketFreshness } from '../services/marketFreshness.js';
 
 // Display only. visibleCandles is the starting zoom; the user can zoom and scroll from there.
 const TIMEFRAMES = {
-  '1': { label: '1m', shortLabel: '1m', seconds: 60, maxCandles: 1900, visibleCandles: 60 },
   '3': { label: '3m', shortLabel: '3m', seconds: 180, maxCandles: 700, visibleCandles: 56 },
   '5': { label: '5m', shortLabel: '5m', seconds: 300, maxCandles: 420, visibleCandles: 48 },
   '15': { label: '15m', shortLabel: '15m', seconds: 900, maxCandles: 160, visibleCandles: 40 }
@@ -15,7 +14,7 @@ const TIMEFRAMES = {
 const LOOKBACK_DAYS = 5;
 const NO_CANDLES = [];
 
-export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', availableTimeframes = ['1', '3', '5'] }) {
+export default function NiftyStrategyChart({ snapshot, position = null, compact = false, defaultTimeframe = '5', strategyNote = '', availableTimeframes = ['3', '5'] }) {
   const liveQuote = useLiveQuote();
   const [timeframe, setTimeframe] = useState(TIMEFRAMES[defaultTimeframe] ? defaultTimeframe : '5');
   const [loaded, setLoaded] = useState({ key: '', rows: [] });

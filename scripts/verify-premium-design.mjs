@@ -41,8 +41,8 @@ try {
   assert.equal(await page.locator('.fyers-ref-core .nifty-chart-zoom button').count(),3,
     'core chart has zoom out, zoom in and latest buttons');
 
-  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),4,
-    'Core chart offers 1m, 3m, 5m and 15m');
+  assert.equal(await page.locator('.fyers-ref-core .nifty-chart-timeframe-tabs button').count(),3,
+    'Core chart offers 3m, 5m and 15m');
   for(const width of [1440,1920,1024,768,430,390,320]){
     await page.setViewportSize({width,height:1000});
     const mobile=width<=900;
@@ -91,8 +91,8 @@ try {
   assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-zoom button').count(),3,
     'scalp chart has zoom out, zoom in and latest buttons');
 
-        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),3,
-          'Scalp chart offers 1m, 3m and 5m');
+        assert.equal(await page.locator('.fyers-ref-scalp .nifty-chart-timeframe-tabs button').count(),2,
+          'Scalp chart offers 3m and 5m');
         const cards=page.locator('.fyers-ref-scalp .fyers-ref-dots.scalp .fyers-ref-dot');
         assert.equal(await cards.count(),7,'Scalp maintains all seven qualifying checks');
         const grid=await cards.evaluateAll(nodes=>nodes.map(node=>{
