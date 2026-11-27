@@ -138,12 +138,25 @@ class PartCaseTests(LotLimitCase):
         id=self.open_two();self.fill_part_of_stop();self.assertEqual(self.held(),65)
         for _ in range(4):self.cycle(219,4)
         self.assertEqual((self.held(),self.waiting_stops(),self.sale_quantities(),self.manager.get(id)['state']),(0,[],[65],'CLOSED'))
-    def test_part_filled_stop_cannot_move_up_but_the_app_still_sells_on_its_trail(self):
-        id=self.open_two();self.fill_part_of_stop()
-        for price in (231,245,260,261,262):status=self.cycle(price)
-        self.assertEqual(([r['stopPrice'] for r in self.stops() if r['status']==6],bool(status['attentionRequired']),self.held()),([220.0],True,65))
-        for _ in range(3):self.cycle(240)
-        self.assertEqual((self.held(),self.manager.get(id)['state'],self.sale_quantities()),(0,'CLOSED',[65]))
+    def test_part_filled_stop_gets_a_few_seconds_to_finish_itself(self):
+        id=self.open_two();self.fill_part_of_stop();self.cycle(231,1);self.cycle(231,1)
+        self.assertEqual((self.held(),self.waiting_stops(),self.sale_quantities()),(65,[130],[]))
+        stop=next(r for r in self.stops() if r['status']==6)
+        stop.update(status=2,filledQty=130,remainingQuantity=0);self.broker._write(stop,'REST_OF_STOP')
+        for _ in range(3):self.cycle(219,4)
+        self.assertEqual((self.held(),self.sale_quantities(),self.manager.get(id)['state']),(0,[],'CLOSED'))
+    def test_stop_still_part_filled_after_the_wait_sells_the_other_lot_even_if_price_recovered(self):
+        id=self.open_two();self.fill_part_of_stop();self.cycle(245,1)
+        for _ in range(4):self.cycle(245,4)
+        self.assertEqual((self.held(),self.waiting_stops(),self.sale_quantities(),self.manager.get(id)['state'],self.manager.get(id)['exit_reason']),
+                         (0,[],[65],'CLOSED','STOP_PART_FILLED'))
+    def test_part_filled_stop_is_not_sold_until_its_cancel_is_confirmed(self):
+        self.open_two();self.fill_part_of_stop();real=self.broker.cancel_order;self.broker.cancel_order=lambda i:{'s':'ok','id':i}
+        for _ in range(4):self.cycle(245,4)
+        self.assertEqual((self.held(),self.sale_quantities()),(65,[]))
+        self.broker.cancel_order=real
+        for _ in range(4):self.cycle(245,4)
+        self.assertEqual((self.held(),self.sale_quantities()),(0,[65]))
 
 
 class HandPartSaleTests(LotLimitCase):
@@ -156,6 +169,13 @@ class HandPartSaleTests(LotLimitCase):
     def wait(self,price=231,times=5):
         for _ in range(times):status=self.cycle(price)
         return status
+    def trade(self):return next(iter(self.runtime.status()['positions']))
+    def journal_rows(self):
+        with self.orders.transaction() as db:
+            return [json.loads(r['payload']) for r in db.execute('SELECT payload FROM live_journal_outbox')]
+    def restart(self):
+        self.manager=Manager(self.execution,self.journal)
+        self.runtime=Runtime(self.execution,self.manager,self.feed,self.market,clock=lambda:self.now,day_clock=self.runtime.day_clock)
     def app_sales(self):return [r for r in self.sells() if r['orderTag']]
     def stop_rows(self):return [(r['qty'],r['stopPrice'],r['limitPrice'],r['status']) for r in self.stops()]
     def modifies(self):return self.broker.calls('MODIFY')
@@ -171,24 +191,68 @@ class HandPartSaleTests(LotLimitCase):
         status=self.wait()
         self.assertEqual(self.stop_rows(),[(65,row[1],row[2],6)])
         self.assertEqual(self.counts(),(before[0],before[1],before[2]+1)) # one change; no new order or cancel
-        self.assertEqual(status['partSales'],[{'id':id,'symbol':self.symbol,'held':65,'stopQuantity':65,'stopReduced':True}])
-        self.assertTrue(status['attentionRequired']);self.assertTrue(self.orders.buy_in_use())
+        self.assertEqual(status['partSales'],[{'id':id,'symbol':self.symbol,'held':65,'stopQuantity':65,'stopReduced':True,'managing':True}])
+        self.assertTrue(self.orders.buy_in_use())
+        self.assertEqual((status['needsChecking'],json.loads(self.manager.get(id)['payload'])['quantity'],status['attentionRequired']),([],65,None))
         self.assertEqual(json.loads(self.orders.get(self.manager.get(id)['stop_intent'])['payload'])['qty'],65)
-        with self.assertRaisesRegex(ValueError,'CLOSED_OUTSIDE_APP_UNCLEAR'):self.runtime.request_exit(id)
-    def test_a_stop_already_moved_up_keeps_that_price_and_stops_trailing(self):
-        self.open_two()
+    def path(self,sell_by_hand,strategy='SCALP'):
+        """One price path; returns (stop price, state, exit reason) after each reading."""
+        id=self.prepared(strategy);self.runtime.submit(id)
         for price in (231,245,260):self.cycle(price)
-        moved=self.stop_rows()[0][1];self.assertGreater(moved,220)
-        self.by_hand();self.wait(260);self.assertEqual(self.stop_rows()[0][:2],(65,moved))
-        calls=self.counts();self.wait(300);self.assertEqual((self.stop_rows()[0][:2],self.counts()),((65,moved),calls))
-    def test_no_end_of_day_sale_for_the_locked_trade(self):
+        if sell_by_hand:self.by_hand()
+        self.wait(260,8)
+        seen=[]
+        for price in (262,266,275,274,290,300,297,296,285,270,255,250,245,240):
+            self.cycle(price);waiting=[r['stopPrice'] for r in self.stops() if r['status']==6]
+            seen.append((price,waiting,self.manager.get(id)['state'],self.manager.get(id)['exit_reason']))
+        return seen,[r['qty'] for r in self.app_sales()]
+    def test_trailing_restarts_with_exactly_the_same_prices_as_an_untouched_trade(self):
+        untouched=self.path(False);self.tearDown();self.setUp();resumed=self.path(True)
+        self.assertEqual(untouched[0],resumed[0])
+        self.assertGreater(len({tuple(x[1]) for x in untouched[0] if x[1]}),1) # the stop really did move
+        self.assertEqual((untouched[1],resumed[1],self.held()),([130],[65],0))
+    def test_13_point_trailing_prices_also_match_an_untouched_trade(self):
+        untouched=self.path(False,'CORE');self.tearDown();self.setUp();resumed=self.path(True,'CORE')
+        self.assertEqual(untouched[0],resumed[0])
+        self.assertGreater(len({tuple(x[1]) for x in untouched[0] if x[1]}),1)
+        self.assertEqual((untouched[1],resumed[1],self.held()),([130],[65],0))
+    def test_saved_profit_figures_shrink_with_the_quantity(self):
+        id=self.open_two()
+        for price in (231,245,260):self.cycle(price)
+        before=json.loads(self.manager.get(id)['payload']);self.by_hand()
+        self.cycle(260);self.cycle(260,6)
+        after=json.loads(self.manager.get(id)['payload'])
+        self.assertEqual((before['quantity'],after['quantity']),(130,65))
+        for name in ('peakUnrealizedPnl','optionTrailingFloorPnl','coreOptionTrailingFloorPnl'):
+            if before.get(name):self.assertAlmostEqual(after[name],before[name]/2)
+    def test_end_of_day_sells_the_one_lot_left(self):
+        id=self.open_two();self.by_hand();self.wait();self.runtime.day_clock=lambda:safety.ist(15,20);self.wait()
+        self.assertEqual((self.held(),[r['qty'] for r in self.app_sales()],self.manager.get(id)['state'],self.manager.get(id)['exit_reason']),(0,[65],'CLOSED','END_OF_DAY'))
+    def test_app_exit_works_again_and_the_journal_guesses_no_profit(self):
+        id=self.open_two();self.by_hand();self.wait();self.tick(231,6);self.runtime.request_exit(id);status=self.wait()
+        self.assertEqual((self.held(),[r['qty'] for r in self.app_sales()],self.manager.get(id)['state'],self.orders.buy_in_use()),(0,[65],'CLOSED',False))
+        (done,)=[e['trade'] for e in self.journal_rows() if e['id']==id+':OUTSIDE_CLOSE']
+        self.assertEqual((done['pnl'],done['exit'],done['grossPnl'],done['quantity'],done['closedOutsideQuantity'],done['appSoldQuantity'],done['needsChecking']),
+                         (None,None,None,130,65,65,True))
+        self.assertEqual([e for e in self.journal_rows() if e['id'] in (id+':EXIT',id+':CLOSED')],[])
+        with self.journal.connection() as db:saved=json.loads(db.execute('SELECT payload FROM trades').fetchone()[0])
+        self.assertEqual((saved['needsChecking'],saved['pnl'],saved['exitReason']),(True,None,'PART_CLOSED_OUTSIDE_APP'))
+        self.assertEqual([(c['id'],c['quantity']) for c in status['needsChecking']],[(id,65)])
+        self.next_buy_works()
+    def test_the_app_cannot_sell_more_than_is_left(self):
         id=self.open_two();self.by_hand();self.wait()
-        calls=self.counts();self.runtime.day_clock=lambda:safety.ist(15,20);status=self.wait()
-        self.assertEqual((self.counts(),self.held(),status['positions'][0]['id']),(calls,65,id));self.assertTrue(status['attentionRequired'])
-    def test_normal_trade_does_get_the_end_of_day_sale(self):
-        # Control for the test above: the same clock closes an untouched trade.
-        id=self.open_two();self.runtime.day_clock=lambda:safety.ist(15,20);self.wait()
-        self.assertEqual((self.held(),self.manager.get(id)['exit_reason']),(0,'END_OF_DAY'))
+        # Without the waiting stop, only the one lot left can be sold; never two.
+        self.manager.protection.cancel(self.manager.get(id)['stop_intent'])
+        with self.assertRaisesRegex(ValueError,'EXIT_EXCEEDS_OWNED_QUANTITY'):self.orders.submit_exit(str(uuid.uuid4()),id,230,130)
+        self.assertEqual(self.app_sales(),[])
+    def test_after_a_restart_the_one_lot_is_still_managed(self):
+        id=self.open_two();self.by_hand();self.wait();self.restart();self.runtime.day_clock=lambda:safety.ist(15,20);self.wait()
+        self.assertEqual((self.held(),[r['qty'] for r in self.app_sales()],self.manager.get(id)['state']),(0,[65],'CLOSED'))
+    def test_no_management_until_the_smaller_stop_is_confirmed(self):
+        id=self.open_two();self.broker.modify_stop=lambda *a:(_ for _ in ()).throw(ValueError('BROKER_REQUEST_UNAVAILABLE_RECONCILE'))
+        self.by_hand();self.wait();calls=self.counts();self.runtime.day_clock=lambda:safety.ist(15,20);status=self.wait()
+        self.assertEqual((self.counts(),self.held(),self.trade()['id']),(calls,65,id));self.assertTrue(status['attentionRequired'])
+        with self.assertRaisesRegex(ValueError,'CLOSED_OUTSIDE_APP_UNCLEAR'):self.runtime.request_exit(id)
     def test_reduced_stop_sells_only_what_is_held_and_then_unlocks(self):
         id=self.open_two();self.by_hand();self.wait()
         stop=next(r for r in self.stops() if r['status']==6);self.broker.fill_stop(stop['id'],220)
@@ -200,12 +264,14 @@ class HandPartSaleTests(LotLimitCase):
         status=self.wait()
         self.assertEqual((self.held(),self.manager.get(id)['state'],[r for r in self.stops() if r['status']==6],status['partSales'],self.orders.buy_in_use()),(0,'CLOSED',[],[],False))
         self.assertEqual(self.app_sales(),[])
+        self.assertEqual([c['quantity'] for c in status['needsChecking']],[130])
+        self.assertEqual([e['trade']['closedOutsideQuantity'] for e in self.journal_rows() if e['id'].endswith(':OUTSIDE_CLOSE')],[130])
     def test_lost_stop_change_warns_that_the_stop_may_be_too_big_and_tries_again(self):
         self.open_two();real=self.broker.modify_stop;tries=[]
         def lost(*args):tries.append(args);raise ValueError('BROKER_REQUEST_UNAVAILABLE_RECONCILE')
         self.broker.modify_stop=lost;self.by_hand();status=self.wait()
         self.assertGreater(len(tries),1);self.assertEqual({a[3] for a in tries},{65})
-        self.assertEqual([(p['stopQuantity'],p['stopReduced']) for p in status['partSales']],[(130,False)])
+        self.assertEqual([(p['stopQuantity'],p['stopReduced'],p['managing']) for p in status['partSales']],[(130,False,False)])
         self.broker.modify_stop=real;status=self.wait()
         self.assertEqual((self.stop_rows()[0][0],status['partSales'][0]['stopReduced']),(65,True))
     def test_change_that_arrives_without_a_reply_is_recognised_after_a_restart(self):

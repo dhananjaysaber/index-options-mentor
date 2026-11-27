@@ -5,7 +5,9 @@ app's own leftover stop and send no new sale. Anything unclear stays locked.
 
 Owner decision 27 Nov 2026 (part sale): when part of a trade is confirmed sold
 outside the app, reduce the app's stop to the quantity still held, at the same
-prices. The trade stays locked with a warning, and no sale is sent.
+prices. Once that smaller stop is confirmed and everything still agrees, the app
+manages what is left again, including trailing and end-of-day selling. Until
+then the trade stays locked with a warning.
 """
 import json
 from orders import TERMINAL
@@ -105,7 +107,11 @@ class OutsideWatch:
         with self.orders.transaction() as db: db.execute('UPDATE live_part_sales SET confirmed=1 WHERE id=?', (entry_id,))
         # Any failure leaves the trade locked; the next check looks again first.
         try: self.protection.shrink(stop_id, held)
-        except ValueError: pass
+        except ValueError: return
+        # Look again after the change. The caller still stops here this time, so
+        # nothing carries on using figures read before the part sale.
+        if self._part_held(entry_id, symbol, remaining) == found:
+            self.orders.adopt_part_close(entry_id, remaining-held, held)
 
     def _part_held(self, entry_id, symbol, remaining):
         """(quantity held, own stop) only when everything agrees; otherwise None."""
@@ -136,16 +142,16 @@ class OutsideWatch:
         return held, stop['id']
 
     def part_sales(self):
-        """Confirmed part sales on trades that are still open, for the warning."""
+        """Confirmed part sales on trades that are still open, for the message."""
         with self.orders.transaction() as db:
-            rows = [dict(r) for r in db.execute('''SELECT p.id,p.held,m.stop_intent FROM live_part_sales p
-                JOIN live_managed_positions m ON m.id=p.id WHERE p.confirmed=1 AND m.state!='CLOSED' ''')]
+            rows = [dict(r) for r in db.execute('''SELECT p.id,p.held,p.confirmed,m.stop_intent FROM live_part_sales p
+                JOIN live_managed_positions m ON m.id=p.id WHERE p.confirmed>0 AND m.state!='CLOSED' ''')]
         result = []
         for row in rows:
             stop = self.orders.get(row['stop_intent'])
             size = json.loads(stop['payload'])['qty'] if stop else None
             result.append({'id':row['id'], 'symbol':self._symbol(row['id']), 'held':row['held'], 'stopQuantity':size,
-                           'stopReduced':bool(stop and size == row['held'] and stop['state'] == 'PENDING')})
+                           'stopReduced':size == row['held'], 'managing':row['confirmed'] == 2})
         return result
 
     def _children(self, entry_id):

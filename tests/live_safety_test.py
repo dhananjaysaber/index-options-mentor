@@ -409,10 +409,11 @@ class ClosedOutsideTests(Case):
         before=self.counts();status=self.wait(rounds)
         self.assertEqual(self.counts(),before);self.locked(id,status)
         self.assertEqual((self.stops()[0]['status'],status['needsChecking']),(6,[]))
-    def test_part_sold_outside_reduces_only_the_stop_and_stays_locked(self):
+    def test_part_sold_outside_reduces_only_the_stop_then_manages_the_rest(self):
         id,_,_=self.entry();calls,cancels,modifies=self.counts();self.outside(65);status=self.wait(6)
-        self.assertEqual(self.counts(),(calls,cancels,modifies+1));self.locked(id,status)
+        self.assertEqual(self.counts(),(calls,cancels,modifies+1))
         self.assertEqual(([(r['qty'],r['status']) for r in self.stops()],status['needsChecking']),([(65,6)],[]))
+        self.assertEqual((self.manager.get(id)['state'],status['attentionRequired'],status['partSales'][0]['managing']),('MANAGING',None,True))
     def test_positions_alone_showing_zero_stays_locked(self):
         id,_,_=self.entry();self.broker.net_quantity=lambda s:0;self.unclear(id)
     def test_a_brief_late_positions_reading_changes_nothing(self):

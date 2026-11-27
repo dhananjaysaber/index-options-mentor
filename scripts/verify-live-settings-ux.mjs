@@ -20,7 +20,7 @@ try{
     if(path.includes('/api/orders/')){
       const action=path.split('/').at(-1);actions.push(action);
       if(action==='status' && rejectStatus)return route.fulfill({status:503,contentType:'application/json',body:'{"error":"UNAVAILABLE"}'});
-      if(action==='status'&&partSale)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:true,exitsAllowed:true,actualBrokerAcceptanceVerified:false,attentionRequired:'OWNED_POSITION_REQUIRES_ATTENTION',positions:[{id:'t1',strategy:'SCALP',state:'MANAGING',symbol:shown.symbol}],partSales:[partSale],settings:{tradeAmount:30000}})});
+      if(action==='status'&&partSale)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:true,exitsAllowed:true,actualBrokerAcceptanceVerified:false,attentionRequired:'OWNED_POSITION_REQUIRES_ATTENTION',positions:[{id:'t1',strategy:'SCALP',state:'MANAGING',symbol:shown.symbol}],partSales:[partSale],needsChecking:[],settings:{tradeAmount:30000}})});
       if(action==='status')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:buyingOn,actualBrokerAcceptanceVerified:false,attentionRequired:false,positions:[],settings:{tradeAmount:30000,mentorAutoOpen:false,scalpAutoOpen:false}})});
       if(action==='preview')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,preview:{trades:{CORE:{available:false,reason:'MENTOR_ENTRY_NOT_READY'},SCALP:shown}}})});
       if(action==='buy'){buys.push(route.request().postDataJSON());return new Promise(done=>setTimeout(done,700)).then(()=>route.fulfill({status:rejectBuy?409:200,contentType:'application/json',body:JSON.stringify(rejectBuy?{error:'ORDER_NOT_ACCEPTED_CHECK_STATUS',reason:'PRICE_MOVED_REFRESH_PLAN'}:{ok:true,order:{state:'MANAGING'}})}));}
@@ -100,7 +100,7 @@ try{
   if(process.env.SCREENSHOTS){await page.setViewportSize({width:390,height:844});await card.screenshot({path:process.env.SCREENSHOTS+'/panel-phone.png'});await signOutCard.screenshot({path:process.env.SCREENSHOTS+'/sign-out-phone.png'});}
   // Part of a trade sold by hand: a clear warning, and no app Exit for that trade.
   for(const [reduced,wanted] of [[true,/reduced its stop to 65 at the same stop price.*will not trail.*end of the day/],[false,/NOT confirmed a smaller stop: it may still be for quantity 130.*Check FYERS now/]]){
-    partSale={id:'t1',symbol:shown.symbol,held:65,stopQuantity:reduced?65:130,stopReduced:reduced};
+    partSale={id:'t1',symbol:shown.symbol,held:65,stopQuantity:reduced?65:130,stopReduced:reduced,managing:false};
     await card.getByRole('button',{name:'Refresh connection',exact:true}).click();
     await card.getByRole('alert').filter({hasText:wanted}).waitFor();
     assert.match(await card.innerText(),/Locked after a part sale\. Your server is not managing this trade/);
@@ -108,6 +108,13 @@ try{
     assert.equal(await card.getByRole('button',{name:'Exit this real position'}).isDisabled(),true);
     if(process.env.SCREENSHOTS)await card.screenshot({path:process.env.SCREENSHOTS+'/part-sale-'+reduced+'.png'});
   }
+  // Smaller stop confirmed and everything agrees: managed again, Exit works.
+  partSale={id:'t1',symbol:shown.symbol,held:65,stopQuantity:65,stopReduced:true,managing:true};
+  await card.getByRole('button',{name:'Refresh connection',exact:true}).click();
+  await card.getByRole('alert').filter({hasText:/managing the remaining quantity 65 again, including trailing and end-of-day selling/}).waitFor();
+  assert.match(await card.innerText(),/Position is being managed by your server/);
+  assert.doesNotMatch(await card.innerText(),/Locked after a part sale/);
+  assert.equal(await card.getByRole('button',{name:'Exit this real position'}).isDisabled(),false);
   partSale=null;
   buyingOn=false;
   await paper.locator('summary').click();

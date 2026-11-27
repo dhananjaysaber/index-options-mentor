@@ -23,7 +23,7 @@ STALE_READING_ALERT_SECONDS=15
 DOUBLE_TAP_SECONDS=3
 REASON=re.compile(r'[A-Z_]{3,60}')
 # Sales for these reasons say nothing about whether a strategy exit works.
-NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED','CLOSED_OUTSIDE_APP'}
+NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED','STOP_PART_FILLED','CLOSED_OUTSIDE_APP'}
 
 class Runtime:
     def __init__(self,execution,manager,feed,market,*,max_amount=30000,clock=time.time,day_clock=None):

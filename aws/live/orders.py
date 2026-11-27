@@ -156,8 +156,8 @@ class Orders:
                 reserved = 0
                 for exit_order in db.execute('SELECT * FROM live_intents WHERE parent_id=?', (parent_id,)):
                     reserved += exit_order['filled_qty'] if exit_order['state'] in TERMINAL else json.loads(exit_order['payload'])['qty']
-                gone = db.execute('SELECT 1 FROM live_external_closes WHERE entry_id=?', (parent_id,)).fetchone()
-                if gone or quantity > entry['filled_qty'] - reserved:
+                gone = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (parent_id,)).fetchone()
+                if quantity > entry['filled_qty'] - reserved - (gone['quantity'] if gone else 0):
                     raise ValueError('EXIT_EXCEEDS_OWNED_QUANTITY')
             elif db.execute('SELECT stopped FROM live_controls WHERE id=1').fetchone()[0]:
                 raise ValueError('NEW_ORDERS_STOPPED')
@@ -280,7 +280,12 @@ class Orders:
         entry = db.execute('SELECT * FROM live_intents WHERE id=?',(entry_id,)).fetchone()
         exits = list(db.execute('SELECT * FROM live_intents WHERE parent_id=?',(entry_id,)))
         qty = entry['filled_qty']
-        if entry['state'] not in TERMINAL or not qty or sum(r['filled_qty'] for r in exits) != qty:
+        gone = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (entry_id,)).fetchone()
+        sold = sum(r['filled_qty'] for r in exits)
+        if entry['state'] not in TERMINAL or not qty or sold + (gone['quantity'] if gone else 0) != qty:
+            return
+        if gone:
+            if sold: self._queue_part_outside_close(db, entry, exits, gone['quantity'])
             return
         now = stamp()
         value = sum(r['filled_qty']*(r['average_price'] or 0) for r in exits)
@@ -310,6 +315,41 @@ class Orders:
             row = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (entry_id,)).fetchone()
         return row['quantity'] if row else 0
 
+    def _queue_part_outside_close(self, db, entry, exits, outside):
+        """Part sold outside, the rest by the app: no whole-trade profit is known."""
+        saved = db.execute('SELECT plan FROM live_plans WHERE id=?', (entry['id'],)).fetchone()
+        plan = json.loads(saved['plan']) if saved else {}
+        symbol = json.loads(entry['payload'])['symbol']
+        sold = sum(r['filled_qty'] for r in exits)
+        trade = {'id':entry['id'],'mode':'LIVE','executionMode':'REAL','symbol':symbol,'side':symbol[-2:],
+                 'strategyFamily':plan.get('strategyFamily','CORE'),'quantity':entry['filled_qty'],
+                 'entry':entry['average_price'],'openedAt':entry['created_at'],'entryOrderId':entry['broker_id'],
+                 'brokerOrderPlaced':True,'exit':None,'pnl':None,'grossPnl':None,
+                 'exitReason':'PART_CLOSED_OUTSIDE_APP','needsChecking':True,'noticedClosedAt':stamp(),
+                 'closedOutsideQuantity':outside,'appSoldQuantity':sold,
+                 'appAverageSalePrice':sum(r['filled_qty']*(r['average_price'] or 0) for r in exits)/sold,
+                 'notes':'NEEDS CHECKING: part sold outside the app. That sale price and the total profit or loss are not recorded.'}
+        event = {'id':entry['id']+':OUTSIDE_CLOSE','type':'POSITION_CHECKPOINT','queuedAt':stamp(),'trade':trade}
+        db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)', (event['id'],encoded(event)))
+
+    def adopt_part_close(self, entry_id, outside, held):
+        """Record a confirmed part sale so the app can manage what is left.
+
+        Rupee figures kept for trailing are reduced in the same proportion as the
+        quantity, so every trailing price level stays where it was."""
+        with self.transaction() as db:
+            position = json.loads(db.execute('SELECT payload FROM live_managed_positions WHERE id=?', (entry_id,)).fetchone()['payload'])
+            share = held / position['quantity']
+            for name in ('currentUnrealizedPnl','peakUnrealizedPnl','coreOptionTrailingFloorPnl','optionTrailingFloorPnl',
+                         'coreOptionTrailArmAtGrossPnl','optionTrailingArmAtGrossPnl'):
+                if position.get(name) is not None: position[name] *= share
+            position['quantity'] = held
+            db.execute('UPDATE live_managed_positions SET payload=? WHERE id=?', (encoded(position), entry_id))
+            db.execute('''INSERT INTO live_external_closes VALUES (?,?,?)
+                          ON CONFLICT(entry_id) DO UPDATE SET quantity=quantity+excluded.quantity''', (entry_id,outside,stamp()))
+            db.execute('UPDATE live_part_sales SET confirmed=2 WHERE id=?', (entry_id,))
+            db.execute('UPDATE live_outside_watch SET sale_seen=0,matched_since=NULL,tried_at=NULL,low_since=NULL,positions_at=NULL WHERE id=?', (entry_id,))
+
     def record_external_close(self, entry_id, quantity):
         """Close a trade sold outside the app. No sale price or profit is recorded."""
         now = stamp()
@@ -318,23 +358,28 @@ class Orders:
             saved = db.execute('SELECT plan FROM live_plans WHERE id=?', (entry_id,)).fetchone()
             plan = json.loads(saved['plan']) if saved else {}
             symbol = json.loads(entry['payload'])['symbol']
+            earlier = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (entry_id,)).fetchone()
+            total = quantity + (earlier['quantity'] if earlier else 0)
             trade = {'id':entry_id,'mode':'LIVE','executionMode':'REAL','symbol':symbol,'side':symbol[-2:],
                      'strategyFamily':plan.get('strategyFamily','CORE'),'quantity':entry['filled_qty'],
                      'entry':entry['average_price'],'openedAt':entry['created_at'],'entryOrderId':entry['broker_id'],
                      'brokerOrderPlaced':True,'exit':None,'pnl':None,'grossPnl':None,
                      'exitReason':'CLOSED_OUTSIDE_APP','needsChecking':True,'noticedClosedAt':now,
-                     'closedOutsideQuantity':quantity,
+                     'closedOutsideQuantity':total,
                      'notes':'NEEDS CHECKING: closed outside the app. Sale price and profit or loss not recorded.'}
             # A checkpoint keeps it out of closed-trade totals, which need a price.
             event = {'id':entry_id+':OUTSIDE_CLOSE','type':'POSITION_CHECKPOINT','queuedAt':now,'trade':trade}
-            db.execute('INSERT OR IGNORE INTO live_external_closes VALUES (?,?,?)', (entry_id,quantity,now))
+            db.execute('INSERT OR REPLACE INTO live_external_closes VALUES (?,?,?)', (entry_id,total,now))
             db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)', (event['id'],encoded(event)))
             db.execute("UPDATE live_managed_positions SET state='CLOSED',exit_reason='CLOSED_OUTSIDE_APP' WHERE id=?", (entry_id,))
 
     def external_closes(self, limit=10):
         with self.transaction() as db:
-            rows = list(db.execute('''SELECT e.entry_id,e.quantity,e.noticed_at,i.payload FROM live_external_closes e
-                                      JOIN live_intents i ON i.id=e.entry_id ORDER BY e.noticed_at DESC LIMIT ?''', (limit,)))
+            # A trade still being managed after a part sale is not listed yet.
+            managed = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='live_managed_positions'").fetchone()
+            still_open = "WHERE e.entry_id NOT IN (SELECT id FROM live_managed_positions WHERE state!='CLOSED')" if managed else ''
+            rows = list(db.execute(f'''SELECT e.entry_id,e.quantity,e.noticed_at,i.payload FROM live_external_closes e
+                                      JOIN live_intents i ON i.id=e.entry_id {still_open} ORDER BY e.noticed_at DESC LIMIT ?''', (limit,)))
         return [{'id':r['entry_id'],'quantity':r['quantity'],'noticedAt':r['noticed_at'],
                  'symbol':json.loads(r['payload'])['symbol']} for r in rows]
 

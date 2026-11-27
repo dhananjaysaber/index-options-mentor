@@ -75,7 +75,7 @@ class Manager:
                 key=self.protection.key(entry_id,attempt);row=self.orders.get(key)
                 if row:row=self.orders.reconcile(key)
                 if not row or row['state'] not in TERMINAL:
-                    result=self.protection.ensure(entry_id,float(stop),float(stop-tick),entry['filled_qty'],key)
+                    result=self.protection.ensure(entry_id,float(stop),float(stop-tick),self._remaining(entry_id),key)
                     if result['state']=='PROTECTION_CONFIRMED':
                         position['stopConfirmed']=True
                         with self.orders.transaction() as db:db.execute("UPDATE live_managed_positions SET payload=?,state='MANAGING' WHERE id=?",(encoded(position),entry_id))
@@ -128,6 +128,9 @@ class Manager:
                 if stop['state'] in TERMINAL:
                     # Rejected, cancelled or expired while we still hold units.
                     managed=self._request_exit(entry_id,'PROTECTION_LOST')
+                elif stop['filled_qty'] and self._stop_part_waited(managed):
+                    # The stop fired but sold only part: finish selling the rest.
+                    managed=self._request_exit(entry_id,'STOP_PART_FILLED')
             if not managed['exit_intent']:
                 args={'position':json.loads(managed['payload']),'quote':quote,'snapshot':snapshot,'nowMs':self.execution.planner.clock()*1000}
                 process=subprocess.run([self.node,str(Path(__file__).with_name('exitSignals.mjs'))],input=encoded(args),text=True,capture_output=True,check=True,timeout=5)
@@ -141,13 +144,20 @@ class Manager:
                 elif unconfirmed: return {'state':'PROTECTING','position':state}
                 else:
                     floor=state.get('optionTrailingFloorPnl') if state['strategyFamily']=='SCALP' else state.get('coreOptionTrailingFloorPnl')
-                    if floor is not None:
+                    if floor is not None and not self.orders.get(managed['stop_intent'])['filled_qty']:
                         tick=decimal(self.execution.planner.validate_contract(state['symbol'])['tick_size'])
                         trigger=((decimal(state['entry'])+decimal(floor)/state['quantity'])/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
                         row,book=self.protection.book(managed['stop_intent'])
                         if trigger>decimal(book.get('stopPrice')) and trigger<decimal(quote['optionPrice']): self.protection.tighten(managed['stop_intent'],float(trigger),float(trigger-tick))
                     return {'state':'MANAGING','position':state}
             return self._work_exit(entry_id)
+    def _stop_part_waited(self,managed):
+        """True once a part-filled stop has had a few seconds to finish itself."""
+        now=self.execution.planner.clock();position=json.loads(managed['payload'])
+        since=position.setdefault('stopPartSince',now)
+        with self.orders.transaction() as db: db.execute('UPDATE live_managed_positions SET payload=? WHERE id=?',(encoded(position),position['id']))
+        managed['payload']=encoded(position)
+        return now-since>=STOP_PASSED_SECONDS
     def _stop_passed(self,managed,unconfirmed,state,quote):
         now=self.execution.planner.clock()
         if unconfirmed:
