@@ -12,13 +12,17 @@ try{
   assert.ok(ready,'Preview unavailable');
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:1000},serviceWorkers:'block'});
-  const errors=[],actions=[],buys=[];let buyingOn=false, rejectBuy=false, rejectStatus=false, partSale=null;
+  const errors=[],actions=[],buys=[];let buyingOn=false, rejectBuy=false, rejectStatus=false, partSale=null, waiting=null;
+  const finishes=[];
   const shown={available:true,symbol:'NSE:NIFTY26D0126000PE',quantity:130,lots:2,buyPrice:230,premiumCost:29900,feeReserve:100,initialStop:220};
   page.on('pageerror',error=>errors.push(error.message));
   await page.route('**/api/**',route=>{
     const path=new URL(route.request().url()).pathname;
     if(path.includes('/api/orders/')){
       const action=path.split('/').at(-1);actions.push(action);
+      if(action==='status'&&waiting)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:false,exitsAllowed:false,settings:{},positions:[],needsChecking:[],partSales:[],actualBrokerAcceptanceVerified:false,waitingForTradingLogin:true,tradingLogin:{ready:true,signedInToday:false},...waiting})});
+      if(action==='login-start')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({loginUrl:'https://api-t1.fyers.in/api/v3/generate-authcode?client_id=FAKE-200'})});
+      if(action==='login-finish'){finishes.push(route.request().postDataJSON());return route.fulfill(finishes.length===1?{status:200,contentType:'application/json',body:'{"connected":true}'}:{status:409,contentType:'application/json',body:'{"error":"ORDER_ACTION_REJECTED_CHECK_STATUS","reason":"TRADING_LOGIN_WRONG_ACCOUNT"}'});}
       if(action==='status' && rejectStatus)return route.fulfill({status:503,contentType:'application/json',body:'{"error":"UNAVAILABLE"}'});
       if(action==='status'&&partSale)return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:true,exitsAllowed:true,actualBrokerAcceptanceVerified:false,attentionRequired:'OWNED_POSITION_REQUIRES_ATTENTION',positions:[{id:'t1',strategy:'SCALP',state:'MANAGING',symbol:shown.symbol}],partSales:[partSale],needsChecking:[],settings:{tradeAmount:30000}})});
       if(action==='status')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({ok:true,realMoneyEnabled:buyingOn,actualBrokerAcceptanceVerified:false,attentionRequired:false,positions:[],settings:{tradeAmount:30000,mentorAutoOpen:false,scalpAutoOpen:false}})});
@@ -116,6 +120,47 @@ try{
   assert.doesNotMatch(await card.innerText(),/Locked after a part sale/);
   assert.equal(await card.getByRole('button',{name:'Exit this real position'}).isDisabled(),false);
   partSale=null;
+  // Waiting for the daily trading sign-in.
+  const refresh=()=>card.getByRole('button',{name:'Refresh connection',exact:true}).click();
+  waiting={mayHoldTrade:false,buyingAfterLogin:false,attentionRequired:null};
+  await refresh();
+  await card.getByText('Waiting for sign-in',{exact:true}).waitFor();
+  assert.match(await card.innerText(),/switched off on your server\. Connecting does not turn it on/);
+  assert.equal(await buyButton.isDisabled(),true);
+  waiting={mayHoldTrade:true,buyingAfterLogin:true,attentionRequired:'TRADING_LOGIN_NEEDED_WHILE_HOLDING'};
+  await refresh();
+  await card.getByRole('alert').filter({hasText:/may be holding a trade and cannot manage it/}).waitFor();
+  assert.match(await card.innerText(),/switched ON on your server/);
+  const connect=card.getByRole('button',{name:'Connect trading account',exact:true});
+  for(const width of [1440,390]){
+    await page.setViewportSize({width,height:1000});
+    const box=await connect.boundingBox();
+    assert.ok(box.height>=44&&box.x>=0&&box.x+box.width<=width+1);
+  }
+  if(process.env.SCREENSHOTS)await card.screenshot({path:process.env.SCREENSHOTS+'/waiting-phone.png'});
+  let opened='';
+  await page.route('https://api-t1.fyers.in/**',route=>{opened=route.request().url();return route.fulfill({status:200,contentType:'text/html',body:'<title>Fake FYERS</title>'});});
+  await connect.click();
+  await page.waitForURL('https://api-t1.fyers.in/**');
+  assert.match(opened,/client_id=FAKE-200/);
+  // Back from the fake FYERS page. The preview server lives under a sub-path.
+  const origin=new URL(base).origin, back='/trading-login?auth_code=fake.one-time-code&state='+'a'.repeat(64);
+  await page.route(origin+'/trading-login**',async route=>route.fulfill({response:await route.fetch({url:base})}));
+  await page.goto(origin+back);
+  await page.getByRole('heading',{name:'Connected',exact:true}).waitFor();
+  assert.deepEqual(finishes,[{state:'a'.repeat(64),code:'fake.one-time-code'}]);
+  assert.equal(new URL(page.url()).search,'','The one-time code leaves the address bar');
+  if(process.env.SCREENSHOTS){await page.setViewportSize({width:390,height:844});await page.screenshot({path:process.env.SCREENSHOTS+'/connected-phone.png'});}
+  await page.goto(origin+back);
+  await page.getByRole('alert').filter({hasText:'Nothing was saved'}).waitFor();
+  assert.equal(finishes.length,2);
+  waiting=null;
+  assert.deepEqual(errors,[]);
+  console.log('PASS trading account sign-in: waiting warnings, button opens only FYERS, return page, address cleared, refusal');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.goto(base,{waitUntil:'domcontentloaded'});
+  await page.locator('.mentor-sidebar-v2').getByRole('button',{name:/Settings/}).first().click();
+  await page.getByRole('button',{name:/Advanced connection and full settings/}).click();
   buyingOn=false;
   await paper.locator('summary').click();
   await paper.getByRole('button',{name:'Run practice check'}).click();

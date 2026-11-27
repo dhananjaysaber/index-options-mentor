@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './TradingSetup.css';
 import { createOneTapBuy, plainReason } from '../services/oneTapBuy.js';
+import { startTradingLogin } from '../services/tradingLogin.js';
 
 const STRATEGIES = [['CORE', '13-point'], ['SCALP', 'Scalp']];
 // The figures beside a Buy button are never more than a few seconds old.
@@ -82,6 +83,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
       const messages = {
         FYERS_SESSION_REQUIRED: 'Connect FYERS on this page, then check the connection again.',
         FYERS_ACCOUNT_NOT_VERIFIED: 'Your FYERS login could not be checked. Reconnect FYERS and try again.',
+        TRADING_LOGIN_NEEDED: 'Connect your trading account first.',
         ACCOUNT_DOES_NOT_MATCH_AWS: 'This FYERS login does not match the trading account saved on your server.'
       };
       const fallback = action === 'settings' ? 'The setting change could not be confirmed. Refresh the connection to check your current settings.'
@@ -118,21 +120,30 @@ export default function LiveOrderPanel({ tradeAmount }) {
   return <section className="settings-card live-setup-card" aria-label="Real-money trading setup">
     <header className="live-setup-header">
       <div><span className="live-setup-eyebrow">REAL-MONEY TRADING</span><h2>Your trading connection</h2></div>
-      <span className={`live-setup-badge ${enabled ? 'is-on' : 'is-off'}`}>{status ? enabled ? 'Buying is ON' : 'Buying is OFF' : 'Connection not checked'}</span>
+      <span className={`live-setup-badge ${enabled ? 'is-on' : 'is-off'}`}>{status ? status.waitingForTradingLogin ? 'Waiting for sign-in' : enabled ? 'Buying is ON' : 'Buying is OFF' : 'Connection not checked'}</span>
     </header>
-    <p className="live-setup-lead">{!status ? 'Your connection is checked automatically when you open this page or return to the app.' : enabled ? 'Real-money buying is enabled. One tap on Buy sends a real order. There is no second screen.' : 'Your server is connected. Real-money buying is switched off, so the Buy buttons are disabled.'}</p>
+    <p className="live-setup-lead">{!status ? 'Your connection is checked automatically when you open this page or return to the app.' : status.waitingForTradingLogin ? 'Your server is waiting for the trading account sign-in. It cannot send any order until you connect.' : enabled ? 'Real-money buying is enabled. One tap on Buy sends a real order. There is no second screen.' : 'Your server is connected. Real-money buying is switched off, so the Buy buttons are disabled.'}</p>
 
     <div className="live-setup-status-grid" aria-live="polite">
-      <Status label="Trading connection" value={status ? 'Connected' : 'Not checked'} />
-      <Status label="Real-money buying" value={status ? enabled ? 'ON' : 'OFF' : 'Not checked'} />
+      <Status label="Trading connection" value={status ? status.waitingForTradingLogin ? 'Sign-in needed' : 'Connected' : 'Not checked'} />
+      <Status label="Real-money buying" value={status ? status.waitingForTradingLogin ? 'Paused' : enabled ? 'ON' : 'OFF' : 'Not checked'} />
       <Status label="Real stop and exit test" value={status ? status.actualBrokerAcceptanceVerified ? 'Verified' : 'Not yet verified' : 'Not checked'} />
     </div>
-    {status && !status.actualBrokerAcceptanceVerified && <p className="live-setup-note">The connection is working. A real broker trade is still needed to verify the stop and automatic exit.</p>}
-    {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your positions and any open stop or sell orders in FYERS before continuing.</p>}
+    {status?.waitingForTradingLogin && <p className="live-setup-note" role="status">{status.buyingAfterLogin ? 'Warning: real-money buying is switched ON on your server. After you connect, Buy and any automatic buying you left on can send real orders.' : 'Real-money buying is switched off on your server. Connecting does not turn it on.'}</p>}
+    {status && !status.waitingForTradingLogin && !status.actualBrokerAcceptanceVerified && <p className="live-setup-note">The connection is working. A real broker trade is still needed to verify the stop and automatic exit.</p>}
+    {status?.attentionRequired && !status.mayHoldTrade && <p className="live-setup-error" role="alert">A trade needs attention. Check your positions and any open stop or sell orders in FYERS before continuing.</p>}
 
     {status?.partSales?.map(sale => <p className="live-setup-error" role="alert" key={sale.id}>{partSaleWarning(sale)}</p>)}
 
     {heldWhileOff && <p className="live-setup-note" role="status">Buying is off. Stops and sales for trades your server already holds still send real orders to FYERS.</p>}
+
+    {status?.mayHoldTrade && <p className="live-setup-error" role="alert">Your server may be holding a trade and cannot manage it until you connect. Check your positions and open stop or sell orders in FYERS now.</p>}
+
+    <div className="live-setup-step">
+      <h3>Trading account sign-in</h3>
+      <p>{!status?.tradingLogin ? 'Sign in with FYERS for your trading app. Do this each trading day.' : !status.tradingLogin.ready ? 'The one-time server setup for this button has not been done yet.' : status.tradingLogin.signedInToday && !status.waitingForTradingLogin ? 'Signed in today.' : 'Not signed in today. Tap the button and sign in with FYERS.'}</p>
+      <button className="live-setup-button" type="button" disabled={busy || status?.tradingLogin?.ready === false} onClick={() => run(async () => { window.location.assign(await startTradingLogin((url, init) => fetch(url, init))); })}>Connect trading account</button>
+    </div>
 
     <div className="live-setup-step">
       <div className="live-setup-step-heading"><span>1</span><div><h3>Check your connection</h3><p>Checked automatically when you return. You can also refresh it here. This does not buy anything.</p></div></div>

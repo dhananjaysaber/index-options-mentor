@@ -112,3 +112,15 @@ then restores/removes configuration, avoiding dangling enablement links.
 ## One-tap manual buy (see APP-SIGN-IN.md)
 
 `preview` returns what a tap would ask for; it saves and sends nothing. `buy` runs prepare and submit once under one lock. It sends nothing if the option, quantity or highest price differ from the screen, or for a second manual tap on the same strategy within three seconds. The same request identity never buys twice. A refusal carries a fixed reason code; "unclear" means an order record exists.
+
+## Connect trading account (app button)
+
+Available only after the app's Google sign-in, and it still needs the app's FYERS connection for the owner check.
+
+One-time setup, in this order (the installer's check still needs a working token from the older terminal sign-in):
+
+1. Install while the trading app's redirect URL in FYERS is still the old one.
+2. On the server: `sudo python3 <release>/aws/live/account_connect.py save-app`. It saves the trading App ID and Secret ID in `/etc/index-options-trading-app.json` (root:mentor 0640). The Secret ID never goes to Netlify or the browser.
+3. In FYERS, change the trading app's redirect URL to `https://optionsmentor.netlify.app/trading-login`. The older terminal sign-in stops working after this.
+
+Each day: tap Connect trading account. A start is valid for five minutes and one use. The server saves the token only after the owner and the funds, orders and positions reads pass, then restarts. If the saved sign-in does not work at startup, the service waits (sign-in and status only; it cannot send any order or manage a held trade) instead of restarting every few seconds. Not tried against real FYERS.

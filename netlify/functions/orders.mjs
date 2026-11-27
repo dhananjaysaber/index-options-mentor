@@ -7,13 +7,14 @@ export default async function orders(request){
   const maintenance=action==='maintenance-status';
   // The server's own signed check is verified below; everything else needs the app sign-in.
   if(!maintenance){const refused=await requireApp(request);if(refused)return refused;}
-  if(!['status','settings','preview','buy','prepare','submit','exit','stop','maintenance-status'].includes(action))return reply(404,{error:'ORDER_ROUTE_NOT_ALLOWED'});
+  if(!['status','settings','preview','buy','prepare','submit','exit','stop','login-start','login-finish','maintenance-status'].includes(action))return reply(404,{error:'ORDER_ROUTE_NOT_ALLOWED'});
   if(request.method!==(action==='status'?'GET':'POST'))return reply(405,{error:'METHOD_NOT_ALLOWED'});
   const secret=process.env.AWS_PAPER_SYNC_SECRET||'',base=String(process.env.AWS_PAPER_SYNC_BASE||'').replace(/\/$/,'');
   if(secret.length<32||!/^https:\/\/[a-z0-9.-]+$/i.test(base))return reply(503,{error:'ORDER_CONNECTION_NOT_CONFIGURED'});
-  const body=action==='status'?'{}':await request.text();if(Buffer.byteLength(body)>4096)return reply(413,{error:'BODY_TOO_LARGE'});
+  const body=action==='status'?'{}':await request.text();// FYERS's one-time sign-in code is long, so that one request may be larger.
+  if(Buffer.byteLength(body)>(action==='login-finish'?7000:4096))return reply(413,{error:'BODY_TOO_LARGE'});
   let data;try{data=JSON.parse(body);}catch{return reply(400,{error:'INVALID_JSON'});}
-  const fields={status:[],settings:['settings'],preview:['tradeAmount'],buy:['intentId','strategy','symbol','quantity','maxPrice','tradeAmount'],prepare:['intentId','strategy'],submit:['intentId'],exit:['entryId'],stop:[],'maintenance-status':[]}[action];
+  const fields={status:[],settings:['settings'],preview:['tradeAmount'],buy:['intentId','strategy','symbol','quantity','maxPrice','tradeAmount'],prepare:['intentId','strategy'],submit:['intentId'],exit:['entryId'],stop:[],'login-start':[],'login-finish':['state','code'],'maintenance-status':[]}[action];
   if(!data||typeof data!=='object'||Array.isArray(data)||Object.keys(data).sort().join(',')!==fields.sort().join(','))return reply(400,{error:'INVALID_ORDER_ACTION'});
   let owner;
   if(maintenance){

@@ -156,8 +156,21 @@ def connect():
     print('Trading-app login saved separately. Real-money orders remain OFF.')
 
 
+def save_app():
+    """Saves the trading App ID and Secret ID once, so the app button can be used."""
+    if os.geteuid() != 0 or not Path('/dev/tty').exists(): raise ConnectError('Run sudo python3 from your SSH terminal.')
+    user = pwd.getpwnam('mentor')
+    account = secure_json('/etc/index-options-live-account.json')
+    app = getpass.getpass('Trading App ID (hidden): ').strip()
+    if app != account.get('appId'): raise ConnectError('This is not the trading App ID already saved on this server. Nothing was saved.')
+    app_secret = getpass.getpass('Trading Secret ID (hidden): ').strip()
+    if not 8 <= len(app_secret) <= 256 or any(c.isspace() for c in app_secret): raise ConnectError('The Secret ID format is invalid.')
+    save_account('/etc/index-options-trading-app.json', {'version':1, 'appId':app, 'appSecret':app_secret}, user.pw_gid)
+    print('Saved on this server only. It is checked the first time you use Connect trading account. No orders were sent.')
+
+
 if __name__ == '__main__':
-    try: connect()
+    try: save_app() if sys.argv[1:] == ['save-app'] else connect()
     except ConnectError as error:
         print('STOP: '+str(error), file=sys.stderr); sys.exit(1)
     except (OSError, ValueError):

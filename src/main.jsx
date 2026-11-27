@@ -50,6 +50,8 @@ import './fyers-reference-v61.css';
 import './fyers-reference-v62.css';
 import './fyers-reference-v63.css';
 import SignInScreen from './components/SignInScreen.jsx';
+import TradingLoginReturn from './components/TradingLoginReturn.jsx';
+import { RETURN_PATH } from './services/tradingLogin.js';
 import { checkSignIn, watchSignIn } from './services/appSignIn.js';
 
 // Do not reopen a standalone PWA halfway down a strategy card.
@@ -115,6 +117,11 @@ async function openApp(){
     return;
   }
   watchSignIn(access.expiresAt,{fetcher,hostname,reload:()=>window.location.reload()});
+  // Back from the FYERS trading sign-in: only after today's app sign-in.
+  if(window.location.pathname===RETURN_PATH){
+    createRoot(document.getElementById('root')).render(<TradingLoginReturn />);
+    return;
+  }
   return startMentor();
 }
 void openApp();
