@@ -4,12 +4,17 @@ import json
 import math
 import re
 import sqlite3
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 
 TERMINAL = {'FILLED', 'CANCELLED', 'REJECTED', 'EXPIRED', 'BLOCKED'}
+# A broker that answers "refused" is believed only after the orderbook has had
+# time to show otherwise. Timeouts are never treated as refusals.
+REFUSALS = {'BROKER_REQUEST_REJECTED_RECONCILE'}
+REFUSED_ENTRY_WAIT, REFUSED_EXIT_WAIT = 60, 10
 
 
 def encoded(value):
@@ -26,6 +31,7 @@ class Orders:
             raise ValueError('OWNER_REQUIRED')
         self.file, self.broker, self.account_id = file, broker, account_id
         self.max_quantity, self.enabled = max_quantity, enabled
+        self.clock = time.time
         with self.transaction() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS live_intents (
@@ -170,9 +176,10 @@ class Orders:
             if result.get('s') == 'ok' and isinstance(result.get('id'), str) and result['id']:
                 self._update(intent_id, 'ACKNOWLEDGED', broker_id=result['id'])
             else:
-                self._update(intent_id, 'UNKNOWN', detail='RECONCILE_WITH_BROKER')
-        except Exception:
-            self._update(intent_id, 'UNKNOWN', detail='RECONCILE_WITH_BROKER')
+                refused = result.get('s') == 'error' and not result.get('id')
+                self._update(intent_id, 'UNKNOWN', detail='BROKER_REFUSED' if refused else 'RECONCILE_WITH_BROKER')
+        except Exception as error:
+            self._update(intent_id, 'UNKNOWN', detail='BROKER_REFUSED' if str(error) in REFUSALS else 'RECONCILE_WITH_BROKER')
         return self.get(intent_id)
 
     @staticmethod
@@ -194,7 +201,7 @@ class Orders:
             raise ValueError('ACCOUNT_MISMATCH')
         matches = self.broker.orders_by_tag('1:' + current['tag'])
         if len(matches) != 1:
-            return current
+            return self._release_refused(current) if not matches else current
         order, expected = matches[0], json.loads(current['payload'])
         if any(order.get(key) != expected[key] for key in ('symbol', 'qty', 'side')):
             raise ValueError('BROKER_ORDER_MISMATCH')
@@ -255,6 +262,15 @@ class Orders:
             elif any(json.loads(r['payload'])['type']==4 and r['filled_qty'] for r in exits): trade['exitReason']='BROKER_PROTECTIVE_STOP'
         event = {'id':entry_id+':BROKER_CLOSED','type':'TRADE_CLOSED','queuedAt':now,'trade':trade}
         db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)',(event['id'],encoded(event)))
+
+    def _release_refused(self, current):
+        if current['state'] != 'UNKNOWN' or current['detail'] != 'BROKER_REFUSED':
+            return current
+        sent = datetime.fromisoformat(current['created_at'].replace('Z','+00:00')).timestamp()
+        if self.clock()-sent < (REFUSED_EXIT_WAIT if current['parent_id'] else REFUSED_ENTRY_WAIT):
+            return current
+        self._update(current['id'], 'REJECTED', detail='BROKER_REFUSED')
+        return self.get(current['id'])
 
     def recover(self):
         with self.transaction() as db:

@@ -4,6 +4,7 @@ All broker mutations still require the separately configured host's send gate.
 The browser supplies actions and budget only; never contract/quote/stop decisions.
 """
 from datetime import datetime,timezone
+from zoneinfo import ZoneInfo
 from decimal import ROUND_FLOOR
 import json
 import threading
@@ -11,10 +12,19 @@ import time
 import uuid
 from orders import TERMINAL,encoded
 from planner import decimal
+from protection import RESEND_AFTER
+
+TZ=ZoneInfo('Asia/Kolkata')
+# Owner decision 27 Nov 2026: whatever is still open is sold from 15:18 IST.
+FORCED_CLOSE=(15,18)
+STALE_READING_ALERT_SECONDS=15
+# Sales for these reasons say nothing about whether a strategy exit works.
+NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED'}
 
 class Runtime:
-    def __init__(self,execution,manager,feed,market,*,max_amount=30000,clock=time.time):
+    def __init__(self,execution,manager,feed,market,*,max_amount=30000,clock=time.time,day_clock=None):
         self.execution,self.orders,self.manager,self.feed,self.market=execution,execution.orders,manager,feed,market
+        self.day_clock=day_clock or clock;self.reading_missing_since=None;self.reading_stale=False
         self.max_amount=decimal(max_amount);self.clock=clock;self.lock=threading.RLock();self.last_error=None
         with self.orders.transaction() as db:
             db.executescript('''CREATE TABLE IF NOT EXISTS live_requests (
@@ -22,6 +32,8 @@ class Runtime:
                 ticket TEXT NOT NULL, stop REAL NOT NULL, state TEXT NOT NULL, created REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS live_runtime_settings (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS live_entry_cancels (id TEXT PRIMARY KEY,state TEXT NOT NULL);''')
+            if 'sent_at' not in {r['name'] for r in db.execute('PRAGMA table_info(live_entry_cancels)')}:
+                db.execute('ALTER TABLE live_entry_cancels ADD COLUMN sent_at REAL NOT NULL DEFAULT 0')
             db.execute('INSERT OR IGNORE INTO live_runtime_settings VALUES (1,?)',(encoded({'tradeAmount':float(self.max_amount),'mentorAutoOpen':False,'scalpAutoOpen':False,'controlledResearch':True,'experimentalResearch':False}),))
     def settings(self):
         with self.orders.transaction() as db:return json.loads(db.execute('SELECT payload FROM live_runtime_settings WHERE id=1').fetchone()[0])
@@ -47,10 +59,10 @@ class Runtime:
             managed=list(db.execute('SELECT * FROM live_managed_positions'))
             stops={r['id']:dict(r) for r in db.execute('SELECT * FROM live_intents WHERE parent_id IS NOT NULL')}
             delivered={r['id'] for r in db.execute('SELECT id FROM live_journal_outbox WHERE delivered=1')}
-        stop_proof=real and any(stops.get(r['stop_intent'],{}).get('state') in ('PENDING','FILLED','CANCELLED') for r in managed)
+        stop_proof=real and any(r['state']!='PROTECTING' and r['exit_reason']!='PROTECTION_FAILED' and stops.get(r['stop_intent'],{}).get('state') in ('PENDING','FILLED','CANCELLED') for r in managed)
         verified=set()
         for row in managed:
-            if real and row['state']=='CLOSED' and row['exit_reason'] and row['exit_reason']!='USER_EXIT' and row['id']+':BROKER_CLOSED' in delivered:
+            if real and row['state']=='CLOSED' and row['exit_reason'] and row['exit_reason'] not in NOT_STRATEGY_EXITS and row['id']+':BROKER_CLOSED' in delivered:
                 verified.add(json.loads(row['payload'])['strategyFamily'])
         return {'brokerStopsVerified':bool(stop_proof),'webSocketExitStrategiesVerified':sorted(verified),
                 'actualBrokerAcceptanceVerified':stop_proof and verified=={'CORE','SCALP'}}
@@ -60,7 +72,7 @@ class Runtime:
             return {'ok':True,'mode':'OWNED_EXECUTION_HOST','actualLiveExecutionHostReleased':True,
                 'realMoneyEnabled':self._enabled(),'settings':self.settings(),'positions':[
                     {'id':r['id'],'strategy':r['strategy'],'state':r['state'],'symbol':json.loads(r['ticket'])['symbol']} for r in rows],
-                'attentionRequired':self.last_error,**self.acceptance()}
+                'attentionRequired':self.last_error,'strategyReadingStale':self.reading_stale,**self.acceptance()}
     def prepare(self,intent_id,strategy,automatic=False):
         with self.lock:
             if strategy not in ('CORE','SCALP') or type(automatic) is not bool:raise ValueError('INVALID_STRATEGY')
@@ -107,7 +119,12 @@ class Runtime:
             with self.orders.transaction() as db:
                 if db.execute("SELECT 1 FROM live_requests WHERE strategy=? AND id!=? AND state NOT IN ('PREPARED','CLOSED','NO_FILL')",(row['strategy'],intent_id)).fetchone():raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
                 db.execute("UPDATE live_requests SET state='SUBMIT_REQUESTED' WHERE id=?",(intent_id,))
-            self.execution.submit(intent_id)
+            try:self.execution.submit(intent_id)
+            except Exception:
+                # The order record is saved before anything is sent, so no
+                # record means nothing reached the broker.
+                if not self.orders.get(intent_id):self._state(intent_id,'NO_FILL')
+                raise
             try:return self._entry_progress(intent_id)
             except Exception:
                 self.last_error='OWNED_POSITION_REQUIRES_ATTENTION';raise
@@ -116,10 +133,12 @@ class Runtime:
     def _cancel_unfilled_entry(self,entry):
         if entry['state'] in TERMINAL:return entry
         if not entry['broker_id']:raise ValueError('ENTRY_OUTCOME_UNKNOWN_CHECK_BROKER')
+        now=self.clock()
         with self.orders.transaction() as db:
-            prior=db.execute('SELECT 1 FROM live_entry_cancels WHERE id=?',(entry['id'],)).fetchone()
-            if not prior:db.execute('INSERT INTO live_entry_cancels VALUES (?,?)',(entry['id'],'SUBMITTING'))
-        if not prior:
+            prior=db.execute('SELECT sent_at FROM live_entry_cancels WHERE id=?',(entry['id'],)).fetchone()
+            send=not prior or now-prior['sent_at']>=RESEND_AFTER
+            if send:db.execute('INSERT OR REPLACE INTO live_entry_cancels(id,state,sent_at) VALUES (?,?,?)',(entry['id'],'SUBMITTING',now))
+        if send:
             try:self.orders.broker.cancel_order(entry['broker_id'])
             except Exception:pass
         # Acknowledgement is not enough; only a terminal orderbook result settles.
@@ -127,6 +146,8 @@ class Runtime:
         if entry['state'] not in TERMINAL:raise ValueError('ENTRY_CANCEL_NOT_CONFIRMED')
         return entry
     def _entry_progress(self,id):
+        if not self.orders.get(id):
+            self._state(id,'NO_FILL');return {'id':id,'state':'NO_FILL'}
         entry=self.orders.reconcile(id)
         with self.orders.transaction() as db:request=dict(db.execute('SELECT * FROM live_requests WHERE id=?',(id,)).fetchone())
         if entry['state'] not in TERMINAL:
@@ -146,27 +167,30 @@ class Runtime:
             raise
         self._state(id,'MANAGING' if tracked['state']!='CLOSED' else 'CLOSED')
         self.orders.drain_journal(self.manager.journal)
-        return {'id':id,'state':tracked['state'],'filledQuantity':entry['filled_qty'],'protectionConfirmed':True}
+        return {'id':id,'state':tracked['state'],'filledQuantity':entry['filled_qty'],'protectionConfirmed':tracked['state']=='MANAGING'}
     def request_exit(self,entry_id):
         with self.lock:
             managed=self.manager.get(entry_id)
             if not managed:raise ValueError('UNKNOWN_OWNED_POSITION')
             if managed['state']=='CLOSED':return {'state':'CLOSED'}
-            exit_id=managed['exit_intent'] or str(uuid.uuid5(uuid.NAMESPACE_URL,'iom-auto-exit:'+entry_id))
-            with self.orders.transaction() as db:
-                db.execute("UPDATE live_managed_positions SET exit_intent=?,exit_reason=COALESCE(exit_reason,'USER_EXIT'),state='EXIT_REQUESTED' WHERE id=?",(exit_id,entry_id))
-            ticket=json.loads(managed['payload']);pair=self.feed.pair(ticket['symbol'])
-            result=self.manager.pulse(entry_id,pair,{})
+            self.manager._request_exit(entry_id,'USER_EXIT')
+            # A sale is priced from its own fresh bid check, not the paired feed.
+            result=self.manager.pulse(entry_id,{},{})
             if result.get('state')=='CLOSED':self._state(entry_id,'CLOSED')
             return result
     def cycle(self):
         with self.lock:
             with self.orders.transaction() as db:db.execute("UPDATE live_requests SET state='EXPIRED' WHERE state='PREPARED' AND created<?",(self.clock()-15,))
             errors=[];rows=self._active();symbols=set()
+            reading_ok=False
             try:
-                data=self.market.current();snapshot=data.get('snapshot',{})
+                data=self.market.current();snapshot=data.get('snapshot',{});reading_ok=True
                 symbols.update(t['symbol'] for t in data['tickets'].values() if isinstance(t,dict))
             except Exception:snapshot={}
+            if reading_ok or not any(self.manager.get(r['id']) for r in rows):self.reading_missing_since=None
+            elif self.reading_missing_since is None:self.reading_missing_since=self.clock()
+            self.reading_stale=self.reading_missing_since is not None and self.clock()-self.reading_missing_since>=STALE_READING_ALERT_SECONDS
+            local=datetime.fromtimestamp(self.day_clock(),TZ);closing=(local.hour,local.minute)>=FORCED_CLOSE
             for row in rows:symbols.add(json.loads(row['ticket'])['symbol'])
             self.feed.subscriptions(symbols)
             for row in rows:
@@ -179,9 +203,14 @@ class Runtime:
                         polled=self.manager.poll(row['id'])
                         if polled['state']=='CLOSED':
                             self._state(row['id'],'CLOSED');continue
-                        ticket=json.loads(managed['payload']);pair=self.feed.pair(ticket['symbol'])
+                        managed=self.manager.get(row['id'])
+                        if closing and not managed['exit_intent']:managed=self.manager._request_exit(row['id'],'END_OF_DAY')
+                        if managed['state']=='PROTECTING':managed=self.manager.protect(row['id'])
+                        if managed['exit_intent']:pair={}
+                        else:pair=self.feed.pair(json.loads(managed['payload'])['symbol'])
                         result=self.manager.pulse(row['id'],pair,snapshot)
                         if result.get('state')=='CLOSED':self._state(row['id'],'CLOSED')
+                        elif self.manager.exit_overdue(row['id']):errors.append('EXIT_OVERDUE')
                 except Exception as error:errors.append(type(error).__name__)
             self.last_error='OWNED_POSITION_REQUIRES_ATTENTION' if errors else None
             self.orders.drain_journal(self.manager.journal)

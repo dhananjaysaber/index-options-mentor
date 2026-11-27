@@ -92,6 +92,11 @@ def server(runtime,secret,owner_proof,port=0):
     value=ThreadingHTTPServer(('127.0.0.1',port),Handler);value.daemon_threads=True;return value
 
 
+def refresh_pause(took):
+    # Aim to start a new reading every 5 seconds; each is valid for 12.
+    return max(1,5-took)
+
+
 def build(config,account,secret):
     if config.get('version')!=1 or type(config.get('realMoneyEnabled')) is not bool:raise ValueError('INVALID_HOST_CONFIG')
     enabled=config['realMoneyEnabled']
@@ -141,9 +146,10 @@ def main():
     stopped=threading.Event();initial=hashlib.sha256(ACCOUNT.read_bytes()).digest()
     def market_worker():
         while not stopped.is_set():
+            began=time.monotonic()
             try:runtime.market.refresh()
             except Exception:runtime.market.last_error='TRUSTED_STRATEGY_UNAVAILABLE'
-            stopped.wait(10)
+            stopped.wait(refresh_pause(time.monotonic()-began))
     def execution_worker():
         while not stopped.is_set():
             try:

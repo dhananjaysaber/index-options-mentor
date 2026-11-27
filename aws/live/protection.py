@@ -2,8 +2,12 @@
 import hashlib
 import json
 import uuid
-from orders import TERMINAL, encoded
+from orders import REFUSALS, TERMINAL, encoded
 from planner import decimal
+
+# Seconds before an unconfirmed cancel or a refused change may be sent again,
+# and before an unconfirmed stop change stops blocking newer ones.
+RESEND_AFTER, ABANDON_AFTER = 5, 10
 
 class Protection:
     def __init__(self, execution):
@@ -12,6 +16,8 @@ class Protection:
             db.execute('''CREATE TABLE IF NOT EXISTS live_stop_actions (
                 id TEXT PRIMARY KEY, target TEXT NOT NULL, kind TEXT NOT NULL,
                 request TEXT NOT NULL, state TEXT NOT NULL)''')
+            if 'sent_at' not in {r['name'] for r in db.execute('PRAGMA table_info(live_stop_actions)')}:
+                db.execute('ALTER TABLE live_stop_actions ADD COLUMN sent_at REAL NOT NULL DEFAULT 0')
     def book(self, intent_id):
         current=self.orders.reconcile(intent_id); payload=json.loads(current['payload'])
         if not current['parent_id'] or payload['type']!=4: raise ValueError('NOT_OWNED_PROTECTION')
@@ -23,14 +29,17 @@ class Protection:
                 book.get('side')!=-1 or book.get('productType')!='INTRADAY'):
             raise ValueError('BROKER_PROTECTION_MISMATCH')
         return current,book
-    def ensure(self, entry_id, stop, limit, quantity):
+    @staticmethod
+    def key(entry_id, attempt=1):
+        return str(uuid.uuid5(uuid.NAMESPACE_URL,'iom-stop:'+entry_id+('' if attempt==1 else ':'+str(attempt))))
+    def ensure(self, entry_id, stop, limit, quantity, key=None):
         self.execution.owner(); entry=self.orders.reconcile(entry_id)
         contract=self.execution.planner.validate_contract(json.loads(entry['payload'])['symbol'])
         tick=decimal(contract['tick_size'])
         if (type(quantity) is not int or quantity<=0 or quantity%contract['lot_size'] or
                 decimal(stop)%tick or decimal(limit)%tick or not 0<decimal(limit)<decimal(stop)):
             raise ValueError('INVALID_PROTECTION_PRICES_OR_QUANTITY')
-        key=str(uuid.uuid5(uuid.NAMESPACE_URL,'iom-stop:'+entry_id))
+        key=key or self.key(entry_id)
         if not self.orders.get(key): self.orders.submit_protection(key,entry_id,stop,limit,quantity)
         row,book=self.book(key)
         if row['state']=='PENDING' and not row['filled_qty']:
@@ -39,13 +48,38 @@ class Protection:
         return {'intentId':key,'state':row['state']}
     def _reserve(self,target,kind,request):
         text=encoded(request); action=hashlib.sha256((target+':'+kind+':'+text).encode()).hexdigest()
+        now=self.execution.planner.clock()
         with self.orders.transaction() as db:
             prior=db.execute('SELECT * FROM live_stop_actions WHERE id=?',(action,)).fetchone()
-            if prior: return dict(prior),False
-            if kind!='CANCEL' and db.execute("SELECT 1 FROM live_stop_actions WHERE target=? AND state!='CONFIRMED'",(target,)).fetchone():
-                raise ValueError('PROTECTION_CHANGE_UNRESOLVED')
-            db.execute('INSERT INTO live_stop_actions VALUES (?,?,?,?,?)',(action,target,kind,text,'SUBMITTING'))
+            if prior:
+                # Cancelling twice cannot create exposure. A change is repeated
+                # only when the broker refused it or it was given up on.
+                again=(prior['state']!='CONFIRMED' if kind=='CANCEL' else prior['state'] in ('REFUSED','ABANDONED'))
+                if again and now-prior['sent_at']>=RESEND_AFTER:
+                    db.execute("UPDATE live_stop_actions SET state='SUBMITTING',sent_at=? WHERE id=?",(now,action))
+                    return {'id':action,'state':'SUBMITTING'},True
+                return dict(prior),False
+            if kind!='CANCEL':
+                db.execute("UPDATE live_stop_actions SET state='ABANDONED' WHERE target=? AND state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN') AND ?-sent_at>=?",(target,now,ABANDON_AFTER))
+                if db.execute("SELECT 1 FROM live_stop_actions WHERE target=? AND state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN')",(target,)).fetchone():
+                    raise ValueError('PROTECTION_CHANGE_UNRESOLVED')
+            db.execute('INSERT INTO live_stop_actions(id,target,kind,request,state,sent_at) VALUES (?,?,?,?,?,?)',(action,target,kind,text,'SUBMITTING',now))
             return {'id':action,'state':'SUBMITTING'},True
+    def cancel_exit(self, intent_id):
+        """Cancel an unfilled ordinary sale so it can be replaced."""
+        self.execution.owner(); row=self.orders.reconcile(intent_id)
+        if row['state'] in TERMINAL: return row
+        if not row['parent_id'] or not row['broker_id']: raise ValueError('EXIT_OUTCOME_UNKNOWN_CHECK_BROKER')
+        action,send=self._reserve(intent_id,'CANCEL',{'brokerId':row['broker_id']})
+        if send: self._send_cancel(action,row['broker_id'])
+        row=self.orders.reconcile(intent_id)
+        if row['state'] not in TERMINAL: raise ValueError('CANCELLATION_NOT_CONFIRMED')
+        self._state(action['id'],'CONFIRMED'); return row
+    def _send_cancel(self,action,broker_id):
+        try:
+            result=self.orders.broker.cancel_order(broker_id)
+            self._state(action['id'],'ACKNOWLEDGED' if result.get('s')=='ok' else 'UNKNOWN')
+        except Exception: self._state(action['id'],'UNKNOWN')
     def _state(self,action,state):
         with self.orders.transaction() as db: db.execute('UPDATE live_stop_actions SET state=? WHERE id=?',(state,action))
     def cancel(self, intent_id):
@@ -54,11 +88,7 @@ class Protection:
             with self.orders.transaction() as db: db.execute("UPDATE live_stop_actions SET state='CONFIRMED' WHERE target=?",(intent_id,))
             return row
         action,send=self._reserve(intent_id,'CANCEL',{'brokerId':row['broker_id']})
-        if send:
-            try:
-                result=self.orders.broker.cancel_order(row['broker_id'])
-                self._state(action['id'],'ACKNOWLEDGED' if result.get('s')=='ok' else 'UNKNOWN')
-            except Exception: self._state(action['id'],'UNKNOWN')
+        if send: self._send_cancel(action,row['broker_id'])
         row,book=self.book(intent_id)
         if row['state'] in TERMINAL:
             self._state(action['id'],'CONFIRMED'); return row
@@ -80,8 +110,8 @@ class Protection:
         if send:
             try:
                 result=self.orders.broker.modify_stop(row['broker_id'],float(stop),float(limit),payload['qty'])
-                self._state(action['id'],'ACKNOWLEDGED' if result.get('s')=='ok' else 'UNKNOWN')
-            except Exception: self._state(action['id'],'UNKNOWN')
+                self._state(action['id'],'ACKNOWLEDGED' if result.get('s')=='ok' else 'REFUSED' if result.get('s')=='error' else 'UNKNOWN')
+            except Exception as error: self._state(action['id'],'REFUSED' if str(error) in REFUSALS else 'UNKNOWN')
         row,book=self.book(intent_id)
         if (row['state']=='PENDING' and not row['filled_qty'] and decimal(book.get('stopPrice'))==stop and decimal(book.get('limitPrice'))==limit):
             self._state(action['id'],'CONFIRMED'); return {'state':'PROTECTION_CONFIRMED','stopPrice':float(stop)}

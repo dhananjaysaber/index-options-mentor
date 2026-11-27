@@ -43,7 +43,7 @@ class RuntimeTests(unittest.TestCase):
         class FakeMarket:
             def session_open(self):return True
             def current(self):return {'tickets':{'SCALP_MANUAL':outer.ticket,'SCALP_AUTO':outer.ticket},'snapshot':{}}
-        self.market=FakeMarket();self.runtime=Runtime(self.execution,self.manager,self.feed,self.market,clock=lambda:self.now)
+        self.market=FakeMarket();self.runtime=Runtime(self.execution,self.manager,self.feed,self.market,clock=lambda:self.now,day_clock=lambda:1795581000.0)
     def tearDown(self):self.temp.cleanup()
     def entry(self):
         id=str(uuid.uuid4());plan=self.runtime.prepare(id,'SCALP');result=self.runtime.submit(id);return id,plan,result
@@ -67,7 +67,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self.broker.calls(),before);self.assertEqual(self.journal.health()['events'],2)
     def test_restart_continuous_trail_and_final_replay(self):
         id,_,_=self.entry();self.quote.update(bid=260,ask=260);self.now=time.time();self.runtime.cycle()
-        self.runtime=Runtime(self.execution,Manager(self.execution,self.journal),self.feed,self.market,clock=lambda:self.now)
+        self.runtime=Runtime(self.execution,Manager(self.execution,self.journal),self.feed,self.market,clock=lambda:self.now,day_clock=self.runtime.day_clock)
         self.quote.update(bid=240,ask=240);self.now=time.time();self.runtime.cycle();before=self.broker.calls()
         self.runtime.cycle();self.assertEqual(self.broker.calls(),before)
         self.assertEqual(self.manager.get(id)['state'],'CLOSED');self.assertEqual(self.journal.health()['trades'],1)
@@ -125,7 +125,7 @@ class RuntimeTests(unittest.TestCase):
         self.broker.place_order=pending;id,_,result=self.entry();self.assertEqual(result['state'],'PENDING')
         calls=[];self.broker.cancel_order=lambda id:(calls.append(id) or {'s':'ok','id':id})
         self.now+=4;self.runtime.cycle()
-        self.runtime=Runtime(self.execution,Manager(self.execution,self.journal),self.feed,self.market,clock=lambda:self.now)
+        self.runtime=Runtime(self.execution,Manager(self.execution,self.journal),self.feed,self.market,clock=lambda:self.now,day_clock=self.runtime.day_clock)
         self.runtime.cycle();self.assertEqual(len(calls),1);self.assertEqual(self.broker.calls(),1)
         self.assertTrue(self.runtime.last_error)
     def test_wrong_broker_stop_price_is_never_called_confirmed(self):

@@ -82,7 +82,7 @@ class Market:
     def __init__(self,client,settings,clock=time.time):
         self.client,self.settings,self.clock=client,settings,clock
         self.lock=threading.RLock();self.master={};self.master_at=0;self.history={};self.history_at=0
-        self.latest=None;self.last_error='STRATEGY_NOT_LOADED'
+        self.latest=None;self.last_error='STRATEGY_NOT_LOADED';self.refresh_lock=threading.Lock()
     def session_open(self):
         now=datetime.fromtimestamp(self.clock(),TZ)
         if now.weekday()>=5 or not 9*60+15 <= now.hour*60+now.minute <= 15*60+15:return False
@@ -100,7 +100,7 @@ class Market:
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),NoRedirect())
         with opener.open('https://public.fyers.in/sym_details/NSE_FO_sym_master.json',timeout=12) as response:
             result=read_nifty_master(response)
-        self.master,self.master_at=result,self.clock()
+        with self.lock:self.master,self.master_at=result,self.clock()
     def contract(self,symbol):
         with self.lock:
             if self.clock()-self.master_at>86400:raise ValueError('CONTRACT_MASTER_STALE')
@@ -112,7 +112,8 @@ class Market:
             return {'symbol':symbol,'active':row.get('tradeStatus')==1,'lot_size':lot,'max_quantity':freeze,
                     'tick_size':row.get('tickSize'),'expires_at':row.get('expiryDate'),'checked_at':self.master_at}
     def refresh(self):
-        with self.lock:
+        # Readers keep using the last result while the next one loads.
+        with self.refresh_lock:
             now=datetime.fromtimestamp(self.clock(),TZ);today=now.strftime('%Y-%m-%d')
             self.refresh_master()
             if self.clock()-self.history_at>60 or not self.history:
@@ -127,7 +128,7 @@ class Market:
             proc=subprocess.run(['node',str(Path(__file__).with_name('entrySignals.mjs'))],input=json.dumps(data),text=True,capture_output=True,check=True,timeout=20)
             value=json.loads(proc.stdout)
             if not isinstance(value.get('tickets'),dict):raise ValueError('INVALID_STRATEGY_RESULT')
-            self.latest=value;self.last_error=None
+            with self.lock:self.latest=value;self.last_error=None
             return value
     def current(self):
         with self.lock:
