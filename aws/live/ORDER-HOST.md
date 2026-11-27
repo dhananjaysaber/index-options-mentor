@@ -93,6 +93,15 @@ fill latency, exchange execution or slippage. The user must perform the final
 controlled real-order acceptance test. No automatic merge or real-money activation
 is part of this installer; PR28 and PR30 remain unmerged.
 
+## Private website
+
+With Netlify's private lock on, the website answers the server's own check with
+401. Add `--site-is-private` to the installer. Only a 401 is then accepted, and
+the installer instead makes the same signed status check at
+`https://api.optionsmentor.in`. This does not check website to server: sign in to
+the app afterwards and confirm the server status appears. Without the flag, or
+with any other error, the installer restores its changes.
+
 ## Contract-stream startup correction
 
 The first AWS installation passed its isolated tests but rolled back at startup.

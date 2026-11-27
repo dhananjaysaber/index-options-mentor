@@ -10,6 +10,7 @@ DATA=Path('/var/lib/index-options-mentor/order-host')
 SERVICE='index-options-order-host.service'
 TIMER='index-options-order-backup.timer'
 NETLIFY='https://optionsmentor.netlify.app'
+PUBLIC_API='https://api.optionsmentor.in'
 UNIT_DIR=Path('/etc/systemd/system')
 NGINX_DIRS=('/etc/nginx/sites-enabled','/etc/nginx/conf.d')
 HOST_CONFIG=Path('/etc/index-options-order-host.json')
@@ -35,6 +36,7 @@ def status_request(base,path,secret,owner):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--verify-only',action='store_true');parser.add_argument('--journal-store',type=Path)
+    parser.add_argument('--site-is-private',action='store_true',help='The website has a Netlify private lock: check the public server address, then check the website in the app.')
     args=parser.parse_args()
     if sys.version_info<(3,12):raise RuntimeError('Python 3.12 or later required.')
     if not args.verify_only and (os.geteuid()!=0 or args.journal_store):raise RuntimeError('Use sudo python3 from SSH.')
@@ -152,11 +154,20 @@ WantedBy=multi-user.target
                     if attempt==79:raise RuntimeError('The disabled order host could not start.')
                     time.sleep(.5)
             print('Checking Netlify → signed AWS order host. No buy/sell requests are sent.',flush=True)
-            result=status_request(NETLIFY,'/api/orders/maintenance-status',secret,owner)
+            website_checked=True
+            try:result=status_request(NETLIFY,'/api/orders/maintenance-status',secret,owner)
+            except urllib.error.HTTPError as error:
+                # Netlify's private lock answers 401 before the website sees the check.
+                # The app itself calls website -> server, so check that part there.
+                if error.code!=401 or not args.site_is_private:raise
+                website_checked=False
+                print('The private website refused the server check (401). Checking the public server address instead.',flush=True)
+                result=status_request(PUBLIC_API,'/monitor/orders/status',secret,owner)
             if result.get('realMoneyEnabled') is not False or result.get('actualLiveExecutionHostReleased') is not True:raise RuntimeError('Deployed order-host status did not pass.')
             run(['systemctl','start','index-options-order-backup.service'])
             if states()!=before:raise RuntimeError('An existing app/feed/journal service changed state.')
-            print(json.dumps({'ok':True,'stage':'ACTUAL_ORDER_HOST_INSTALLED_DISABLED','accountMatchesAws':True,'netlifyToAwsVerified':True,'realMoneyEnabled':False,'ordersSent':0,'productionPositionsModified':False,'productionJournalTouched':False,'dailyLedgerBackupEnabled':True,'existingServices':before,'actualBrokerStopsAndExitsVerified':False}))
+            print(json.dumps({'ok':True,'stage':'ACTUAL_ORDER_HOST_INSTALLED_DISABLED','accountMatchesAws':True,'netlifyToAwsVerified':website_checked,'publicServerAddressVerified':not website_checked,'realMoneyEnabled':False,'ordersSent':0,'productionPositionsModified':False,'productionJournalTouched':False,'dailyLedgerBackupEnabled':True,'existingServices':before,'actualBrokerStopsAndExitsVerified':False}))
+            if not website_checked:print('STILL TO CHECK: website to server. Sign in to the app and confirm the server status appears.')
             print('Actual order service connected and daily ledger backup enabled. Real-money sending remains OFF. Actual broker buy/stop/exit proof requires a user-executed live acceptance test.')
         except Exception:
             subprocess.run(['systemctl','stop',SERVICE,TIMER],check=False)

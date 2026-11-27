@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT/'aws/live'))
 class HostInstallerTests(unittest.TestCase):
@@ -21,7 +22,13 @@ class HostInstallerTests(unittest.TestCase):
         spec=importlib.util.spec_from_file_location('order_host_installer_test',ROOT/'public/iom-order-host.py');self.mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.mod)
         self.mod.BASE=self.base;self.mod.DATA=self.root/'data';self.mod.UNIT_DIR=self.units;self.mod.NGINX_DIRS=(str(self.nginx),);self.mod.HOST_CONFIG=self.root/'config.json';self.calls=[]
     def tearDown(self):self.temp.cleanup()
-    def install(self,fail=False,fail_preflight=False):
+    def install(self,fail=False,fail_preflight=False,flags=(),website_code=None,public_ok=True):
+        self.asked=[]
+        def status(base,path,*a):
+            self.asked.append((base,path))
+            if website_code and base==self.mod.NETLIFY:raise urllib.error.HTTPError(base+path,website_code,'refused',None,None)
+            if not public_ok and base==self.mod.PUBLIC_API:raise OSError('public address unreachable')
+            return {'ok':True,'mode':'OWNED_EXECUTION_HOST','realMoneyEnabled':False,'actualLiveExecutionHostReleased':True}
         def secure(path):
             path=str(path)
             if path.endswith('live-account.json'):return {'appId':'TRADINGAPP-200','accessToken':'x'*40,'ownerProof':'a'*64}
@@ -34,7 +41,7 @@ class HostInstallerTests(unittest.TestCase):
             if fail and cmd[:2]==['systemctl','restart'] and kwargs.get('check'):raise RuntimeError('simulated restart failed')
             return subprocess.CompletedProcess(cmd,1 if 'is-enabled' in cmd else 0)
         with ExitStack() as stack:
-            for obj,name,value in [(sys,'argv',['iom-order-host.py']),(self.mod.os,'geteuid',lambda:0),(self.mod.os,'chown',lambda *a:None),(self.mod.pwd,'getpwnam',lambda _:pwd.getpwuid(os.getuid())),(self.mod,'states',lambda:{'existing-app':'active'}),(self.mod,'active',lambda _:'inactive'),(self.mod.subprocess,'run',run),(self.mod,'status_request',lambda *a:{'ok':True,'mode':'OWNED_EXECUTION_HOST','realMoneyEnabled':False,'actualLiveExecutionHostReleased':True})]:
+            for obj,name,value in [(sys,'argv',['iom-order-host.py',*flags]),(self.mod.os,'geteuid',lambda:0),(self.mod.os,'chown',lambda *a:None),(self.mod.pwd,'getpwnam',lambda _:pwd.getpwuid(os.getuid())),(self.mod,'states',lambda:{'existing-app':'active'}),(self.mod,'active',lambda _:'inactive'),(self.mod.subprocess,'run',run),(self.mod,'status_request',status)]:
                 stack.enter_context(patch.object(obj,name,value))
             stack.enter_context(patch('account_connect.secure_json',side_effect=secure));stack.enter_context(patch('account_connect.request',return_value={'s':'ok','data':{'fy_id':'OWNER'}}));stack.enter_context(patch('account_connect.verify_owner',return_value='OWNER'))
             self.mod.main()
@@ -54,6 +61,20 @@ class HostInstallerTests(unittest.TestCase):
         self.assertFalse(any(c[:2] in (['systemctl','enable'],['systemctl','restart']) for c in self.calls))
     def test_signed_check_goes_to_the_single_main_address(self):
         self.assertEqual(self.mod.NETLIFY,'https://optionsmentor.netlify.app')
+    def test_private_website_is_accepted_only_with_the_flag_and_checks_the_public_server_address(self):
+        self.install(flags=['--site-is-private'],website_code=401)
+        self.assertIn((self.mod.PUBLIC_API,'/monitor/orders/status'),self.asked)
+        self.assertTrue((self.units/self.mod.SERVICE).exists())
+    def test_private_website_without_the_flag_is_rolled_back(self):
+        with self.assertRaisesRegex(RuntimeError,'restored'):self.install(website_code=401)
+        self.assertEqual(self.site.read_text(),self.source);self.assertFalse((self.units/self.mod.SERVICE).exists())
+    def test_other_website_errors_are_rolled_back_even_with_the_flag(self):
+        for code in (302,403,404,500):
+            with self.assertRaisesRegex(RuntimeError,'restored'):self.install(flags=['--site-is-private'],website_code=code)
+            self.assertEqual(self.site.read_text(),self.source)
+    def test_unreachable_public_server_address_is_rolled_back(self):
+        with self.assertRaisesRegex(RuntimeError,'restored'):self.install(flags=['--site-is-private'],website_code=401,public_ok=False)
+        self.assertEqual(self.site.read_text(),self.source);self.assertFalse((self.units/self.mod.SERVICE).exists())
     def ledger(self,sold=0,outside=None):
         self.mod.DATA.mkdir()
         with sqlite3.connect(self.mod.DATA/'orders.sqlite3') as db:
