@@ -7,6 +7,7 @@ from datetime import datetime,timezone
 from zoneinfo import ZoneInfo
 from decimal import ROUND_FLOOR
 import json
+import re
 import threading
 import time
 import uuid
@@ -18,6 +19,9 @@ TZ=ZoneInfo('Asia/Kolkata')
 # Owner decision 27 Nov 2026: whatever is still open is sold from 15:18 IST.
 FORCED_CLOSE=(15,18)
 STALE_READING_ALERT_SECONDS=15
+# A second manual tap for the same strategy this soon is treated as a mistake.
+DOUBLE_TAP_SECONDS=3
+REASON=re.compile(r'[A-Z_]{3,60}')
 # Sales for these reasons say nothing about whether a strategy exit works.
 NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED','CLOSED_OUTSIDE_APP'}
 
@@ -91,8 +95,7 @@ class Runtime:
             data=self.market.current();ticket=data['tickets'].get(strategy+('_AUTO' if automatic else '_MANUAL'))
             if not isinstance(ticket,dict):raise ValueError('MENTOR_ENTRY_NOT_READY')
             symbol=ticket['symbol'];pair=self.feed.pair(symbol)
-            tick=decimal(self.execution.planner.validate_contract(symbol)['tick_size'])
-            stop=(decimal(ticket.get('hardOptionStop'))/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
+            tick,stop=self._initial_stop(ticket)
             if not tick<stop<decimal(pair['optionPrice']):raise ValueError('VALID_INITIAL_BROKER_STOP_REQUIRED')
             # Revalidate structural stop against the current shared-socket index.
             direction=1 if ticket.get('side')=='CE' else -1
@@ -103,6 +106,78 @@ class Runtime:
             with self.orders.transaction() as db:
                 db.execute('INSERT INTO live_requests VALUES (?,?,?,?,?,?,?)',(intent_id,strategy,int(automatic),encoded(ticket),float(stop),'PREPARED',self.clock()))
             return plan
+    def _initial_stop(self,ticket):
+        tick=decimal(self.execution.planner.validate_contract(ticket['symbol'])['tick_size'])
+        return tick,(decimal(ticket.get('hardOptionStop'))/tick).to_integral_value(rounding=ROUND_FLOOR)*tick
+    def preview(self,trade_amount):
+        """What a Buy tap would ask for now. Saves nothing and sends nothing.
+
+        An estimate only: every safety and price check runs again on the tap."""
+        with self.lock:
+            amount=decimal(trade_amount)
+            if not 0<amount<=self.max_amount:raise ValueError('AMOUNT_LIMIT_EXCEEDED')
+            trades={}
+            for strategy in ('CORE','SCALP'):
+                try:
+                    if any(r['strategy']==strategy for r in self._active() if r['state']!='PREPARED'):raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
+                    if self.last_error:raise ValueError('RECONCILIATION_ATTENTION_REQUIRED')
+                    ticket=self.market.current()['tickets'].get(strategy+'_MANUAL')
+                    if not isinstance(ticket,dict):raise ValueError('MENTOR_ENTRY_NOT_READY')
+                    plan=self.execution.planner.size(ticket['symbol'],amount)
+                    stop=self._initial_stop(ticket)[1]
+                    trades[strategy]={'available':True,'symbol':ticket['symbol'],'quantity':plan['payload']['qty'],
+                        'lots':plan['lots'],'buyPrice':plan['buyPrice'],'premiumCost':plan['premiumCost'],
+                        'feeReserve':plan['feeReserve'],'initialStop':float(stop)}
+                except Exception as error:
+                    trades[strategy]={'available':False,'reason':self._reason(error,'PRICE_NOT_AVAILABLE')}
+            return {'tradeAmount':float(amount),'trades':trades}
+    @staticmethod
+    def _reason(error,fallback):
+        text=str(error)
+        return text if isinstance(error,ValueError) and REASON.fullmatch(text) else fallback
+    def buy(self,intent_id,strategy,symbol,quantity,max_price,amount):
+        """One tap: prepare and submit exactly what was on screen, at most once.
+
+        A raised ValueError means no order was sent."""
+        with self.lock:
+            if strategy not in ('CORE','SCALP'):raise ValueError('INVALID_STRATEGY')
+            if not isinstance(intent_id,str) or str(uuid.UUID(intent_id))!=intent_id:raise ValueError('INVALID_INTENT_ID')
+            if not isinstance(symbol,str) or type(quantity) is not int or quantity<=0 or decimal(max_price)<=0:raise ValueError('INVALID_BUY')
+            with self.orders.transaction() as db:prior=db.execute('SELECT * FROM live_requests WHERE id=?',(intent_id,)).fetchone()
+            if prior:
+                if prior['strategy']!=strategy or prior['automatic']:raise ValueError('INTENT_REUSED')
+                return {**self._outcome(intent_id,prior['state']),'duplicate':True}
+            if not self._enabled():raise ValueError('REAL_MONEY_DISABLED')
+            with self.orders.transaction() as db:
+                if db.execute("SELECT 1 FROM live_requests WHERE strategy=? AND automatic=0 AND state!='EXPIRED' AND created>?",
+                              (strategy,self.clock()-DOUBLE_TAP_SECONDS)).fetchone():raise ValueError('DUPLICATE_TAP')
+            self.set_settings({'tradeAmount':amount})
+            try:
+                plan=self.prepare(intent_id,strategy)
+                if plan['payload']['symbol']!=symbol or plan['payload']['qty']!=quantity:raise ValueError('TRADE_CHANGED_LOOK_AGAIN')
+                if decimal(plan['buyPrice'])>decimal(max_price):raise ValueError('PRICE_MOVED_REFRESH_PLAN')
+                self.submit(intent_id)
+            except Exception as error:
+                if self.orders.get(intent_id):
+                    return {'id':intent_id,'state':'UNCLEAR','symbol':symbol,'quantity':quantity}
+                self._not_sent(intent_id,strategy)
+                raise ValueError(self._reason(error,'BROKER_CHECK_FAILED_NO_ORDER')) from None
+            with self.orders.transaction() as db:state=db.execute('SELECT state FROM live_requests WHERE id=?',(intent_id,)).fetchone()['state']
+            return {**self._outcome(intent_id,state),'symbol':symbol,'quantity':quantity}
+    def _not_sent(self,intent_id,strategy):
+        # No order record: free the slot, and remember the tap so a late copy cannot buy.
+        with self.orders.transaction() as db:
+            db.execute("INSERT OR IGNORE INTO live_requests VALUES (?,?,?,?,?,?,?)",(intent_id,strategy,0,encoded({'symbol':''}),0.0,'EXPIRED',self.clock()))
+            db.execute("UPDATE live_requests SET state='EXPIRED' WHERE id=?",(intent_id,))
+    def _outcome(self,id,request_state):
+        entry=self.orders.get(id)
+        if not entry:return {'id':id,'state':'NOT_SENT'}
+        managed=self.manager.get(id)
+        if managed:
+            state=managed['state']
+            return {'id':id,'state':state,'protectionConfirmed':state=='MANAGING'}
+        if request_state in ('NO_FILL','CLOSED'):return {'id':id,'state':request_state}
+        return {'id':id,'state':'WAITING'}
     def submit(self,intent_id):
         with self.lock:
             if not self._enabled():raise ValueError('REAL_MONEY_DISABLED')
@@ -121,7 +196,7 @@ class Runtime:
             if direction*(decimal(pair['nifty'])-decimal(ticket['underlyingStop']))<=0:raise ValueError('STRUCTURAL_STOP_ALREADY_HIT')
             if decimal(pair['optionPrice'])<=decimal(row['stop']):raise ValueError('INITIAL_STOP_ALREADY_HIT')
             with self.orders.transaction() as db:
-                if db.execute("SELECT 1 FROM live_requests WHERE strategy=? AND id!=? AND state NOT IN ('PREPARED','CLOSED','NO_FILL')",(row['strategy'],intent_id)).fetchone():raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
+                if db.execute("SELECT 1 FROM live_requests WHERE strategy=? AND id!=? AND state NOT IN ('PREPARED','CLOSED','NO_FILL','EXPIRED')",(row['strategy'],intent_id)).fetchone():raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
                 db.execute("UPDATE live_requests SET state='SUBMIT_REQUESTED' WHERE id=?",(intent_id,))
             try:self.execution.submit(intent_id)
             except Exception:

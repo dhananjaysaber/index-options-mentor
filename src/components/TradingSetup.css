@@ -63,3 +63,14 @@
   .live-setup-position > button { width: 100%; }
   .live-paper-check summary .live-setup-badge { margin-top: 12px; }
 }
+
+.live-setup-buy-list { display: grid; gap: 14px; margin-top: 14px; }
+.live-setup-buy-list .live-setup-plan { margin-top: 0; }
+.live-setup-real { display: inline-block; padding: 5px 10px; border-radius: 8px; background: #7a2335; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.premium-fintech-shell .live-setup-card .live-setup-buy-list h3 { margin-top: 12px; overflow-wrap: anywhere; }
+.premium-fintech-shell .live-setup-card .live-setup-buy-list .live-setup-buy:disabled { background: #243d52; border-color: #3c5265; }
+.live-setup-buy-list .live-setup-buy { width: 100%; touch-action: manipulation; }
+.premium-fintech-shell .live-setup-card .live-setup-outcome { margin-bottom: 0; padding: 11px 13px; border-radius: 10px; background: #102236; color: #e8f3ff; }
+.premium-fintech-shell .live-setup-card .live-setup-outcome.is-done { color: #96edcd; }
+.premium-fintech-shell .live-setup-card .live-setup-outcome.is-warning, .premium-fintech-shell .live-setup-card .live-setup-outcome.is-unclear { background: #3a202e; color: #ffe0e5; }
+.premium-fintech-shell .live-setup-card .live-setup-outcome.is-refused { background: #29291e; color: #f2dcae; }

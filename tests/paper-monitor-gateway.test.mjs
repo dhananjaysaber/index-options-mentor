@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { signedInCookie } from './helpers/appSession.mjs';
 import monitor from '../netlify/functions/monitor.mjs';
 
-const BASE = 'https://deploy-preview-28--optionsmentor.netlify.app';
+const BASE = 'https://optionsmentor.netlify.app';
+const COOKIE = await signedInCookie();
 const AWS_URL = 'https://api.optionsmentor.in';
 const SECRET = 'x'.repeat(64);
 const SESSION_SECRET = 'test-fyers-session-secret-never-used-in-production';
@@ -19,10 +21,10 @@ function encryptedSession(value = 'fake_fyers_token_for_unit_testing_long_enough
   const encrypted = Buffer.concat([cipher.update(value), cipher.final()]);
   return Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64url');
 }
-function request(action, method = 'GET', token = '', body = { strategy: 'core' }, origin = 'https://dhananjaysaber.github.io') {
+function request(action, method = 'GET', token = '', body = { strategy: 'core' }, origin = BASE) {
   return new Request(BASE + '/api/monitor/' + action, {
     method, headers: {
-      origin,
+      origin, cookie: COOKIE,
       ...(token ? { Authorization: 'Bearer ' + token } : {}),
       ...(method === 'POST' ? { 'content-type': 'application/json' } : {})
     },
@@ -112,7 +114,7 @@ test('owner match allows signed paper open and reconcile', async () => {
   });
 });
 
-test('Netlify preview can sync using its own browser origin', async () => {
+test('the main address can sync using its own browser origin', async () => {
   await withEnv(async () => {
     const mock = mockFetch();
     try {
@@ -159,7 +161,7 @@ test('missing AWS secret fails closed', async () => {
 test('disallowed browser origin is rejected', async () => {
   await withEnv(async () => {
     const res = await monitor(new Request(BASE + '/api/monitor/status', {
-      headers: { origin: 'https://evil.example',
+      headers: { origin: 'https://evil.example', cookie: COOKIE,
         Authorization: 'Bearer ' + encryptedSession() }
     }));
     assert.equal(res.status, 403);

@@ -2,22 +2,13 @@
 // Requires Netlify env AWS_PAPER_SYNC_BASE and AWS_PAPER_SYNC_SECRET.
 // The corresponding AWS endpoint must verify the HMAC before accepting changes.
 import crypto from 'node:crypto';
+import { requireApp } from './lib/appAuth.mjs';
 
-const ORIGIN = 'https://dhananjaysaber.github.io';
 const SESSION_COOKIE = 'iom_fyers_session';
 const MAX_BYTES = 32768;
-const reply = (code, value, origin = '') => new Response(JSON.stringify(value), {
+const reply = (code, value) => new Response(JSON.stringify(value), {
   status: code,
-  headers: {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-    ...(origin === ORIGIN ? {
-      'Access-Control-Allow-Origin': ORIGIN,
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-      Vary: 'Origin'
-    } : {})
-  }
+  headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
 });
 
 const PROFILE_URL = 'https://api-t1.fyers.in/api/v3/profile';
@@ -125,42 +116,31 @@ function signedAwsRequest(base, secret, action, method, body = '') {
 }
 
 export default async function handler(request) {
-  const origin = request.headers.get('origin') || '';
-  if (request.method === 'OPTIONS')
-    return origin === ORIGIN
-      ? new Response(null, { status: 204, headers: {
-          'Access-Control-Allow-Origin': ORIGIN,
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Authorization, Content-Type',
-          'Vary': 'Origin'
-        } })
-      : reply(403, { error: 'ORIGIN_NOT_ALLOWED' }, origin);
+  const refused = await requireApp(request);
+  if (refused) return refused;
   if (!['GET', 'POST'].includes(request.method))
-    return reply(405, { error: 'METHOD_NOT_ALLOWED' }, origin);
-  // Same-origin Netlify POSTs include Origin even though they do not use CORS.
-  if (origin && origin !== ORIGIN && origin !== new URL(request.url).origin)
-    return reply(403, { error: 'ORIGIN_NOT_ALLOWED' }, origin);
+    return reply(405, { error: 'METHOD_NOT_ALLOWED' });
   const token = decryptedFyersToken(request);
-  if (!token) return reply(401, { error: 'FYERS_SESSION_REQUIRED' }, origin);
+  if (!token) return reply(401, { error: 'FYERS_SESSION_REQUIRED' });
 
   const base = String(process.env.AWS_PAPER_SYNC_BASE || '').replace(/\/$/, '');
   const secret = process.env.AWS_PAPER_SYNC_SECRET || '';
   if (!/^https:\/\/[a-z0-9.-]+$/i.test(base) || secret.length < 32)
-    return reply(503, { error: 'PAPER_SYNC_NOT_CONFIGURED' }, origin);
+    return reply(503, { error: 'PAPER_SYNC_NOT_CONFIGURED' });
 
   const route = new URL(request.url).pathname;
   const action = route.endsWith('/sync') ? 'sync' : route.endsWith('/reconcile') ? 'reconcile' : route.endsWith('/status') ? 'status' : '';
   if (!action || (['sync', 'reconcile'].includes(action) && request.method !== 'POST') ||
       (action === 'status' && request.method !== 'GET'))
-    return reply(404, { error: 'UNKNOWN_MONITOR_ROUTE' }, origin);
+    return reply(404, { error: 'UNKNOWN_MONITOR_ROUTE' });
 
 
   const body = request.method === 'POST' ? await request.text() : '';
   if (Buffer.byteLength(body, 'utf8') > MAX_BYTES)
-    return reply(413, { error: 'PAYLOAD_TOO_LARGE' }, origin);
+    return reply(413, { error: 'PAYLOAD_TOO_LARGE' });
   if (body) {
     try { if (!JSON.parse(body) || Array.isArray(JSON.parse(body))) throw Error(); }
-    catch { return reply(400, { error: 'INVALID_JSON' }, origin); }
+    catch { return reply(400, { error: 'INVALID_JSON' }); }
   }
   // Verify the current FYERS identity against the AWS instance's
   // pinned owner BEFORE returning sensitive status or forwarding writes.
@@ -168,24 +148,24 @@ export default async function handler(request) {
   try {
     const statusResponse = await signedAwsRequest(base, secret, 'status', 'GET');
     if (!statusResponse.ok)
-      return reply(503, { error: 'AWS_OWNER_STATUS_UNAVAILABLE' }, origin);
+      return reply(503, { error: 'AWS_OWNER_STATUS_UNAVAILABLE' });
 
     const statusData = await statusResponse.json().catch(() => ({}));
     const ownerProof = statusData?.paperOwnerProof;
     if (!/^[a-f0-9]{64}$/.test(ownerProof || ''))
-      return reply(503, { error: 'PAPER_OWNER_NOT_CONFIGURED' }, origin);
+      return reply(503, { error: 'PAPER_OWNER_NOT_CONFIGURED' });
 
     const account = await verifiedAccountProof(token, secret);
     if (account.error)
-      return reply(account.status, { error: account.error }, origin);
+      return reply(account.status, { error: account.error });
 
     if (!sameOwner(ownerProof, account.proof))
-      return reply(403, { error: 'FYERS_ACCOUNT_NOT_PAPER_OWNER' }, origin);
+      return reply(403, { error: 'FYERS_ACCOUNT_NOT_PAPER_OWNER' });
 
     if (action === 'status') {
       // Never expose the internal identity binding to the browser.
       const { paperOwnerProof: _privateProof, ...safeStatus } = statusData;
-      return reply(200, safeStatus, origin);
+      return reply(200, safeStatus);
     }
 
     const response = await signedAwsRequest(
@@ -194,8 +174,8 @@ export default async function handler(request) {
     const data = await response.json().catch(() => ({
       error: 'INVALID_AWS_RESPONSE'
     }));
-    return reply(response.status, data, origin);
+    return reply(response.status, data);
   } catch {
-    return reply(503, { error: 'AWS_MONITOR_UNAVAILABLE' }, origin);
+    return reply(503, { error: 'AWS_MONITOR_UNAVAILABLE' });
   }
 }

@@ -84,6 +84,10 @@ class RuntimeTests(unittest.TestCase):
         id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP');self.now+=16;self.runtime.cycle()
         with self.assertRaisesRegex(ValueError,'EXPIRED'):self.runtime.submit(id)
         self.assertEqual(self.broker.calls(),0)
+    def test_an_expired_unused_plan_does_not_block_the_strategy_for_ever(self):
+        self.runtime.prepare(str(uuid.uuid4()),'SCALP');self.now+=16;self.runtime.cycle()
+        self.now=time.time();self.quote['at']=self.now
+        self.assertEqual(self.entry()[2]['state'],'MANAGING')
     def test_auto_entry_once_per_setup_and_defaults_off(self):
         self.runtime.cycle();self.assertEqual(self.broker.calls(),0)
         self.runtime.set_settings({'scalpAutoOpen':True});self.runtime.cycle();self.assertEqual(self.broker.calls(),2)

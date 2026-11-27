@@ -6,9 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import { signedInCookie } from './helpers/appSession.mjs';
 import journal from '../netlify/functions/journal.mjs';
 
 test('duplicate paper exit traverses the signed gateway and persists one SQLite record', async () => {
+  const cookie = await signedInCookie();
+  const headers = { origin: 'https://optionsmentor.netlify.app', cookie };
   const directory = await mkdtemp(join(tmpdir(), 'iom-http-replay-'));
   const secret = 'local-integration-key-'.repeat(4);
   const configuration = join(directory, 'config.json');
@@ -46,16 +49,16 @@ server.serve_forever()
         exitPriceSource: 'OBSERVED_OPTION_QUOTE', executionMode: 'PAPER_ONLY', brokerOrderPlaced: false } };
     for (let delivery = 0; delivery < 2; delivery++) {
       const response = await journal(new Request('https://optionsmentor.netlify.app/api/journal', {
-        method: 'POST', body: JSON.stringify({ action: 'journal_event', event })
+        method: 'POST', headers, body: JSON.stringify({ action: 'journal_event', event })
       }));
       assert.equal(response.status, 200);
       assert.equal((await response.json()).ok, true);
     }
-    const health = await (await journal(new Request('https://optionsmentor.netlify.app/api/journal?health=1'))).json();
+    const health = await (await journal(new Request('https://optionsmentor.netlify.app/api/journal?health=1', { headers: { cookie } }))).json();
     assert.equal(health.storage, 'sqlite');
     assert.equal(health.trades, 1);
     assert.equal(health.events, 1);
-    const history = await (await journal(new Request('https://optionsmentor.netlify.app/api/journal?limit=1000'))).json();
+    const history = await (await journal(new Request('https://optionsmentor.netlify.app/api/journal?limit=1000', { headers: { cookie } }))).json();
     assert.equal(history.trades.length, 1);
     assert.equal(history.trades[0].exit, 110);
     assert.equal(history.trades[0].closedBy, 'AWS_MONITOR');

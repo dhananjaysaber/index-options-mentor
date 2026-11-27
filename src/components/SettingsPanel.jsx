@@ -1,4 +1,5 @@
 import LiveOrderPanel from './LiveOrderPanel.jsx';
+import AppSignOutPanel from './AppSignOutPanel.jsx';
 import ExecutionConnectionPanel from './ExecutionConnectionPanel.jsx';
 import { useEffect, useState } from 'react';
 
@@ -57,6 +58,7 @@ export default function SettingsPanel({ settings, onSave }) {
 
       <LiveOrderPanel tradeAmount={draft.tradeAmount} />
       <ExecutionConnectionPanel />
+      <AppSignOutPanel />
 
       <div className="settings-grid">
         <SettingsCard title="Trade amount and account settings" copy="Enter your amount per trade. Mentor calculates whole lots using the selected option price.">
@@ -84,7 +86,7 @@ export default function SettingsPanel({ settings, onSave }) {
 
         <SettingsCard title="Copy trade details (manual trading)" copy="Optional: copy Mentor’s plan as text. This does not fill in a FYERS order form or send an order.">
           <Toggle checked={draft.liveHandoffEnabled !== false} onChange={value => update('liveHandoffEnabled', value)} title="Show live handoff" copy="Show the current symbol, quantity, reference price, NIFTY stop and target. Copy saves these details to your clipboard; Open FYERS opens its website." />
-          <div className="settings-note">When using this manual handoff, you place and manage the order in FYERS. The real-money connection above is a separate way to submit a reviewed plan.</div>
+          <div className="settings-note">When using this manual handoff, you place and manage the order in FYERS. The real-money Buy buttons above are separate and send a real order with one tap.</div>
         </SettingsCard>
 
         <SettingsCard title="Rules Mentor always checks" copy="Switching on automation does not bypass these trading rules.">

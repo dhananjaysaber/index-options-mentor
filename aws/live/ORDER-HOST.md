@@ -108,3 +108,7 @@ The installer now runs a disabled account/master/journal preflight before any
 service or nginx changes. Startup failures expose only a fixed stage and safe
 constant reason. Rollback disables new units while their files still exist,
 then restores/removes configuration, avoiding dangling enablement links.
+
+## One-tap manual buy (see APP-SIGN-IN.md)
+
+`preview` returns what a tap would ask for; it saves and sends nothing. `buy` runs prepare and submit once under one lock. It sends nothing if the option, quantity or highest price differ from the screen, or for a second manual tap on the same strategy within three seconds. The same request identity never buys twice. A refusal carries a fixed reason code; "unclear" means an order record exists.

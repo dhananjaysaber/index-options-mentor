@@ -1,9 +1,9 @@
 // Authenticated diagnostics only. Real-order routes cannot be enabled with env flags.
 import crypto from 'node:crypto';
+import {requireApp} from './lib/appAuth.mjs';
 const SESSION_COOKIE='iom_fyers_session';
-const GITHUB='https://dhananjaysaber.github.io';
 const profiles=new Map();
-const reply=(status,data,origin='')=>Response.json(data,{status,headers:{'cache-control':'no-store',...(origin===GITHUB?{'access-control-allow-origin':origin,'access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'Authorization,Content-Type,X-IOM-Action',vary:'Origin'}:{})}});
+const reply=(status,data)=>Response.json(data,{status,headers:{'cache-control':'no-store'}});
 function token(request){
   const secret=process.env.FYERS_SESSION_SECRET;
   if(!secret)return '';
@@ -32,17 +32,16 @@ async function proof(access,secret){
 }
 export default async function execution(request){
   const url=new URL(request.url),origin=request.headers.get('origin')||'';
-  if(request.method==='OPTIONS')return origin===GITHUB?reply(200,{},origin):reply(403,{error:'ORIGIN_NOT_ALLOWED'});
-  if(origin&&origin!==url.origin&&origin!==GITHUB)return reply(403,{error:'ORIGIN_NOT_ALLOWED'});
   const action=url.pathname.split('/').filter(Boolean).at(-1);
   const maintenance=action==='maintenance';
-  if(!['status','check','maintenance'].includes(action))return reply(404,{error:'REAL_ORDER_ROUTE_DISABLED'},origin);
-  if((action==='status'&&request.method!=='GET')||(action!=='status'&&request.method!=='POST'))return reply(405,{error:'METHOD_NOT_ALLOWED'},origin);
+  if(!maintenance){const refused=await requireApp(request);if(refused)return refused;}
+  if(!['status','check','maintenance'].includes(action))return reply(404,{error:'REAL_ORDER_ROUTE_DISABLED'});
+  if((action==='status'&&request.method!=='GET')||(action!=='status'&&request.method!=='POST'))return reply(405,{error:'METHOD_NOT_ALLOWED'});
   const secret=process.env.AWS_PAPER_SYNC_SECRET||'',base=String(process.env.AWS_PAPER_SYNC_BASE||'').replace(/\/$/,'');
-  if(secret.length<32||!/^https:\/\/[a-z0-9.-]+$/i.test(base))return reply(503,{error:'EXECUTION_CONNECTION_NOT_CONFIGURED'},origin);
-  let body=action==='status'?'{}':await request.text();if(Buffer.byteLength(body)>1024)return reply(413,{error:'BODY_TOO_LARGE'},origin);
-  let payload;try{payload=JSON.parse(body);}catch{return reply(400,{error:'INVALID_JSON'},origin);}
-  if(!payload||typeof payload!=='object'||Array.isArray(payload)||(action==='status'?Object.keys(payload).length!==0:Object.keys(payload).length!==1||!/^[a-f0-9-]{36}$/i.test(payload.checkId||'')))return reply(400,{error:'INVALID_EXECUTION_CHECK'},origin);
+  if(secret.length<32||!/^https:\/\/[a-z0-9.-]+$/i.test(base))return reply(503,{error:'EXECUTION_CONNECTION_NOT_CONFIGURED'});
+  let body=action==='status'?'{}':await request.text();if(Buffer.byteLength(body)>1024)return reply(413,{error:'BODY_TOO_LARGE'});
+  let payload;try{payload=JSON.parse(body);}catch{return reply(400,{error:'INVALID_JSON'});}
+  if(!payload||typeof payload!=='object'||Array.isArray(payload)||(action==='status'?Object.keys(payload).length!==0:Object.keys(payload).length!==1||!/^[a-f0-9-]{36}$/i.test(payload.checkId||'')))return reply(400,{error:'INVALID_EXECUTION_CHECK'});
   let owner,time=String(Math.floor(Date.now()/1000)),nonce=crypto.randomBytes(16).toString('hex');
   if(maintenance){
     if(origin)return reply(403,{error:'SERVER_AUTHENTICATION_REQUIRED'});
@@ -51,18 +50,18 @@ export default async function execution(request){
     const expected=signed(secret,time,nonce,owner,'/api/execution/maintenance',body);
     if(!/^[a-f0-9]{64}$/.test(owner)||!/^\d{10}$/.test(time)||Math.abs(Date.now()/1000-Number(time))>30||!/^[a-f0-9]{32}$/.test(nonce)||!/^[a-f0-9]{64}$/.test(supplied)||supplied.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(expected)))return reply(403,{error:'SERVER_AUTHENTICATION_FAILED'});
   }else{
-    const access=token(request);if(!access)return reply(401,{error:'FYERS_SESSION_REQUIRED'},origin);
-    if(action==='check'&&request.headers.get('x-iom-action')!=='execution-check')return reply(403,{error:'EXPLICIT_CHECK_REQUIRED'},origin);
-    try{owner=await proof(access,secret);}catch{return reply(503,{error:'FYERS_ACCOUNT_NOT_VERIFIED'},origin);}
+    const access=token(request);if(!access)return reply(401,{error:'FYERS_SESSION_REQUIRED'});
+    if(action==='check'&&request.headers.get('x-iom-action')!=='execution-check')return reply(403,{error:'EXPLICIT_CHECK_REQUIRED'});
+    try{owner=await proof(access,secret);}catch{return reply(503,{error:'FYERS_ACCOUNT_NOT_VERIFIED'});}
   }
   const path='/monitor/live/'+(action==='status'?'status':'check');
   try{
     const response=await fetch(base+path,{method:'POST',headers:{'content-type':'application/json','x-iom-time':time,'x-iom-nonce':nonce,'x-iom-owner':owner,'x-iom-signature':signed(secret,time,nonce,owner,path,body)},body,signal:AbortSignal.timeout(20000),redirect:'error',cache:'no-store'});
     const data=await response.json();
-    if(!response.ok)return reply(response.status===403?403:503,{error:response.status===403?'FYERS_ACCOUNT_NOT_EXECUTION_OWNER':'AWS_EXECUTION_CHECK_UNAVAILABLE',realMoneyEnabled:false},origin);
-    if(data.realMoneyEnabled!==false||!['DIAGNOSTICS_ONLY','SIMULATED_EXECUTION_CHECK'].includes(data.mode))return reply(503,{error:'UNSAFE_EXECUTION_STATUS'},origin);
-    return reply(200,data,origin);
-  }catch{return reply(503,{error:'AWS_EXECUTION_CHECK_UNAVAILABLE',realMoneyEnabled:false},origin);}
+    if(!response.ok)return reply(response.status===403?403:503,{error:response.status===403?'FYERS_ACCOUNT_NOT_EXECUTION_OWNER':'AWS_EXECUTION_CHECK_UNAVAILABLE',realMoneyEnabled:false});
+    if(data.realMoneyEnabled!==false||!['DIAGNOSTICS_ONLY','SIMULATED_EXECUTION_CHECK'].includes(data.mode))return reply(503,{error:'UNSAFE_EXECUTION_STATUS'});
+    return reply(200,data);
+  }catch{return reply(503,{error:'AWS_EXECUTION_CHECK_UNAVAILABLE',realMoneyEnabled:false});}
 }
 
 // Shared authentication only; the diagnostic handler above stays order-free.

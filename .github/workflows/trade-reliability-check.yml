@@ -62,7 +62,12 @@ jobs:
         env:
           GITHUB_ACTIONS: 'true'
 
-      - name: Plain-English live settings and plan-only review
+      - name: Signed out shows only the sign-in screen
+        run: node scripts/verify-sign-in-screen.mjs
+        env:
+          GITHUB_ACTIONS: 'true'
+
+      - name: Plain-English live settings and one-tap buy with a fake server
         run: node scripts/verify-live-settings-ux.mjs
         env:
           GITHUB_ACTIONS: 'true'

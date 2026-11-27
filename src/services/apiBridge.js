@@ -1,91 +1,43 @@
-const SESSION_KEY = 'index-options-mentor-fyers-session-v1';
-
-const configuredBase = String(import.meta.env.VITE_API_BASE || '').replace(/\/$/, '');
-const githubPagesBase = 'https://dhananjaysaber.github.io';
-const defaultBackend = 'https://optionsmentor.netlify.app';
-
-export const API_BASE = configuredBase || (window.location.hostname.endsWith('github.io') ? defaultBackend : '');
+// The app and its server share one address, so requests carry the sign-in cookie.
+// Nothing secret is kept in browser storage.
+const OLD_SESSION_KEY = 'index-options-mentor-fyers-session-v1';
 
 let installed = false;
-let nativeFetch = null;
 
 export function installApiBridge() {
   if (installed || typeof window === 'undefined' || typeof window.fetch !== 'function') return;
   installed = true;
-  consumeFyersSessionFromHash();
-  nativeFetch = window.fetch.bind(window);
+  clearFyersSession();
+  consumeLoginMarker();
+  const nativeFetch = window.fetch.bind(window);
+  let closing = false;
 
-  window.fetch = (input, init = {}) => {
-    const originalUrl = typeof input === 'string' ? input : input?.url || '';
-    if (!isApiPath(originalUrl)) return nativeFetch(input, init);
-
-    const apiUrl = API_BASE ? `${API_BASE}${normaliseApiPath(originalUrl)}` : originalUrl;
-    const headers = new Headers(init.headers || (typeof input !== 'string' ? input?.headers : undefined) || {});
-    const session = readSession();
-    if (session && (normaliseApiPath(originalUrl).startsWith('/api/fyers/') || normaliseApiPath(originalUrl).startsWith('/api/monitor/') || normaliseApiPath(originalUrl).startsWith('/api/execution/') || normaliseApiPath(originalUrl).startsWith('/api/orders/'))) {
-      headers.set('Authorization', `Bearer ${session}`);
+  window.fetch = async (input, init) => {
+    const response = await nativeFetch(input, init);
+    const url = typeof input === 'string' ? input : input?.url || '';
+    if (response.status === 401 && url.startsWith('/api/') && !closing) {
+      let code = '';
+      try { code = (await response.clone().json())?.error; } catch {}
+      // The day's sign-in ended: return to the sign-in screen once.
+      if (code === 'APP_SIGN_IN_REQUIRED') { closing = true; window.location.reload(); }
     }
-
-    return nativeFetch(apiUrl, {
-      ...init,
-      headers,
-      ...(API_BASE ? { mode: 'cors', credentials: 'omit' } : {})
-    });
+    return response;
   };
 }
 
 export function getFyersLoginUrl() {
-  const base = API_BASE || window.location.origin;
-  const returnTo = getFrontendReturnUrl();
-  const url = new URL('/api/fyers/login', base);
-  if (base !== window.location.origin) url.searchParams.set('returnTo', returnTo);
-  return url.toString();
+  return new URL('/api/fyers/login', window.location.origin).toString();
 }
 
+// Removes the saved session that earlier versions kept in browser storage.
 export function clearFyersSession() {
-  try { localStorage.removeItem(SESSION_KEY); } catch {}
+  try { localStorage.removeItem(OLD_SESSION_KEY); } catch {}
 }
 
-export function hasFyersSession() {
-  return Boolean(readSession());
-}
-
-function consumeFyersSessionFromHash() {
-  const hash = String(window.location.hash || '').replace(/^#/, '');
-  const params = new URLSearchParams(hash);
+function consumeLoginMarker() {
   const search = new URLSearchParams(window.location.search || '');
-  const session = params.get('fyers_session');
-  const cookieLoginReturn = search.get('fyers') === 'connected';
-  if (!session && !cookieLoginReturn) return;
-  try {
-    if (session) localStorage.setItem(SESSION_KEY, session);
-    else localStorage.removeItem(SESSION_KEY);
-  } catch {}
-  params.delete('fyers_session');
-  if (cookieLoginReturn) search.delete('fyers');
-  const cleanHash = params.toString();
-  const cleanSearch = search.toString();
-  const cleanUrl = `${window.location.pathname}${cleanSearch ? '?' + cleanSearch : ''}${cleanHash ? '#' + cleanHash : ''}`;
-  window.history.replaceState({}, document.title, cleanUrl);
-}
-
-
-function getFrontendReturnUrl() {
-  const basePath = import.meta.env.BASE_URL || '/';
-  const origin = window.location.origin === githubPagesBase ? githubPagesBase : window.location.origin;
-  return new URL(basePath, origin).toString();
-}
-
-function isApiPath(value) {
-  if (typeof value !== 'string') return false;
-  return value.startsWith('/api/');
-}
-
-function normaliseApiPath(value) {
-  const url = new URL(value, window.location.origin);
-  return `${url.pathname}${url.search}`;
-}
-
-function readSession() {
-  try { return localStorage.getItem(SESSION_KEY) || ''; } catch { return ''; }
+  if (search.get('fyers') !== 'connected') return;
+  search.delete('fyers');
+  const clean = search.toString();
+  window.history.replaceState({}, document.title, `${window.location.pathname}${clean ? '?' + clean : ''}${window.location.hash || ''}`);
 }

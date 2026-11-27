@@ -59,7 +59,7 @@ class JournalBridge:
 
 def server(runtime,secret,owner_proof,port=0):
     with runtime.orders.transaction() as db:db.execute('CREATE TABLE IF NOT EXISTS live_host_nonces(id TEXT PRIMARY KEY,expires REAL NOT NULL)')
-    actions={'status':set(),'settings':{'settings'},'prepare':{'intentId','strategy'},'submit':{'intentId'},'exit':{'entryId'},'stop':set()}
+    actions={'status':set(),'settings':{'settings'},'preview':{'tradeAmount'},'buy':{'intentId','strategy','symbol','quantity','maxPrice','tradeAmount'},'prepare':{'intentId','strategy'},'submit':{'intentId'},'exit':{'entryId'},'stop':set()}
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def reply(self,status,value):
@@ -81,13 +81,18 @@ def server(runtime,secret,owner_proof,port=0):
                 if not isinstance(payload,dict) or set(payload)!=actions[action]:raise ValueError('INVALID_FIELDS')
                 if action=='status':result=runtime.status()
                 elif action=='settings':result={'settings':runtime.set_settings(payload['settings'])}
+                elif action=='preview':result={'preview':runtime.preview(payload['tradeAmount'])}
+                elif action=='buy':result={'order':runtime.buy(payload['intentId'],payload['strategy'],payload['symbol'],payload['quantity'],payload['maxPrice'],payload['tradeAmount'])}
                 elif action=='prepare':result={'plan':runtime.prepare(payload['intentId'],payload['strategy'])}
                 elif action=='submit':result={'order':runtime.submit(payload['intentId'])}
                 elif action=='exit':result={'order':runtime.request_exit(payload['entryId'])}
                 else:
                     runtime.orders.stop();result={'newEntries':'STOPPED'}
                 self.reply(200,{'ok':True,**result,'realMoneyEnabled':runtime._enabled(),'mode':'OWNED_EXECUTION_HOST'})
-            except (ValueError,TypeError,KeyError,AttributeError):self.reply(409,{'error':'ORDER_ACTION_REJECTED_CHECK_STATUS','realMoneyEnabled':runtime._enabled()})
+            except (ValueError,TypeError,KeyError,AttributeError) as error:
+                # Only a fixed reason code may leave; never free text.
+                reason=str(error) if isinstance(error,ValueError) and re.fullmatch(r'[A-Z_]{3,60}',str(error)) else None
+                self.reply(409,{'error':'ORDER_ACTION_REJECTED_CHECK_STATUS',**({'reason':reason} if reason else {}),'realMoneyEnabled':runtime._enabled()})
             except Exception:self.reply(503,{'error':'ORDER_SERVICE_UNAVAILABLE_RECONCILE','realMoneyEnabled':runtime._enabled()})
     value=ThreadingHTTPServer(('127.0.0.1',port),Handler);value.daemon_threads=True;return value
 

@@ -1,6 +1,7 @@
 // Browser smoke: SELL from each strategy must close only that position,
 // keep rendering all four mobile tabs, and write one journal record per ID.
 // Usage after npm run build: node scripts/verify-sell-no-black.mjs
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -53,6 +54,7 @@ try {
     status: 401, contentType: 'application/json',
     body: '{"error":"Offline smoke test"}'
   }));
+  await fakeSignedIn(page);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
   await page.locator('.fyers-ref-scalp-sell').click();
@@ -92,6 +94,7 @@ try {
     Storage.prototype.setItem=function(){throw new DOMException('The quota has been exceeded.','QuotaExceededError');};
   });
   await auto.route('**/api/**',route=>route.fulfill({status:401,contentType:'application/json',body:'{"error":"Offline quota test"}'}));
+  await fakeSignedIn(auto);
   await auto.goto(base,{waitUntil:'domcontentloaded'});
   await auto.locator('.premium-mobile-bottom-nav button').nth(3).click();
   await auto.locator('.history-panel').getByText('NIFTY26NOV25400CE',{exact:false}).first().waitFor();

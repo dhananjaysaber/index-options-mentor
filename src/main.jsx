@@ -49,10 +49,9 @@ import './premium-design-v60.css';
 import './fyers-reference-v61.css';
 import './fyers-reference-v62.css';
 import './fyers-reference-v63.css';
+import SignInScreen from './components/SignInScreen.jsx';
+import { checkSignIn, watchSignIn } from './services/appSignIn.js';
 
-// On GitHub Pages the visible PWA is static, while all /api/* traffic is
-// transparently routed to the existing secure backend. No FYERS secret is
-// bundled into the public GitHub Pages build.
 // Do not reopen a standalone PWA halfway down a strategy card.
 // Browser-restored scroll positions caused the approved header to appear clipped.
 if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
@@ -66,15 +65,7 @@ installFyersRequestGuard();
 installLiveQuoteFeed();
 installPaperSyncQueue();
 
-if ('serviceWorker' in navigator) {
-  const registerWorker=() => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
-      console.warn('PWA service worker registration failed:', error);
-    });
-  };
-  if(document.readyState==='complete')registerWorker();
-  else window.addEventListener('load',registerWorker,{once:true});
-}
+registerServiceWorker();
 
 // Observe completed mentor snapshots and journal important setup decisions in
 // the background. This wrapper never delays the FYERS response used by the UI.
@@ -99,6 +90,33 @@ createRoot(document.getElementById('root')).render(
 // Permanent trade journal writes and retries stay outside the live trading path.
 startTradeJournalBridge();
 }
-void startMentor();
+
+function registerServiceWorker(){
+  if (!('serviceWorker' in navigator)) return;
+  const register=() => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(error => {
+      console.warn('PWA service worker registration failed:', error);
+    });
+  };
+  if(document.readyState==='complete')register();
+  else window.addEventListener('load',register,{once:true});
+}
+
+// Nothing loads, polls or syncs until the server confirms today's sign-in.
+async function openApp(){
+  // Only the Vite development server (never a built app) skips this: it has no sign-in routes.
+  if(import.meta.env.DEV)return startMentor();
+  const fetcher=window.fetch.bind(window),hostname=window.location.hostname;
+  const access=await checkSignIn(fetcher,hostname);
+  if(access.state!=='signed-in'){
+    createRoot(document.getElementById('root')).render(<SignInScreen state={access.state} />);
+    // Replaces an older cached copy of the app on this device.
+    registerServiceWorker();
+    return;
+  }
+  watchSignIn(access.expiresAt,{fetcher,hostname,reload:()=>window.location.reload()});
+  return startMentor();
+}
+void openApp();
 
 

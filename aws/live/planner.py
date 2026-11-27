@@ -31,6 +31,12 @@ class EntryPlanner:
 
     def plan(self, symbol, amount, available_funds):
         if self.market_open() is not True: raise ValueError('ENTRY_SESSION_CLOSED')
+        plan = self.size(symbol, amount)
+        self.check_funds(available_funds,plan['premiumCost'])
+        return plan
+
+    def size(self, symbol, amount):
+        """Price and lots for an amount. Reads contract and quote only."""
         if not isinstance(symbol,str) or not re.fullmatch(r'NSE:NIFTY[A-Z0-9]+(?:CE|PE)',symbol):
             raise ValueError('INVALID_NIFTY_CONTRACT')
         amount = decimal(amount).quantize(Decimal('.01'),rounding=ROUND_FLOOR)
@@ -45,7 +51,6 @@ class EntryPlanner:
         if qty < units: raise ValueError('AMOUNT_CANNOT_BUY_ONE_LOT')
         if qty > freeze: raise ValueError('EXCHANGE_QUANTITY_LIMIT')
         premium = limit*qty
-        self.check_funds(available_funds,premium)
         return {'amount':float(amount),'lots':lots,'lotSize':units,'buyPrice':float(limit),
                 'premiumCost':float(premium),'feeReserve':float(self.fee_reserve),
                 'payload':{'symbol':symbol,'qty':qty,'side':1,'type':1,'limitPrice':float(limit),

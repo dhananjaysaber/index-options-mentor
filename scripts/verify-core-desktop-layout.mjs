@@ -1,4 +1,5 @@
 // Synthetic, intercepted API responses only. No broker or journal writes escape.
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -21,6 +22,7 @@ try{
     if(path.endsWith('/quote'))data={d:[{n:'NSE:NIFTY50-INDEX',v:{lp:25550}},{n:'NSE:NIFTY26D0126000CE',v:{lp:150}}]};
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
+  await fakeSignedIn(page);
   await page.goto(base,{waitUntil:'domcontentloaded'});
   const layout=page.locator('.fyers-ref-trade-grid');
   const plan=page.locator('.fyers-ref-decision');

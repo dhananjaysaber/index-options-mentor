@@ -1,26 +1,54 @@
 import { useEffect, useRef, useState } from 'react';
 import './TradingSetup.css';
+import { createOneTapBuy, plainReason } from '../services/oneTapBuy.js';
+
+const STRATEGIES = [['CORE', '13-point'], ['SCALP', 'Scalp']];
+// The figures beside a Buy button are never more than a few seconds old.
+const FRESH_MS = 6000;
 
 export default function LiveOrderPanel({ tradeAmount }) {
   const [status, setStatus] = useState(null);
-  const [plan, setPlan] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [preview, setPreview] = useState(null);
+  const [outcomes, setOutcomes] = useState({});
+  const [buying, setBuying] = useState({});
   const [now, setNow] = useState(Date.now);
-  const pending = useRef(null);
   const running = useRef(false);
+  const tapBuy = useRef(null);
+  if (!tapBuy.current) tapBuy.current = createOneTapBuy({ fetcher: (url, init) => fetch(url, init) });
+  const amount = Number(tradeAmount);
   const enabled = status?.realMoneyEnabled === true;
   const exitsAllowed = enabled || status?.exitsAllowed === true;
   const heldWhileOff = !enabled && exitsAllowed && Boolean(status?.positions?.some(position => position.state !== 'PREPARED'));
   const money = value => Number.isFinite(Number(value)) && value != null ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(value)) : '—';
-  const expiresIn = plan ? Math.max(0, Math.ceil(plan.expiresAt - now / 1000)) : 0;
 
   useEffect(() => {
-    if (!plan) return undefined;
-    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [plan]);
+  }, []);
+
+  // Keeps the option, quantity and cost beside each Buy button current. It saves
+  // and sends nothing, and never uses the lock that Exit needs.
+  useEffect(() => {
+    let live = true, timer, asking = false;
+    async function look() {
+      window.clearTimeout(timer);
+      if (!asking && document.visibilityState === 'visible' && amount > 0) {
+        asking = true;
+        const askedAt = Date.now();
+        try {
+          const data = await api('preview', { tradeAmount: amount });
+          if (live) setPreview({ amount, askedAt, trades: data.preview.trades });
+        } catch { if (live) setPreview(null); }
+        if (enabled) await quietRefresh();
+        asking = false;
+      }
+      if (live) timer = window.setTimeout(look, enabled ? 3000 : 15000);
+    }
+    if (status !== null) void look();
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [amount, enabled, status !== null]);
 
   // Read-only status checks run on entry and when returning to the app.
   // Never restore a cached ON/OFF flag or automatically repeat an order action.
@@ -46,7 +74,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
       });
       data = await response.json();
     } catch {
-      throw new Error(['submit', 'exit'].includes(action)
+      throw new Error(action === 'exit'
         ? 'The trade status is unclear. Check your FYERS orders before trying again.'
         : 'The trading server could not be reached. Check your connection and try again.');
     }
@@ -56,11 +84,9 @@ export default function LiveOrderPanel({ tradeAmount }) {
         FYERS_ACCOUNT_NOT_VERIFIED: 'Your FYERS login could not be checked. Reconnect FYERS and try again.',
         ACCOUNT_DOES_NOT_MATCH_AWS: 'This FYERS login does not match the trading account saved on your server.'
       };
-      const fallback = action === 'prepare'
-        ? 'A trade plan could not be prepared. No buy request was sent. Check the connection and try again when Mentor has a current setup.'
-        : action === 'settings' ? 'The setting change could not be confirmed. Refresh the connection to check your current settings.'
+      const fallback = action === 'settings' ? 'The setting change could not be confirmed. Refresh the connection to check your current settings.'
         : action === 'stop' ? 'New entries could not be confirmed as paused. Refresh the connection before continuing.'
-        : action === 'submit' || action === 'exit'
+        : action === 'exit'
           ? 'The trade status is unclear. Check your FYERS orders before trying again.'
           : 'The trading connection could not be checked. Try again shortly.';
       throw new Error(messages[data.error] || fallback);
@@ -76,23 +102,25 @@ export default function LiveOrderPanel({ tradeAmount }) {
     finally { running.current = false; setBusy(false); }
   }
   async function refresh() { setStatus(null); setStatus(await api('status')); }
-  async function prepare(strategy) {
-    setPlan(null);
-    await api('settings', { settings: { tradeAmount: Number(tradeAmount) } });
-    if (!pending.current || pending.current.strategy !== strategy || Date.now() - pending.current.at > 15000) {
-      pending.current = { strategy, id: crypto.randomUUID(), at: Date.now() };
-    }
-    const result = await api('prepare', { intentId: pending.current.id, strategy });
-    setPlan(result.plan); await refresh();
+  async function quietRefresh() { try { setStatus(await api('status')); } catch {} }
+  async function buy(strategy, shown) {
+    // One tap: no confirmation and no Submit step. An ignored repeat changes nothing.
+    const result = await tapBuy.current(strategy, shown, preview.amount, () => {
+      setBuying(value => ({ ...value, [strategy]: true }));
+      setOutcomes(value => ({ ...value, [strategy]: { kind: 'sending', message: 'Order waiting. Sending to your server…' } }));
+    });
+    if (result.kind === 'ignored') return;
+    setBuying(value => ({ ...value, [strategy]: false }));
+    setOutcomes(value => ({ ...value, [strategy]: result }));
+    await quietRefresh();
   }
-  async function submit() { await api('submit', { intentId: plan.intentId }); setPlan(null); await refresh(); }
 
   return <section className="settings-card live-setup-card" aria-label="Real-money trading setup">
     <header className="live-setup-header">
       <div><span className="live-setup-eyebrow">REAL-MONEY TRADING</span><h2>Your trading connection</h2></div>
       <span className={`live-setup-badge ${enabled ? 'is-on' : 'is-off'}`}>{status ? enabled ? 'Buying is ON' : 'Buying is OFF' : 'Connection not checked'}</span>
     </header>
-    <p className="live-setup-lead">{!status ? 'Your connection is checked automatically when you open this page or return to the app.' : enabled ? 'Real-money buying is enabled. Review the price and quantity before submitting a trade.' : 'Your server is connected. Real-money buying is switched off. You can still review a trade plan.'}</p>
+    <p className="live-setup-lead">{!status ? 'Your connection is checked automatically when you open this page or return to the app.' : enabled ? 'Real-money buying is enabled. One tap on Buy sends a real order. There is no second screen.' : 'Your server is connected. Real-money buying is switched off, so the Buy buttons are disabled.'}</p>
 
     <div className="live-setup-status-grid" aria-live="polite">
       <Status label="Trading connection" value={status ? 'Connected' : 'Not checked'} />
@@ -110,32 +138,37 @@ export default function LiveOrderPanel({ tradeAmount }) {
     </div>
 
     <div className="live-setup-step">
-      <div className="live-setup-step-heading"><span>2</span><div><h3>Review a trade</h3><p>Mentor selects the strike and calculates the lots. Reviewing a plan does not place an order.</p></div></div>
+      <div className="live-setup-step-heading"><span>2</span><div><h3>Buy with one tap</h3><p>One tap sends a real-money order. It will not pay more than the price shown. Safety checks can still refuse it.</p></div></div>
       <div className="live-setup-budget"><span>Amount per trade</span><strong>{money(tradeAmount)}</strong><small>Uses the amount entered below. Brokerage and other charges are extra.</small></div>
-      <div className="live-setup-actions">
-        <button className="live-setup-button" type="button" disabled={busy || !status || Boolean(status.attentionRequired)} onClick={() => run(() => prepare('CORE'))}>Review 13-point trade</button>
-        <button className="live-setup-button" type="button" disabled={busy || !status || Boolean(status.attentionRequired)} onClick={() => run(() => prepare('SCALP'))}>Review Scalp trade</button>
+      <div className="live-setup-buy-list">
+        {STRATEGIES.map(([strategy, name]) => {
+          const current = preview && preview.amount === amount && now - preview.askedAt <= FRESH_MS ? preview.trades[strategy] : null;
+          const shown = current?.available ? current : null;
+          const outcome = outcomes[strategy];
+          return <div className="live-setup-plan" role="region" aria-label={`${name} real-money buy`} key={strategy}>
+            <span className="live-setup-real">REAL MONEY · {name}</span>
+            {shown ? <>
+              <h3>{shown.symbol}</h3>
+              <div className="live-setup-plan-grid">
+                <Status label="Quantity" value={`${shown.quantity} (${shown.lots} ${shown.lots === 1 ? 'lot' : 'lots'})`} />
+                <Status label="Estimated cost" value={`${money(shown.premiumCost)} + charges`} />
+                <Status label="Buy price · at most" value={money(shown.buyPrice)} />
+                <Status label="Initial stop price" value={money(shown.initialStop)} />
+              </div>
+            </> : <p>{current ? plainReason(current.reason) : enabled ? 'Waiting for a current price.' : 'No current price to show.'}</p>}
+            <button className="live-setup-button live-setup-buy" type="button" disabled={!shown || !enabled || Boolean(status?.attentionRequired) || Boolean(buying[strategy])} onClick={() => buy(strategy, shown)}>{buying[strategy] ? 'Order waiting…' : `Buy ${name} · real money`}</button>
+            {outcome && <p className={`live-setup-outcome is-${outcome.kind}`} role={['warning', 'unclear'].includes(outcome.kind) ? 'alert' : 'status'}>{outcome.message}</p>}
+          </div>;
+        })}
       </div>
       {!status && <p className="live-setup-help">Waiting for the connection check. If it fails, use Refresh connection to try again.</p>}
     </div>
 
     {error && <div className="live-setup-error" role="alert"><strong>This step could not finish</strong><p>{error}</p></div>}
 
-    {plan && <div className="live-setup-plan" role="region" aria-label="Trade plan review">
-      <div className="live-setup-plan-heading"><div><span className="live-setup-eyebrow">TRADE PLAN · NOT PURCHASED</span><h3>{plan.payload.symbol}</h3></div><span>{expiresIn ? `Valid for ${expiresIn}s` : 'Plan expired'}</span></div>
-      <div className="live-setup-plan-grid">
-        <Status label="Buy option price · limit" value={money(plan.buyPrice)} />
-        <Status label="Lots / quantity" value={`${plan.lots} lots / ${plan.payload.qty}`} />
-        <Status label="Premium cost" value={money(plan.premiumCost)} />
-        <Status label="Initial stop price" value={money(plan.initialStop)} />
-      </div>
-      <p>{!expiresIn ? 'This plan has expired. Review the trade again for current prices.' : !enabled ? 'You can review this plan, but buying remains switched off.' : 'Submitting this buy sends a real-money order to FYERS. The price and setup are checked again.'}</p>
-      <button className="live-setup-button live-setup-buy" type="button" disabled={busy || !enabled || !expiresIn} onClick={() => run(submit)}>Submit this real buy</button>
-    </div>}
-
     {status?.needsChecking?.length > 0 && <div className="live-setup-step"><h3>Needs checking</h3>{status.needsChecking.map(trade => <div className="live-setup-position" key={trade.id}><div><strong>{trade.symbol} · quantity {trade.quantity}</strong><p>Closed outside the app. Sale price and profit or loss were not recorded. Check this trade in FYERS.</p></div></div>)}</div>}
 
-    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
+    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : position.state === 'SUBMIT_REQUESTED' ? 'Order waiting — not confirmed as bought.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
 
     {status && <details className="live-setup-details"><summary>Automatic real-money entries</summary><p>These switches control real trades. The paper-trading switches below are separate.</p>{!enabled && <p>Unavailable while real-money buying is switched off.</p>}
       <AutoToggle title="13-point automatic buying" checked={Boolean(status.settings?.mentorAutoOpen)} disabled={busy || !enabled} onChange={checked => run(async () => { await api('settings', { settings: { mentorAutoOpen: checked } }); await refresh(); })} />

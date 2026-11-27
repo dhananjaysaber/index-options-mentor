@@ -1,5 +1,6 @@
 // Isolated UI regression for a *manual* Scalp BUY while strict auto research
 // is WAITING. Every /api/* request is intercepted: no FYERS/account writes.
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -82,6 +83,7 @@ try {
    ]};
    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
  });
+ await fakeSignedIn(page);
  await page.goto(base,{waitUntil:'domcontentloaded'});
  await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
  const decision=page.locator('.fyers-ref-scalp-decision');

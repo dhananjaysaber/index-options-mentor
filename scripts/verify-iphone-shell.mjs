@@ -1,5 +1,6 @@
 // Run separately in the GitHub verification workflow after installing Playwright.
 // Mobile-browser geometry assertions catch regressions that static CSS tests miss.
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -30,6 +31,7 @@ try {
     status: 401, contentType: 'application/json',
     body: JSON.stringify({ error: 'FYERS not connected in test session' })
   }));
+  await fakeSignedIn(page);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-feed-status').waitFor({ state: 'visible' });
   assert.equal(await page.locator('.strategy-mode-bar').count(), 0,

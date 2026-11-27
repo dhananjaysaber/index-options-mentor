@@ -1,4 +1,5 @@
 // Isolated UI fixtures. Every API request is intercepted; no real account or writes.
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
@@ -30,6 +31,7 @@ try {
     else if(path.endsWith('/quote'))data={d:[{n:'NSE:NIFTY50-INDEX',v:{lp:25550}},{n:'NSE:NIFTY26D0126000CE',v:{lp:230}}]};
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
   });
+  await fakeSignedIn(page);
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.locator('.fyers-ref-decision:visible').waitFor();
   await page.waitForTimeout(1500);
@@ -197,6 +199,7 @@ try {
     localStorage.setItem('index-options-mentor-scalp-position-v41',JSON.stringify({id:'isolated-target-hit',mode:'SIMULATION',strategyFamily:'SCALP',strategyTier:'SCALP',side:'CE',symbol:'NSE:NIFTY26NOV25400CE',lots:2,quantity:130,entry:230,currentPrice:245,underlyingEntry:25500,underlyingCurrent:25550,underlyingStop:25475,underlyingTarget:25525,rr:1,bestR:2,currentR:2,peakUnrealizedPnl:2000,optionTrailingActive:true,optionTrailingFloorPnl:1000,openedAt:new Date().toISOString(),score:85,scalpMaxHoldMinutes:12}));
   });
   await positionPage.route('**/api/**',r=>r.fulfill({status:401,contentType:'application/json',body:'{"error":"Isolated target-state fixture"}'}));
+  await fakeSignedIn(positionPage);
   await positionPage.goto(base,{waitUntil:'domcontentloaded'});
   for(const width of [390,1440]){
     await positionPage.setViewportSize({width,height:844});

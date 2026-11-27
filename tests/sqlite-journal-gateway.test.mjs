@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { signedInCookie } from './helpers/appSession.mjs';
 import journal from '../netlify/functions/journal.mjs';
 import maintenance from '../netlify/functions/journal-maintenance.mjs';
 import { signedHeaders, verifyMaintenance } from '../netlify/functions/lib/journalBridge.mjs';
+
+const cookie = await signedInCookie();
 
 test('SQLite gateway signs writes and preserves browser retry on failed commit', async () => {
   const saved = globalThis.fetch;
@@ -25,11 +28,11 @@ test('SQLite gateway signs writes and preserves browser retry on failed commit',
       return Response.json({ ok: true, tradeId: 'fixture' });
     };
     const request = () => new Request('https://optionsmentor.netlify.app/api/journal', {
-      method: 'POST', body: JSON.stringify(payload), headers: { origin: 'https://dhananjaysaber.github.io' }
+      method: 'POST', body: JSON.stringify(payload), headers: { origin: 'https://optionsmentor.netlify.app', cookie }
     });
     const result = await journal(request());
     assert.equal(result.status, 200);
-    assert.equal(result.headers.get('Access-Control-Allow-Origin'), 'https://dhananjaysaber.github.io');
+    assert.equal(result.headers.get('Access-Control-Allow-Origin'), null);
     assert.equal((await result.json()).tradeId, 'fixture');
     assert.equal(calls, 1);
     globalThis.fetch = async () => { throw Error('offline'); };

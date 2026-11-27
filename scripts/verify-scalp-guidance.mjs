@@ -1,5 +1,6 @@
 // Real mobile-browser smoke for the paper-only option-premium profit trail
 // and formerly invisible "What matters now" on the Scalp position.
+import { fakeSignedIn } from './lib/fake-signed-in.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
@@ -64,6 +65,7 @@ try {
     contentType: 'application/json',
     body: '{"error":"No authenticated FYERS session in screenshot test"}'
   }));
+  await fakeSignedIn(page);
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await page.locator('.premium-mobile-bottom-nav button').nth(1).click();
   const panel = page.locator('.position-essential-card').first();

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { requireApp } from './lib/appAuth.mjs';
 import { classifyFyersFailure } from './fyersErrors.mjs';
 import { buildMentorSnapshot, dateDaysAgoIST, dateKeyIST } from '../../server/mentor.js';
 
@@ -6,10 +7,6 @@ const COOKIE_NAME = 'iom_fyers_session';
 const API_BASE = 'https://api-t1.fyers.in/api/v3';
 const DATA_BASE = 'https://api-t1.fyers.in/data';
 const DIRECTIONAL_PARAMETER_IDS = new Set(['trend', 'vwap', 'risk', 'liquidity', 'orb', 'close', 'retest', 'pd', 'htf']);
-const GITHUB_PAGES_ORIGIN = 'https://dhananjaysaber.github.io';
-const GITHUB_PAGES_PATHS = ['/index-options-mentor-pwa/', '/index-options-mentor/'];
-// Only these two owned previews can hand off an encrypted session.
-const PREVIEW_ORIGINS = new Set(['https://deploy-preview-28--optionsmentor.netlify.app', 'https://deploy-preview-30--optionsmentor.netlify.app']);
 const researchHistoryCache = new Map();
 
 function json(data, status = 200, headers = {}) {
@@ -97,8 +94,6 @@ function validateReturnTo(value, backendOrigin) {
   try {
     const url = new URL(value);
     if (url.origin === backendOrigin) return url.toString();
-    if (PREVIEW_ORIGINS.has(backendOrigin) && PREVIEW_ORIGINS.has(url.origin)) return url.toString();
-    if (url.origin === GITHUB_PAGES_ORIGIN && GITHUB_PAGES_PATHS.some(path => url.pathname.startsWith(path))) return url.toString();
   } catch {}
   return '';
 }
@@ -372,7 +367,8 @@ async function handleCallback(request) {
   try {
     const response = await exchangeAuthCode(authCode);
     if (response?.s !== 'ok' || !response?.access_token) {
-      console.error('FYERS token response:', response);
+      // The reply can hold login details, so none of it is written to logs.
+      console.error('FYERS login was not accepted.');
       return new Response('FYERS login could not be completed.', { status: 400 });
     }
 
@@ -380,7 +376,6 @@ async function handleCallback(request) {
     const returnTo = readState(url.searchParams.get('state'), url.origin);
     const destination = new URL(returnTo);
     destination.searchParams.set('fyers', 'connected');
-    if (destination.origin === GITHUB_PAGES_ORIGIN || (PREVIEW_ORIGINS.has(url.origin) && PREVIEW_ORIGINS.has(destination.origin) && destination.origin !== url.origin)) destination.hash = `fyers_session=${encodeURIComponent(encrypted)}`;
 
     return new Response(null, {
       status: 302,
@@ -391,7 +386,7 @@ async function handleCallback(request) {
       }
     });
   } catch (error) {
-    console.error('FYERS callback failed:', error);
+    console.error('FYERS callback failed.');
     return new Response('FYERS login failed.', { status: 500 });
   }
 }
@@ -551,28 +546,14 @@ async function handleMentorSnapshot(request) {
   }
 }
 
-function corsOrigin(request) {
-  const origin = request.headers.get('origin') || '';
-  if (origin === GITHUB_PAGES_ORIGIN) return origin;
-  return '';
-}
-
-function withCors(response, request) {
-  const origin = corsOrigin(request);
-  if (!origin) return response;
-  const headers = new Headers(response.headers);
-  headers.set('Access-Control-Allow-Origin', origin);
-  headers.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  headers.set('Vary', 'Origin');
-  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
-}
-
 export default async (request) => {
-  if (request.method === 'OPTIONS') {
-    return withCors(new Response(null, { status: 204 }), request);
+  const refused = await requireApp(request);
+  if (refused) {
+    // A person who opened a FYERS login page while signed out lands on sign-in.
+    const page = ['login', 'callback'].includes(routeName(request)) && (request.headers.get('accept') || '').includes('text/html');
+    return refused.status === 401 && page ? new Response(null, { status: 302, headers: { Location: '/', 'cache-control': 'no-store' } }) : refused;
   }
-  if (request.method !== 'GET') return withCors(json({ error: 'Method not allowed.' }, 405), request);
+  if (request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
 
   const route = routeName(request);
   let response;
@@ -588,6 +569,6 @@ export default async (request) => {
     case 'mentor-snapshot': response = await handleMentorSnapshot(request); break;
     default: response = json({ error: 'Unknown FYERS route.' }, 404);
   }
-  return withCors(response, request);
+  return response;
 };
 
