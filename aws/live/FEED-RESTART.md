@@ -4,8 +4,10 @@
 expired (`FYERS_AUTH_REQUIRED TOKEN_EXPIRED`). With `Restart=on-failure` it then
 stays stopped, even after a new sign-in.
 
-`public/iom-feed-restart.py` adds one systemd drop-in (`Restart=always`, every
-60 seconds, no start limit). `--undo` removes it. A manual `systemctl stop`
+`public/iom-feed-restart.py` adds one systemd drop-in, `zz-iom-restart.conf`
+(`Restart=always`, every 120 seconds, no start limit). The server already has
+`recovery.conf` (on-failure, 120 seconds, 6 starts an hour) and
+`feed-status.conf`. Neither is edited; the new name sorts after both. `--undo` removes it. A manual `systemctl stop`
 still keeps the service stopped.
 
 It does not sign in to FYERS. The daily server data sign-in is still a manual

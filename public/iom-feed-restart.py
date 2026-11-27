@@ -3,7 +3,9 @@
 
 The feed program exits "successfully" when its FYERS sign-in has expired, so
 systemd's Restart=on-failure leaves it stopped, even after a new sign-in.
-This adds one small systemd settings file: try again every 60 seconds.
+This adds one small systemd settings file: try again every 120 seconds, the
+wait this server already uses, with no limit on the number of tries. Its name
+sorts last so that it wins over older settings files such as recovery.conf.
 
 It changes no program, strategy, order setting or sign-in, and it cannot sign in
 to FYERS. A manual `systemctl stop` still keeps the service stopped.
@@ -21,10 +23,10 @@ StartLimitIntervalSec=0
 
 [Service]
 Restart=always
-RestartSec=60
+RestartSec=120
 '''
 
-def drop_in():return UNIT_DIR/(SERVICE+'.d')/'50-iom-restart.conf'
+def drop_in():return UNIT_DIR/(SERVICE+'.d')/'zz-iom-restart.conf'
 def run(args):return subprocess.check_output(args,text=True,timeout=60).strip()
 def prop(name):return run(['systemctl','show',SERVICE,'--property='+name,'--value'])
 
@@ -40,7 +42,9 @@ def install(wait=time.sleep):
     try:
         path.parent.mkdir(parents=True,exist_ok=True);path.write_text(SETTINGS);os.chmod(path,0o644)
         run(['systemctl','daemon-reload'])
-        if prop('Restart')!='always' or prop('RestartUSec') not in ('1min','60s'):raise RuntimeError('The new restart setting did not take effect.')
+        found={name:prop(name) for name in ('Restart','RestartUSec','StartLimitIntervalUSec')}
+        if found!={'Restart':'always','RestartUSec':'2min','StartLimitIntervalUSec':'0'}:
+            raise RuntimeError('The new restart setting did not take effect, so it was removed. Found: '+json.dumps(found))
         # Does nothing if the feed is already running.
         run(['systemctl','start',SERVICE])
     except BaseException:
@@ -50,8 +54,8 @@ def install(wait=time.sleep):
         raise
     wait(5)
     running=prop('ActiveState')=='active'
-    return {'ok':True,'retriesEvery60Seconds':True,'feedRunningNow':running,
-        'next':'Feed is running.' if running else 'Feed is not running yet. After the daily server data sign-in it should start within about a minute. Check again then.',
+    return {'ok':True,'retriesEvery2Minutes':True,'feedRunningNow':running,
+        'next':'Feed is running.' if running else 'Feed is not running yet. After the daily server data sign-in it should start within about two minutes. Check again then.',
         'signedInToFyers':'NOT_CHECKED','ordersSent':0}
 
 def undo():
