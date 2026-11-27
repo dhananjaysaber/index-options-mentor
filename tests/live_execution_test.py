@@ -14,6 +14,7 @@ from orders import Orders
 from planner import EntryPlanner
 from execution import Execution
 from fyers_broker import FyersBroker
+from lift_lot_limit import lift
 
 SYMBOL='NSE:NIFTY26NOV25450PE'
 
@@ -42,6 +43,7 @@ class FakeBroker:
 
 class ExecutionTests(unittest.TestCase):
     def setUp(self):
+        lift(self)
         self.temp=tempfile.TemporaryDirectory(); self.file=str(Path(self.temp.name)/'live.sqlite3')
         self.broker=FakeBroker(); self.now=1800000000.; self.ask=230.; self.open=True
         self.contract={'symbol':SYMBOL,'active':True,'lot_size':65,'max_quantity':1800,

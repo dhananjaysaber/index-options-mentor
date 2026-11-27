@@ -68,7 +68,7 @@ export default function SettingsPanel({ settings, onSave }) {
           <Field label="Risk %" hint="Used to show whether a simulated setup would fit your intended real-risk budget.">
             <input type="number" min="0.1" max="10" step="0.1" value={draft.riskPct} onChange={e => update('riskPct', e.target.value)} />
           </Field>
-          <Field label="Amount per trade (₹)" hint="Mentor buys the whole lots affordable within this premium budget. Charges are additional.">
+          <Field label="Amount per trade (₹)" hint="Mentor buys the whole lots affordable within this premium budget. Charges are additional. Real orders are limited to 2 lots, with one buy open at a time.">
             <input type="number" min="1" step="100" value={draft.tradeAmount} onChange={e => update('tradeAmount', e.target.value)} />
           </Field>
           {sizingError && <p role="alert">{sizingError}</p>}

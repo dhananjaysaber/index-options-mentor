@@ -3,6 +3,11 @@ from decimal import Decimal, InvalidOperation, ROUND_CEILING, ROUND_FLOOR
 import re
 import time
 
+# Owner decision 27 Nov 2026: real orders are limited to 2 lots, with one buy
+# open at a time. This limits size only; it does not choose or exit trades.
+# There is deliberately no setting or request that can raise it.
+MAX_LOTS = 2
+
 
 def decimal(value):
     try:
@@ -46,7 +51,7 @@ class EntryPlanner:
         tick = decimal(contract['tick_size'])
         ask = self.quote(symbol)
         limit = (ask/tick).to_integral_value(rounding=ROUND_CEILING)*tick
-        lots = int(amount//(limit*units))
+        lots = min(int(amount//(limit*units)),MAX_LOTS)
         qty = lots*units
         if qty < units: raise ValueError('AMOUNT_CANNOT_BUY_ONE_LOT')
         if qty > freeze: raise ValueError('EXCHANGE_QUANTITY_LIMIT')

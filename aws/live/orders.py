@@ -158,6 +158,11 @@ class Orders:
                     raise ValueError('EXIT_EXCEEDS_OWNED_QUANTITY')
             elif db.execute('SELECT stopped FROM live_controls WHERE id=1').fetchone()[0]:
                 raise ValueError('NEW_ORDERS_STOPPED')
+            # Lot limit: no second buy while any app buy is waiting or held.
+            # Checked in the same transaction that records the new order, so two
+            # buys arriving together cannot both pass. Sales and stops skip this.
+            elif self._buy_in_use(db):
+                raise ValueError('LOT_LIMIT_IN_USE')
             reserve = Decimal('0')
             if not parent_id and cash_available is not None:
                 available, fee = Decimal(str(cash_available)), Decimal(str(fee_reserve))
@@ -189,6 +194,22 @@ class Orders:
         except Exception as error:
             self._update(intent_id, 'UNKNOWN', detail='BROKER_REFUSED' if str(error) in REFUSALS else 'RECONCILE_WITH_BROKER')
         return self.get(intent_id)
+
+    def buy_in_use(self):
+        with self.transaction() as db:
+            return self._buy_in_use(db)
+
+    @staticmethod
+    def _buy_in_use(db):
+        """True unless every earlier app buy, and its sales and stops, is finished."""
+        for entry in db.execute('SELECT id,state,filled_qty FROM live_intents WHERE parent_id IS NULL').fetchall():
+            children = db.execute('SELECT state,filled_qty FROM live_intents WHERE parent_id=?', (entry['id'],)).fetchall()
+            if entry['state'] not in TERMINAL or any(c['state'] not in TERMINAL for c in children):
+                return True
+            outside = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (entry['id'],)).fetchone()
+            if entry['filled_qty'] - sum(c['filled_qty'] for c in children) - (outside['quantity'] if outside else 0) > 0:
+                return True
+        return False
 
     @staticmethod
     def _audit(db, intent_id):

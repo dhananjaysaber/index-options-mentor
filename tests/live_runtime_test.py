@@ -21,9 +21,11 @@ from diagnostic import SimulatedBroker,journal_class
 from fyers_rest import FyersRest
 from market import Market
 from bridge import signature
+from lift_lot_limit import lift
 
 class RuntimeTests(unittest.TestCase):
     def setUp(self):
+        if not getattr(self,'real_lot_limit',False):lift(self)
         self.temp=tempfile.TemporaryDirectory();self.now=time.time();self.file=str(Path(self.temp.name)/'isolated.sqlite3')
         self.symbol='NSE:NIFTYTEST25450PE';self.quote={'symbol':self.symbol,'ask':230,'bid':230,'at':self.now}
         self.contract={'symbol':self.symbol,'active':True,'lot_size':65,'max_quantity':1755,'tick_size':.05,'checked_at':self.now,'expires_at':self.now+86400}

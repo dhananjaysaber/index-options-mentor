@@ -48,7 +48,7 @@ def main():
     package=json.loads(raw)
     if package.get('format')!=1: raise RuntimeError('Unsupported package format.')
     expected={f'aws/live/{n}' for n in ['orders.py','planner.py','execution.py','bridge.py','fyers_broker.py','README.md']}
-    expected.update(f'tests/{n}' for n in ['live_orders_test.py','live_execution_test.py','live_bridge_test.py'])
+    expected.update(f'tests/{n}' for n in ['live_orders_test.py','live_execution_test.py','live_bridge_test.py','lift_lot_limit.py'])
     if set(package['files'])!=expected or set(package['sha256'])!=expected:
         raise RuntimeError('Unexpected package contents.')
     for path,content in package['files'].items():

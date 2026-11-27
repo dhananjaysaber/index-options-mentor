@@ -6,6 +6,7 @@ created here. Strategy signals must come from the existing server strategy engin
 import json
 import uuid
 from orders import TERMINAL, encoded
+import planner as sizing
 from planner import decimal
 
 
@@ -55,6 +56,9 @@ class Execution:
         contract = self.planner.validate_contract(plan['payload']['symbol'])
         if plan['payload']['qty'] % contract['lot_size'] or plan['payload']['qty'] > contract['max_quantity']:
             raise ValueError('CONTRACT_CHANGED_REFRESH_PLAN')
+        # Also refuses a larger plan that was saved before the limit existed.
+        if plan['payload']['qty'] > sizing.MAX_LOTS*contract['lot_size']:
+            raise ValueError('LOT_LIMIT_EXCEEDED')
         if self.planner.quote(plan['payload']['symbol']) > decimal(plan['buyPrice']):
             raise ValueError('PRICE_MOVED_REFRESH_PLAN')
         available = self.orders.broker.available_funds()

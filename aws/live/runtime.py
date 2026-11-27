@@ -89,6 +89,7 @@ class Runtime:
                 if prior['strategy']!=strategy or bool(prior['automatic'])!=automatic:raise ValueError('INTENT_REUSED')
                 return self.execution.prepare(intent_id,json.loads(prior['ticket'])['symbol'],self.settings()['tradeAmount'],strategy)
             if any(r['strategy']==strategy  for r in self._active()):raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
+            if self.orders.buy_in_use():raise ValueError('LOT_LIMIT_IN_USE')
             if self.last_error:raise ValueError('RECONCILIATION_ATTENTION_REQUIRED')
             if self.market.session_open() is not True:raise ValueError('ENTRY_SESSION_CLOSED')
             data=self.market.current();ticket=data['tickets'].get(strategy+('_AUTO' if automatic else '_MANUAL'))
@@ -119,6 +120,7 @@ class Runtime:
             for strategy in ('CORE','SCALP'):
                 try:
                     if any(r['strategy']==strategy for r in self._active() if r['state']!='PREPARED'):raise ValueError('STRATEGY_POSITION_ALREADY_ACTIVE')
+                    if self.orders.buy_in_use():raise ValueError('LOT_LIMIT_IN_USE')
                     if self.last_error:raise ValueError('RECONCILIATION_ATTENTION_REQUIRED')
                     ticket=self.market.current()['tickets'].get(strategy+'_MANUAL')
                     if not isinstance(ticket,dict):raise ValueError('MENTOR_ENTRY_NOT_READY')
@@ -299,6 +301,7 @@ class Runtime:
                 settings=self.settings()
                 for strategy,key in [('CORE','mentorAutoOpen'),('SCALP','scalpAutoOpen')]:
                     if settings.get(key) is not True or any(r['strategy']==strategy for r in self._active()):continue
+                    if self.orders.buy_in_use():continue
                     try:
                         ticket=self.market.current()['tickets'].get(strategy+'_AUTO')
                         if not ticket or not ticket.get('setupId'):continue

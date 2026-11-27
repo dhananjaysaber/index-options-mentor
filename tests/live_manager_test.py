@@ -14,9 +14,11 @@ from planner import EntryPlanner
 from manager import Manager
 from diagnostic import SimulatedBroker,journal_class,run_check
 from protection import Protection
+from lift_lot_limit import lift
 
 class ManagerTests(unittest.TestCase):
     def setUp(self):
+        lift(self)
         self.temp=tempfile.TemporaryDirectory();self.file=str(Path(self.temp.name)/'check.sqlite3');self.now=time.time()
         self.symbol='NSE:NIFTYTEST25450PE';self.quote={'symbol':self.symbol,'ask':230.,'bid':230.,'at':self.now}
         self.contract={'symbol':self.symbol,'active':True,'lot_size':65,'max_quantity':1800,'tick_size':.05,'checked_at':self.now,'expires_at':self.now+86400}

@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 paths=[f'aws/live/{n}' for n in ['orders.py','planner.py','execution.py','bridge.py','fyers_broker.py','README.md']]
-paths += [f'tests/{n}' for n in ['live_orders_test.py','live_execution_test.py','live_bridge_test.py']]
+paths += [f'tests/{n}' for n in ['live_orders_test.py','live_execution_test.py','live_bridge_test.py','lift_lot_limit.py']]
 files={p:(ROOT/p).read_text() for p in paths}
 package={'format':1,'source':'content-addressed-package-v2','files':files,
          'sha256':{p:hashlib.sha256(v.encode()).hexdigest() for p,v in files.items()}}

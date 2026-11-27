@@ -25,6 +25,8 @@ export const REASONS = {
   VALID_INITIAL_BROKER_STOP_REQUIRED: 'A valid stop price could not be set.',
   INSUFFICIENT_AVAILABLE_FUNDS: 'Your FYERS funds are not enough.',
   AMOUNT_CANNOT_BUY_ONE_LOT: 'The amount per trade cannot buy one lot.',
+  LOT_LIMIT_IN_USE: '2-lot limit: a real buy is already open or not settled yet.',
+  LOT_LIMIT_EXCEEDED: '2-lot limit: this order was larger than 2 lots.',
   AMOUNT_LIMIT_EXCEEDED: 'The amount per trade is above your server limit.',
   STALE_OR_INVALID_OPTION_QUOTE: 'A fresh option price was not available.',
   FRESH_BID_ASK_REQUIRED: 'A fresh option price was not available.',

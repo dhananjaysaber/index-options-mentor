@@ -18,10 +18,12 @@ from orders import Orders
 from planner import EntryPlanner
 from execution import Execution
 from live_execution_test import FakeBroker,SYMBOL,uid
+from lift_lot_limit import lift
 
 
 class BridgeTests(unittest.TestCase):
     def setUp(self):
+        lift(self)
         self.temp=tempfile.TemporaryDirectory(); self.file=str(Path(self.temp.name)/'journal.sqlite3')
         spec=importlib.util.spec_from_file_location('bridge_test_journal',ROOT/'aws/journal/store.py')
         module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
