@@ -130,6 +130,8 @@ export default function LiveOrderPanel({ tradeAmount }) {
     {status && !status.actualBrokerAcceptanceVerified && <p className="live-setup-note">The connection is working. A real broker trade is still needed to verify the stop and automatic exit.</p>}
     {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your positions and any open stop or sell orders in FYERS before continuing.</p>}
 
+    {status?.partSales?.map(sale => <p className="live-setup-error" role="alert" key={sale.id}>{partSaleWarning(sale)}</p>)}
+
     {heldWhileOff && <p className="live-setup-note" role="status">Buying is off. Stops and sales for trades your server already holds still send real orders to FYERS.</p>}
 
     <div className="live-setup-step">
@@ -168,7 +170,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
 
     {status?.needsChecking?.length > 0 && <div className="live-setup-step"><h3>Needs checking</h3>{status.needsChecking.map(trade => <div className="live-setup-position" key={trade.id}><div><strong>{trade.symbol} · quantity {trade.quantity}</strong><p>Closed outside the app. Sale price and profit or loss were not recorded. Check this trade in FYERS.</p></div></div>)}</div>}
 
-    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : position.state === 'SUBMIT_REQUESTED' ? 'Order waiting — not confirmed as bought.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
+    {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{status.partSales?.some(sale => sale.id === position.id) ? 'Locked after a part sale. Your server is not managing this trade. Check FYERS.' : position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : position.state === 'SUBMIT_REQUESTED' ? 'Order waiting — not confirmed as bought.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed || status.partSales?.some(sale => sale.id === position.id)} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
 
     {status && <details className="live-setup-details"><summary>Automatic real-money entries</summary><p>These switches control real trades. The paper-trading switches below are separate.</p>{!enabled && <p>Unavailable while real-money buying is switched off.</p>}
       <AutoToggle title="13-point automatic buying" checked={Boolean(status.settings?.mentorAutoOpen)} disabled={busy || !enabled} onChange={checked => run(async () => { await api('settings', { settings: { mentorAutoOpen: checked } }); await refresh(); })} />
@@ -178,5 +180,11 @@ export default function LiveOrderPanel({ tradeAmount }) {
   </section>;
 }
 
+function partSaleWarning(sale) {
+  const unmanaged = 'The app is not managing this trade now: the stop will not trail, and the app will not sell it at the end of the day. Check FYERS and close it yourself.';
+  return sale.stopReduced
+    ? `Part of ${sale.symbol} was sold outside the app. FYERS showed quantity ${sale.held} left, and the app reduced its stop to ${sale.held} at the same stop price. ${unmanaged}`
+    : `Part of ${sale.symbol} was sold outside the app and quantity ${sale.held} was left. The app has NOT confirmed a smaller stop: it may still be for quantity ${sale.stopQuantity}. Check FYERS now. ${unmanaged}`;
+}
 function Status({ label, value }) { return <div className="live-setup-stat"><span>{label}</span><strong>{value}</strong></div>; }
 function AutoToggle({ title, checked, disabled, onChange }) { return <label className="live-setup-toggle"><span>{title}</span><input type="checkbox" checked={checked} disabled={disabled} onChange={event => onChange(event.target.checked)} /></label>; }

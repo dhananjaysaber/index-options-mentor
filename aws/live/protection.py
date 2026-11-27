@@ -100,6 +100,32 @@ class Protection:
         if row['state'] in TERMINAL:
             self._state(action['id'],'CONFIRMED'); return row
         raise ValueError('CANCELLATION_NOT_CONFIRMED')
+    def shrink(self, intent_id, quantity):
+        """Reduce an owned stop to the quantity still held, at the same prices.
+
+        Never increases it. Success only when the orderbook shows the new size."""
+        self.execution.owner(); row,book=self.book(intent_id)
+        if row['state']!='PENDING' or row['filled_qty']: raise ValueError('PROTECTION_NOT_MODIFIABLE')
+        current=json.loads(row['payload'])['qty']
+        if current==quantity: return True
+        if type(quantity) is not int or not 0<quantity<current: raise ValueError('INVALID_PROTECTION_QUANTITY')
+        now=self.execution.planner.clock()
+        with self.orders.transaction() as db:
+            # A price change still in flight carries the old quantity: wait for it.
+            if db.execute('''SELECT 1 FROM live_stop_actions a JOIN live_stop_times t ON t.id=a.id
+                    WHERE a.target=? AND a.kind='MODIFY' AND a.state IN ('SUBMITTING','ACKNOWLEDGED','UNKNOWN')
+                    AND ?-t.sent_at<?''',(intent_id,now,ABANDON_AFTER)).fetchone():
+                raise ValueError('PROTECTION_CHANGE_UNRESOLVED')
+            prior=db.execute('SELECT quantity,sent_at FROM live_stop_resizes WHERE id=?',(intent_id,)).fetchone()
+            send=not prior or prior['quantity']!=quantity or now-prior['sent_at']>=RESEND_AFTER
+            # Saved before sending, so a restart still recognises the new size.
+            if send: db.execute('INSERT OR REPLACE INTO live_stop_resizes VALUES (?,?,?)',(intent_id,quantity,now))
+        if send:
+            try: self.orders.broker.modify_stop(row['broker_id'],float(book.get('stopPrice')),float(book.get('limitPrice')),quantity)
+            except Exception: pass
+        row,_=self.book(intent_id)
+        if row['state']=='PENDING' and json.loads(row['payload'])['qty']==quantity: return True
+        raise ValueError('PROTECTION_MODIFICATION_NOT_CONFIRMED')
     def tighten(self, intent_id, stop, limit):
         self.execution.owner(); row,book=self.book(intent_id)
         if row['state']!='PENDING' or row['filled_qty']: raise ValueError('PROTECTION_NOT_MODIFIABLE')

@@ -47,7 +47,7 @@ class SimulatedBroker:
     def modify_stop(self,order_id,stop,limit,qty):
         row=next(r for r in self._rows() if r['id']==order_id)
         if row['status']!=6 or row['filledQty']: raise ValueError('SIM_STOP_NOT_PENDING')
-        row.update(stopPrice=stop,limitPrice=limit,qty=qty);self._write(row,'MODIFY')
+        row.update(stopPrice=stop,limitPrice=limit,qty=qty,remainingQuantity=qty-row['filledQty']);self._write(row,'MODIFY')
         return {'s':'ok','id':order_id}
     def calls(self,kind='PLACE'):
         with sqlite3.connect(self.file) as db: return db.execute('SELECT count(*) FROM simulated_calls WHERE kind=?',(kind,)).fetchone()[0]

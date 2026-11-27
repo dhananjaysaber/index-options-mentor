@@ -79,7 +79,7 @@ class Runtime:
                 'realMoneyEnabled':self._enabled(),'exitsAllowed':self._exits_allowed(),'settings':self.settings(),'positions':[
                     {'id':r['id'],'strategy':r['strategy'],'state':r['state'],'symbol':json.loads(r['ticket'])['symbol']} for r in rows],
                 'attentionRequired':self.last_error,'strategyReadingStale':self.reading_stale,
-                'needsChecking':self.orders.external_closes(),**self.acceptance()}
+                'needsChecking':self.orders.external_closes(),'partSales':self.manager.outside.part_sales(),**self.acceptance()}
     def prepare(self,intent_id,strategy,automatic=False):
         with self.lock:
             if strategy not in ('CORE','SCALP') or type(automatic) is not bool:raise ValueError('INVALID_STRATEGY')

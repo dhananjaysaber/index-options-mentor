@@ -46,6 +46,9 @@ class Orders:
                 CREATE TABLE IF NOT EXISTS live_external_closes (
                     entry_id TEXT PRIMARY KEY, quantity INTEGER NOT NULL, noticed_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS live_stop_resizes (
+                    id TEXT PRIMARY KEY, quantity INTEGER NOT NULL, sent_at REAL NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS live_controls (
                     id INTEGER PRIMARY KEY CHECK(id=1), stopped INTEGER NOT NULL
                 );
@@ -232,6 +235,14 @@ class Orders:
         if len(matches) != 1:
             return self._release_refused(current) if not matches else current
         order, expected = matches[0], json.loads(current['payload'])
+        # A stop may show the smaller quantity this app itself asked for, and no
+        # other. It is adopted below only after every other check has passed.
+        resized = None
+        if expected['type']==4 and order.get('qty') != expected['qty']:
+            with self.transaction() as db:
+                asked = db.execute('SELECT quantity FROM live_stop_resizes WHERE id=?', (intent_id,)).fetchone()
+            if asked and order.get('qty') == asked['quantity'] and asked['quantity'] < expected['qty']:
+                resized = expected = {**expected, 'qty': asked['quantity']}
         if any(order.get(key) != expected[key] for key in ('symbol', 'qty', 'side')):
             raise ValueError('BROKER_ORDER_MISMATCH')
         if (order.get('orderTag') != '1:' + current['tag'] or not isinstance(order.get('id'),str) or
@@ -259,6 +270,8 @@ class Orders:
                 return dict(latest)
             db.execute('UPDATE live_intents SET state=?,broker_id=?,filled_qty=?,average_price=? WHERE id=?',
                        (state,order['id'],filled,price if filled else None,intent_id))
+            if resized:
+                db.execute('UPDATE live_intents SET payload=? WHERE id=?', (encoded(resized),intent_id))
             self._audit(db,intent_id)
             self._queue_close(db,current['parent_id'] or intent_id)
         return self.get(intent_id)

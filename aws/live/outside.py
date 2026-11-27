@@ -2,6 +2,10 @@
 
 Owner decision 27 Nov 2026: confirm the position is closed, then cancel only the
 app's own leftover stop and send no new sale. Anything unclear stays locked.
+
+Owner decision 27 Nov 2026 (part sale): when part of a trade is confirmed sold
+outside the app, reduce the app's stop to the quantity still held, at the same
+prices. The trade stays locked with a warning, and no sale is sent.
 """
 import json
 from orders import TERMINAL
@@ -21,6 +25,9 @@ class OutsideWatch:
             db.execute('''CREATE TABLE IF NOT EXISTS live_outside_watch (
                 id TEXT PRIMARY KEY, sale_seen INTEGER NOT NULL DEFAULT 0, matched_since REAL,
                 tried_at REAL, low_since REAL, positions_at REAL)''')
+            # held: quantity last seen left after a part sale. confirmed: seen twice.
+            db.execute('''CREATE TABLE IF NOT EXISTS live_part_sales (
+                id TEXT PRIMARY KEY, held INTEGER NOT NULL, since REAL NOT NULL, confirmed INTEGER NOT NULL)''')
 
     def _load(self, entry_id):
         with self.orders.transaction() as db:
@@ -64,7 +71,9 @@ class OutsideWatch:
         if state['tried_at'] is not None and now-state['tried_at'] < CHECK_EVERY: raise ValueError(UNCLEAR)
         state['tried_at'] = now
         if not self._closed_at_broker(entry_id, symbol):
-            state['matched_since'] = None; self._save(state); raise ValueError(UNCLEAR)
+            state['matched_since'] = None; self._save(state)
+            self._part_sale(entry_id, symbol, remaining, now)
+            raise ValueError(UNCLEAR)
         if state['matched_since'] is None: state['matched_since'] = now
         self._save(state)
         if now-state['matched_since'] < CONFIRM_SECONDS: raise ValueError(UNCLEAR)
@@ -76,6 +85,68 @@ class OutsideWatch:
             raise ValueError(UNCLEAR)
         self.orders.record_external_close(entry_id, remaining)
         return True
+
+    def _part_sale(self, entry_id, symbol, remaining, now):
+        """Shrink the app's stop once the same part holding is confirmed twice."""
+        found = self._part_held(entry_id, symbol, remaining)
+        with self.orders.transaction() as db:
+            prior = db.execute('SELECT * FROM live_part_sales WHERE id=?', (entry_id,)).fetchone()
+        if not found:
+            # Restart the wait. A part sale already confirmed stays on record.
+            if prior and not prior['confirmed']:
+                with self.orders.transaction() as db: db.execute('DELETE FROM live_part_sales WHERE id=?', (entry_id,))
+            return
+        held, stop_id = found
+        if not prior or prior['held'] != held:
+            with self.orders.transaction() as db:
+                db.execute('INSERT OR REPLACE INTO live_part_sales VALUES (?,?,?,0)', (entry_id, held, now))
+            return
+        if now-prior['since'] < CONFIRM_SECONDS: return
+        with self.orders.transaction() as db: db.execute('UPDATE live_part_sales SET confirmed=1 WHERE id=?', (entry_id,))
+        # Any failure leaves the trade locked; the next check looks again first.
+        try: self.protection.shrink(stop_id, held)
+        except ValueError: pass
+
+    def _part_held(self, entry_id, symbol, remaining):
+        """(quantity held, own stop) only when everything agrees; otherwise None."""
+        view = self.execution.orderbook_view(symbol, entry_id)
+        held = view['total']
+        # view['owned'] covers every app trade in this option: it must be only this one.
+        if not view['complete'] or view['owned'] != remaining or not 0 < held < remaining: return None
+        if held % self.execution.planner.validate_contract(symbol)['lot_size']: return None
+        entry = self.orders.get(entry_id)
+        if entry['state'] not in TERMINAL: return None
+        if not any(r.get('orderTag') == '1:'+entry['tag'] for r in view['book']): return None
+        positions = self.orders.broker.position_rows(symbol)
+        if not positions or self.orders.broker.net_quantity(symbol) != held: return None
+        # No unfinished app sale, and exactly one untouched stop of the app's own.
+        children = self._children(entry_id)
+        live = [r for r in children if r['state'] not in TERMINAL]
+        if len(live) != 1 or json.loads(live[0]['payload'])['type'] != 4: return None
+        stop = live[0]
+        if stop['state'] != 'PENDING' or stop['filled_qty']: return None
+        stop_tag = '1:'+stop['tag']
+        if sum(r.get('orderTag') == stop_tag and r['status'] == 6 for r in view['book']) != 1: return None
+        rows, _, _ = self.execution.ledger(symbol)
+        app_tags = {'1:'+r['tag'] for r in rows}
+        for row in view['book']:
+            if row.get('orderTag') != stop_tag and row['status'] not in (1,2,5,7): return None
+            # Something bought outside the app: the holding may not be this trade.
+            if row['side'] == 1 and row['filledQty'] and row.get('orderTag') not in app_tags: return None
+        return held, stop['id']
+
+    def part_sales(self):
+        """Confirmed part sales on trades that are still open, for the warning."""
+        with self.orders.transaction() as db:
+            rows = [dict(r) for r in db.execute('''SELECT p.id,p.held,m.stop_intent FROM live_part_sales p
+                JOIN live_managed_positions m ON m.id=p.id WHERE p.confirmed=1 AND m.state!='CLOSED' ''')]
+        result = []
+        for row in rows:
+            stop = self.orders.get(row['stop_intent'])
+            size = json.loads(stop['payload'])['qty'] if stop else None
+            result.append({'id':row['id'], 'symbol':self._symbol(row['id']), 'held':row['held'], 'stopQuantity':size,
+                           'stopReduced':bool(stop and size == row['held'] and stop['state'] == 'PENDING')})
+        return result
 
     def _children(self, entry_id):
         with self.orders.transaction() as db:
