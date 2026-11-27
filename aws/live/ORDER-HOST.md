@@ -47,6 +47,21 @@ New buys and real auto-entry controls stay disabled while AWS sending is OFF.
 Exit stays available only for trades the server already holds (see below).
 Existing research-position controls remain simulations.
 
+## Trades sold outside the app
+
+If you or FYERS sell a held trade, the server confirms it only when today's
+orderbook shows every app fill and no net holding, FYERS positions show that
+option flat, and no other order for it is open, twice at least 5 seconds apart.
+It then cancels only its own stop for that trade, confirms it, sends no sale and
+unlocks. The journal gets a "needs checking" checkpoint with no sale price or
+profit, so it is not part of closed-trade totals.
+
+Anything else stays locked with attention: a part sale, missing or conflicting
+FYERS data, another open order, an unfinished app sale or an unseen stop. The app
+changes nothing, so a stop already at FYERS can still fire, possibly for more than
+you still hold. Check positions and open orders by hand. There is no unlock
+button, and evidence from an earlier day is not available in today's orderbook.
+
 ## Switching real money off
 
 Set `realMoneyEnabled` to `false`, keep `operatorApprovedAppId`, and restart the

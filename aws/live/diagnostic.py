@@ -37,6 +37,9 @@ class SimulatedBroker:
         self._write(row,'PLACE'); return {'s':'ok','id':key}
     def orders_by_tag(self,tag): return [r for r in self._rows() if r['orderTag']==tag]
     def net_quantity(self,symbol): return sum(r['side']*r['filledQty'] for r in self._rows() if r['symbol']==symbol)
+    def orders_for_symbol(self,symbol): return [r for r in self._rows() if r['symbol']==symbol]
+    def position_rows(self,symbol):
+        return [{'netQty':self.net_quantity(symbol)}] if self.orders_for_symbol(symbol) else []
     def cancel_order(self,order_id):
         row=next(r for r in self._rows() if r['id']==order_id)
         if row['status']!=2: row['status']=1;self._write(row,'CANCEL')

@@ -88,13 +88,40 @@ class Execution:
             raise ValueError('INVALID_EXIT_PRICE')
         return self.orders.submit_exit(intent_id,entry_id,price,quantity)
 
+    def ledger(self, symbol):
+        """This app's orders for one option, and the quantity it still owns."""
+        with self.orders.transaction() as db:
+            rows = [dict(r) for r in db.execute('SELECT * FROM live_intents')
+                    if json.loads(r['payload'])['symbol'] == symbol]
+            gone = {r['entry_id']:r['quantity'] for r in db.execute('SELECT * FROM live_external_closes')}
+        owned = sum((1 if not r['parent_id'] else -1)*r['filled_qty'] for r in rows)
+        return rows, owned-sum(gone.get(r['id'],0) for r in rows), gone
+
+    def orderbook_view(self, symbol, entry_id=None):
+        """Compare today's FYERS orderbook with the ledger.
+
+        `complete` is false unless every fill of each relevant app trade is shown,
+        so an empty, partial or late orderbook is never read as an outside sale.
+        """
+        book = self.orders.broker.orders_for_symbol(symbol)
+        rows, owned, gone = self.ledger(symbol)
+        shown = {r.get('orderTag'):r for r in book if r.get('orderTag')}
+        trades = {}
+        for row in rows: trades.setdefault(row['parent_id'] or row['id'], []).append(row)
+        complete = True
+        for key, orders in trades.items():
+            held = sum((1 if not r['parent_id'] else -1)*r['filled_qty'] for r in orders)-gone.get(key,0)
+            if key == entry_id or held or any('1:'+r['tag'] in shown for r in orders):
+                for r in orders:
+                    seen = shown.get('1:'+r['tag'])
+                    if r['filled_qty'] != (seen['filledQty'] if seen else 0): complete = False
+        return {'complete':complete,'total':sum(r['side']*r['filledQty'] for r in book),'owned':owned,'book':book}
+
     def check_holding(self, symbol):
         """FYERS must hold exactly what this ledger says it owns."""
-        with self.orders.transaction() as db:
-            rows = list(db.execute('SELECT * FROM live_intents'))
-        owned = sum((1 if not r['parent_id'] else -1)*r['filled_qty'] for r in rows
-                    if json.loads(r['payload'])['symbol'] == symbol)
-        if self.orders.broker.net_quantity(symbol) != owned:
+        view = self.orderbook_view(symbol)
+        if (self.orders.broker.net_quantity(symbol) != view['owned'] or
+                not view['complete'] or view['total'] < view['owned']):
             raise ValueError('BROKER_POSITION_MISMATCH')
 
     def recover(self, journal):

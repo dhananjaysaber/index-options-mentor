@@ -351,4 +351,124 @@ class UnconfirmedStopTests(Case):
         self.assertEqual((self.manager.get(id)['exit_reason'],len(self.sells()),self.held()),('END_OF_DAY',0,130))
         self.assertTrue(self.runtime.last_error)
 
+class ClosedOutsideTests(Case):
+    def outside(self,quantity=130,side=-1,status=2,key=None):
+        """An order the app did not send, as the owner or FYERS would create."""
+        self.broker._write({'id':key or 'OUT-'+str(uuid.uuid4()),'orderTag':'','clientId':'OWNER','symbol':self.symbol,
+            'side':side,'qty':quantity,'type':1,'productType':'INTRADAY','status':status,'limitPrice':230,
+            'filledQty':quantity if status==2 else 0,'remainingQuantity':0 if status==2 else quantity,
+            'tradedPrice':230 if status==2 else 0},'OUTSIDE')
+    def wait(self,times=4):
+        for _ in range(times):status=self.cycle(231)
+        return status
+    def counts(self):return (self.broker.calls(),self.broker.calls('CANCEL'),self.broker.calls('MODIFY'))
+    def locked(self,id,status):
+        self.assertNotEqual(self.manager.get(id)['state'],'CLOSED')
+        self.assertEqual([p['id'] for p in status['positions']],[id]);self.assertTrue(status['attentionRequired'])
+    def trade(self):
+        with self.journal.connection() as db:return json.loads(db.execute('SELECT payload FROM trades').fetchone()[0])
+    def test_confirmed_outside_sale_cancels_own_stop_sends_no_sale_and_unlocks(self):
+        id,_,_=self.entry();before=self.broker.calls();self.outside();status=self.cycle(231)
+        self.assertEqual((self.broker.calls('CANCEL'),self.stops()[0]['status']),(0,6));self.locked(id,status)
+        status=self.wait()
+        self.assertEqual((self.manager.get(id)['state'],self.manager.get(id)['exit_reason']),('CLOSED','CLOSED_OUTSIDE_APP'))
+        self.assertEqual((self.stops()[0]['status'],self.broker.calls(),self.broker.calls('CANCEL')),(1,before,1))
+        self.assertEqual((status['positions'],status['attentionRequired']),([],None))
+        self.assertEqual([(n['id'],n['quantity'],n['symbol']) for n in status['needsChecking']],[(id,130,self.symbol)])
+    def test_journal_says_needs_checking_without_a_price_or_profit(self):
+        self.entry();self.outside();self.wait();row=self.trade()
+        self.assertEqual((row.get('exit'),row.get('pnl'),row.get('grossPnl'),row.get('needsChecking')),(None,None,None,True))
+        self.assertIn('NEEDS CHECKING',row['notes']);self.assertEqual(self.journal.list_trades()['trades'],[])
+    def test_the_next_trade_on_the_same_option_works_normally(self):
+        self.entry();self.outside();self.wait();self.ticket={**self.ticket,'setupId':'NEXT'}
+        id,_,result=self.entry();self.assertTrue(result['protectionConfirmed']);self.tick(240)
+        self.assertEqual((self.runtime.request_exit(id)['state'],self.held()),('CLOSED',0))
+    def test_survives_a_restart_midway(self):
+        id,_,_=self.entry();self.outside();self.cycle(231)
+        self.manager=Manager(self.execution,self.journal)
+        self.runtime=Runtime(self.execution,self.manager,self.feed,self.market,clock=lambda:self.now,day_clock=self.runtime.day_clock)
+        self.wait();self.assertEqual(self.manager.get(id)['state'],'CLOSED')
+    def test_stop_already_cancelled_by_fyers_sends_nothing(self):
+        id,_,_=self.entry();row=self.stops()[0];row.update(status=1);self.broker._write(row,'BROKER_CANCEL');self.outside();before=self.counts()
+        self.wait();self.assertEqual((self.manager.get(id)['state'],self.counts(),len(self.sells())),('CLOSED',before,1))
+    def test_exit_button_and_1518_send_no_sale(self):
+        id,_,_=self.entry();self.outside();self.tick(240)
+        with self.assertRaisesRegex(ValueError,'CLOSED_OUTSIDE'):self.runtime.request_exit(id)
+        self.runtime.day_clock=lambda:ist(15,18);self.wait()
+        self.assertEqual([r['orderTag'] for r in self.sells()],[''])
+    def test_works_with_buying_off(self):
+        id,_,_=self.entry();self.orders.enabled=False;self.outside();self.wait()
+        self.assertEqual((self.manager.get(id)['state'],self.stops()[0]['status']),('CLOSED',1))
+    def test_both_strategies_on_one_option_sold_together(self):
+        a,_,_=self.entry();core=str(uuid.uuid4())
+        self.market.current=lambda:{'tickets':{'CORE_MANUAL':{**self.ticket,'strategyFamily':'CORE','setupId':'C'}},'snapshot':{}}
+        self.runtime.prepare(core,'CORE');self.runtime.submit(core);before=self.broker.calls()
+        self.outside(260);status=self.wait(8)
+        self.assertEqual((status['positions'],self.broker.calls(),self.broker.calls('CANCEL')),([],before,2))
+    def unclear(self,id,rounds=6):
+        before=self.counts();status=self.wait(rounds)
+        self.assertEqual(self.counts(),before);self.locked(id,status)
+        self.assertEqual((self.stops()[0]['status'],status['needsChecking']),(6,[]))
+    def test_part_sold_outside_stays_locked(self):
+        id,_,_=self.entry();self.outside(65);self.unclear(id)
+    def test_positions_alone_showing_zero_stays_locked(self):
+        id,_,_=self.entry();self.broker.net_quantity=lambda s:0;self.unclear(id)
+    def test_a_brief_late_positions_reading_changes_nothing(self):
+        id,_,_=self.entry();real=self.broker.net_quantity;self.broker.net_quantity=lambda s:0
+        self.assertIsNone(self.cycle(231)['attentionRequired']);self.broker.net_quantity=real
+        status=self.wait();self.assertEqual((self.manager.get(id)['state'],status['attentionRequired']),('MANAGING',None))
+    def test_orderbook_shows_sale_but_positions_still_show_holding(self):
+        id,_,_=self.entry();self.outside();self.broker.net_quantity=lambda s:130;self.unclear(id)
+    def test_no_positions_row_is_not_proof(self):
+        id,_,_=self.entry();self.outside();self.broker.position_rows=lambda s:[];self.unclear(id)
+    def test_an_empty_orderbook_never_cancels_the_stop(self):
+        id,_,_=self.entry();real=self.broker.orders_for_symbol;self.broker.orders_for_symbol=lambda s:[]
+        self.broker.net_quantity=lambda s:0;self.unclear(id)
+    def test_open_order_from_outside_stays_locked(self):
+        id,_,_=self.entry();self.outside();self.outside(65,side=1,status=6);self.unclear(id)
+    def test_our_own_unfilled_sale_stays_locked_and_is_not_cancelled(self):
+        id,_,_=self.entry();self.shape(is_sale,status=6);self.tick(240);self.runtime.request_exit(id)
+        self.broker.place_order=self.place;self.outside();before=self.counts();status=self.wait()
+        self.assertEqual(self.counts(),before);self.locked(id,status)
+    def test_unseen_own_stop_stays_locked(self):
+        held=[]
+        def placed(payload):
+            if is_stop(payload):held.append(1);raise TimeoutError()
+            return self.place(payload)
+        self.broker.place_order=placed;id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaises(ValueError):self.runtime.submit(id)
+        self.outside();before=self.counts();status=self.wait()
+        self.assertEqual((self.counts(),len(held)),(before,1));self.locked(id,status)
+    def test_unconfirmed_cancel_stays_locked_until_confirmed(self):
+        id,_,_=self.entry();real=self.broker.cancel_order;self.broker.cancel_order=lambda i:{'s':'ok','id':i}
+        self.outside();status=self.wait();self.locked(id,status)
+        self.broker.cancel_order=real;self.wait();self.assertEqual(self.manager.get(id)['state'],'CLOSED')
+    def test_never_unlocks_a_double_sale(self):
+        id,_,_=self.entry();self.outside();self.broker.fill_stop(self.stops()[0]['id'],219)
+        status=self.wait();self.assertEqual(self.held(),-130);self.locked(id,status)
+    def test_buying_back_after_a_seen_sale_does_not_resume_trading(self):
+        id,_,_=self.entry();self.outside();self.cycle(231);self.outside(130,side=1);before=self.counts()
+        status=self.wait();self.assertEqual(self.counts(),before);self.locked(id,status)
+    def test_sale_before_the_first_stop_sends_no_stop(self):
+        def sold_at_once(payload):
+            result=self.place(payload)
+            if is_buy(payload):self.outside()
+            return result
+        self.broker.place_order=sold_at_once;id=str(uuid.uuid4());self.runtime.prepare(id,'SCALP')
+        with self.assertRaisesRegex(ValueError,'CLOSED_OUTSIDE'):self.runtime.submit(id)
+        self.wait();self.assertEqual((len(self.stops()),self.manager.get(id)['state']),(0,'CLOSED'))
+    def test_fyers_reader_returns_only_this_intraday_option_and_rejects_odd_rows(self):
+        from fyers_broker import FyersBroker
+        rows=[{'symbol':'A','productType':'INTRADAY','side':1,'filledQty':65,'status':2},
+              {'symbol':'A','productType':'MARGIN','side':-1,'filledQty':65,'status':2},
+              {'symbol':'B','productType':'INTRADAY','side':1,'filledQty':65,'status':2}]
+        class Client:
+            def orderbook(self):return {'s':'ok','orderBook':rows}
+            def positions(self):return {'s':'ok','netPositions':[{'symbol':'A','productType':'INTRADAY','netQty':0},{'symbol':'A','productType':'MARGIN','netQty':65}]}
+        broker=FyersBroker(Client())
+        self.assertEqual(broker.orders_for_symbol('A'),rows[:1]);self.assertEqual(len(broker.position_rows('A')),1)
+        self.assertEqual(broker.net_quantity('A'),0)
+        rows[0]={**rows[0],'filledQty':'65'}
+        with self.assertRaises(ValueError):broker.orders_for_symbol('A')
+
 if __name__=='__main__':unittest.main()

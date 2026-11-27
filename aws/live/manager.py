@@ -7,6 +7,7 @@ from pathlib import Path
 from decimal import ROUND_FLOOR
 from orders import TERMINAL,encoded
 from planner import decimal
+from outside import OutsideWatch
 from protection import Protection
 
 # Failed-sale handling. Untested starting values, to be tuned on evidence.
@@ -27,6 +28,7 @@ class Manager:
     def __init__(self,execution,journal,node='node'):
         self.execution,self.orders,self.journal=execution,execution.orders,journal
         self.node=node;self.lock=threading.RLock();self.protection=Protection(execution)
+        self.outside=OutsideWatch(execution,self.protection)
         with self.orders.transaction() as db:
             db.execute('''CREATE TABLE IF NOT EXISTS live_managed_positions (
                 id TEXT PRIMARY KEY, payload TEXT NOT NULL, stop_intent TEXT NOT NULL,
@@ -61,6 +63,7 @@ class Manager:
         with self.lock:
             managed=self.get(entry_id)
             if managed['state']!='PROTECTING':return managed
+            if self._closed_outside(entry_id):return self.get(entry_id)
             entry=self.orders.get(entry_id);position=json.loads(managed['payload'])
             symbol=json.loads(entry['payload'])['symbol']
             tick=decimal(self.execution.planner.validate_contract(symbol)['tick_size']);stop=decimal(position['initialStop'])
@@ -103,18 +106,18 @@ class Manager:
             with self.orders.transaction() as db:
                 ids=[r['id'] for r in db.execute('SELECT id FROM live_intents WHERE parent_id=?',(entry_id,))]
             for id in ids:self.orders.reconcile(id)
-            entry=self.orders.get(entry_id)
-            with self.orders.transaction() as db:
-                closed=sum(r['filled_qty'] for r in db.execute('SELECT filled_qty FROM live_intents WHERE parent_id=?',(entry_id,)))
-            if closed==entry['filled_qty']:return self._closed(entry_id)
+            if self._closed_outside(entry_id):return {'state':'CLOSED'}
+            if self._remaining(entry_id)==0:return self._closed(entry_id)
             return {'state':managed['state']}
     def pulse(self,entry_id,quote,snapshot):
         with self.lock:
             managed=self.get(entry_id)
             if not managed: raise ValueError('UNKNOWN_MANAGED_POSITION')
             if managed['state']=='CLOSED': return {'state':'CLOSED'}
+            if self._closed_outside(entry_id): return {'state':'CLOSED'}
             if managed['state']=='PROTECTING':
                 managed=self.try_protect(entry_id)
+                if managed['state']=='CLOSED': return {'state':'CLOSED'}
             # Until the first stop is confirmed, strategy exits are still watched.
             # A sale still waits in _work_exit until any old stop is confirmed gone.
             unconfirmed=managed['state']=='PROTECTING'
@@ -159,7 +162,12 @@ class Manager:
     def _remaining(self,entry_id):
         with self.orders.transaction() as db:
             sold=sum(r['filled_qty'] for r in db.execute('SELECT filled_qty FROM live_intents WHERE parent_id=?',(entry_id,)))
-        return self.orders.get(entry_id)['filled_qty']-sold
+        return self.orders.get(entry_id)['filled_qty']-sold-self.orders.external_quantity(entry_id)
+    def _closed_outside(self,entry_id):
+        """True once an outside close is confirmed; raises while it is unclear."""
+        if not self.outside.check(entry_id,self._remaining(entry_id)): return False
+        self.orders.drain_journal(self.journal)
+        return True
     def progress(self,entry_id):
         with self.orders.transaction() as db: row=db.execute('SELECT * FROM live_exit_progress WHERE id=?',(entry_id,)).fetchone()
         return dict(row) if row else None
@@ -202,6 +210,8 @@ class Manager:
         exit_id=managed['exit_intent']
         if prior:
             exit_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'iom-auto-exit:'+entry_id+':'+str(attempt)))
+        # Look again immediately before selling: it may have been sold outside.
+        if self._closed_outside(entry_id): return {'state':'CLOSED'}
         limit=self._exit_limit(symbol,progress)
         self._save_progress(entry_id,attempt,progress['started'] if progress else now,now)
         with self.orders.transaction() as db: db.execute('UPDATE live_managed_positions SET exit_intent=? WHERE id=?',(exit_id,entry_id))
@@ -227,6 +237,7 @@ class Manager:
         if limit<=0: raise ValueError('INVALID_EXIT_BID')
         return limit
     def _closed(self,entry_id):
+        self.outside.guard_close(entry_id)
         with self.orders.transaction() as db: db.execute("UPDATE live_managed_positions SET state='CLOSED' WHERE id=?",(entry_id,))
         self.orders.drain_journal(self.journal)
         return {'state':'CLOSED'}

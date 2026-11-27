@@ -100,7 +100,7 @@ export default function LiveOrderPanel({ tradeAmount }) {
       <Status label="Real stop and exit test" value={status ? status.actualBrokerAcceptanceVerified ? 'Verified' : 'Not yet verified' : 'Not checked'} />
     </div>
     {status && !status.actualBrokerAcceptanceVerified && <p className="live-setup-note">The connection is working. A real broker trade is still needed to verify the stop and automatic exit.</p>}
-    {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your orders and positions in FYERS before continuing.</p>}
+    {status?.attentionRequired && <p className="live-setup-error" role="alert">A trade needs attention. Check your positions and any open stop or sell orders in FYERS before continuing.</p>}
 
     {heldWhileOff && <p className="live-setup-note" role="status">Buying is off. Stops and sales for trades your server already holds still send real orders to FYERS.</p>}
 
@@ -132,6 +132,8 @@ export default function LiveOrderPanel({ tradeAmount }) {
       <p>{!expiresIn ? 'This plan has expired. Review the trade again for current prices.' : !enabled ? 'You can review this plan, but buying remains switched off.' : 'Submitting this buy sends a real-money order to FYERS. The price and setup are checked again.'}</p>
       <button className="live-setup-button live-setup-buy" type="button" disabled={busy || !enabled || !expiresIn} onClick={() => run(submit)}>Submit this real buy</button>
     </div>}
+
+    {status?.needsChecking?.length > 0 && <div className="live-setup-step"><h3>Needs checking</h3>{status.needsChecking.map(trade => <div className="live-setup-position" key={trade.id}><div><strong>{trade.symbol} · quantity {trade.quantity}</strong><p>Closed outside the app. Sale price and profit or loss were not recorded. Check this trade in FYERS.</p></div></div>)}</div>}
 
     {status?.positions?.length > 0 && <div className="live-setup-step"><h3>Trades and plans on your server</h3>{status.positions.map(position => <div className="live-setup-position" key={position.id}><div><strong>{position.strategy === 'CORE' ? '13-point' : 'Scalp'} · {position.symbol}</strong><p>{position.state === 'PREPARED' ? 'Plan only — no purchase confirmed.' : position.state === 'MANAGING' ? 'Position is being managed by your server.' : 'Check the latest order status in FYERS.'}</p></div>{position.state !== 'PREPARED' && <button className="live-setup-button live-setup-exit" type="button" disabled={busy || !exitsAllowed} onClick={() => run(async () => { await api('exit', { entryId: position.id }); await refresh(); })}>Exit this real position</button>}</div>)}</div>}
 

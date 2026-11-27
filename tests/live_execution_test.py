@@ -33,6 +33,7 @@ class FakeBroker:
         if self.timeout: raise TimeoutError()
         return {'s':'ok','id':key}
     def orders_by_tag(self,tag): return [r.copy() for r in self.orders.values() if r['orderTag']==tag]
+    def orders_for_symbol(self,symbol): return [r.copy() for r in self.orders.values() if r['symbol']==symbol]
     def net_quantity(self,symbol):
         return self.extra+sum(r['side']*r['filledQty'] for r in self.orders.values() if r['symbol']==symbol)
     def fill(self,key,qty=None,price=230,status=2):

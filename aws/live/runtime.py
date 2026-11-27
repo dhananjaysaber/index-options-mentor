@@ -19,7 +19,7 @@ TZ=ZoneInfo('Asia/Kolkata')
 FORCED_CLOSE=(15,18)
 STALE_READING_ALERT_SECONDS=15
 # Sales for these reasons say nothing about whether a strategy exit works.
-NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED'}
+NOT_STRATEGY_EXITS={'USER_EXIT','END_OF_DAY','PROTECTION_FAILED','PROTECTION_LOST','STOP_NOT_FILLED','CLOSED_OUTSIDE_APP'}
 
 class Runtime:
     def __init__(self,execution,manager,feed,market,*,max_amount=30000,clock=time.time,day_clock=None):
@@ -75,7 +75,8 @@ class Runtime:
             return {'ok':True,'mode':'OWNED_EXECUTION_HOST','actualLiveExecutionHostReleased':True,
                 'realMoneyEnabled':self._enabled(),'exitsAllowed':self._exits_allowed(),'settings':self.settings(),'positions':[
                     {'id':r['id'],'strategy':r['strategy'],'state':r['state'],'symbol':json.loads(r['ticket'])['symbol']} for r in rows],
-                'attentionRequired':self.last_error,'strategyReadingStale':self.reading_stale,**self.acceptance()}
+                'attentionRequired':self.last_error,'strategyReadingStale':self.reading_stale,
+                'needsChecking':self.orders.external_closes(),**self.acceptance()}
     def prepare(self,intent_id,strategy,automatic=False):
         with self.lock:
             if strategy not in ('CORE','SCALP') or type(automatic) is not bool:raise ValueError('INVALID_STRATEGY')

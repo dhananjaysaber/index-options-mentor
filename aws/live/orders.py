@@ -43,6 +43,9 @@ class Orders:
                     state TEXT NOT NULL, broker_id TEXT, filled_qty INTEGER DEFAULT 0,
                     average_price REAL, detail TEXT NOT NULL DEFAULT ''
                 );
+                CREATE TABLE IF NOT EXISTS live_external_closes (
+                    entry_id TEXT PRIMARY KEY, quantity INTEGER NOT NULL, noticed_at TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS live_controls (
                     id INTEGER PRIMARY KEY CHECK(id=1), stopped INTEGER NOT NULL
                 );
@@ -150,7 +153,8 @@ class Orders:
                 reserved = 0
                 for exit_order in db.execute('SELECT * FROM live_intents WHERE parent_id=?', (parent_id,)):
                     reserved += exit_order['filled_qty'] if exit_order['state'] in TERMINAL else json.loads(exit_order['payload'])['qty']
-                if quantity > entry['filled_qty'] - reserved:
+                gone = db.execute('SELECT 1 FROM live_external_closes WHERE entry_id=?', (parent_id,)).fetchone()
+                if gone or quantity > entry['filled_qty'] - reserved:
                     raise ValueError('EXIT_EXCEEDS_OWNED_QUANTITY')
             elif db.execute('SELECT stopped FROM live_controls WHERE id=1').fetchone()[0]:
                 raise ValueError('NEW_ORDERS_STOPPED')
@@ -266,6 +270,39 @@ class Orders:
             elif any(json.loads(r['payload'])['type']==4 and r['filled_qty'] for r in exits): trade['exitReason']='BROKER_PROTECTIVE_STOP'
         event = {'id':entry_id+':BROKER_CLOSED','type':'TRADE_CLOSED','queuedAt':now,'trade':trade}
         db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)',(event['id'],encoded(event)))
+
+    def external_quantity(self, entry_id):
+        with self.transaction() as db:
+            row = db.execute('SELECT quantity FROM live_external_closes WHERE entry_id=?', (entry_id,)).fetchone()
+        return row['quantity'] if row else 0
+
+    def record_external_close(self, entry_id, quantity):
+        """Close a trade sold outside the app. No sale price or profit is recorded."""
+        now = stamp()
+        with self.transaction() as db:
+            entry = db.execute('SELECT * FROM live_intents WHERE id=?', (entry_id,)).fetchone()
+            saved = db.execute('SELECT plan FROM live_plans WHERE id=?', (entry_id,)).fetchone()
+            plan = json.loads(saved['plan']) if saved else {}
+            symbol = json.loads(entry['payload'])['symbol']
+            trade = {'id':entry_id,'mode':'LIVE','executionMode':'REAL','symbol':symbol,'side':symbol[-2:],
+                     'strategyFamily':plan.get('strategyFamily','CORE'),'quantity':entry['filled_qty'],
+                     'entry':entry['average_price'],'openedAt':entry['created_at'],'entryOrderId':entry['broker_id'],
+                     'brokerOrderPlaced':True,'exit':None,'pnl':None,'grossPnl':None,
+                     'exitReason':'CLOSED_OUTSIDE_APP','needsChecking':True,'noticedClosedAt':now,
+                     'closedOutsideQuantity':quantity,
+                     'notes':'NEEDS CHECKING: closed outside the app. Sale price and profit or loss not recorded.'}
+            # A checkpoint keeps it out of closed-trade totals, which need a price.
+            event = {'id':entry_id+':OUTSIDE_CLOSE','type':'POSITION_CHECKPOINT','queuedAt':now,'trade':trade}
+            db.execute('INSERT OR IGNORE INTO live_external_closes VALUES (?,?,?)', (entry_id,quantity,now))
+            db.execute('INSERT OR IGNORE INTO live_journal_outbox(id,payload) VALUES (?,?)', (event['id'],encoded(event)))
+            db.execute("UPDATE live_managed_positions SET state='CLOSED',exit_reason='CLOSED_OUTSIDE_APP' WHERE id=?", (entry_id,))
+
+    def external_closes(self, limit=10):
+        with self.transaction() as db:
+            rows = list(db.execute('''SELECT e.entry_id,e.quantity,e.noticed_at,i.payload FROM live_external_closes e
+                                      JOIN live_intents i ON i.id=e.entry_id ORDER BY e.noticed_at DESC LIMIT ?''', (limit,)))
+        return [{'id':r['entry_id'],'quantity':r['quantity'],'noticedAt':r['noticed_at'],
+                 'symbol':json.loads(r['payload'])['symbol']} for r in rows]
 
     def _release_refused(self, current):
         if current['state'] != 'UNKNOWN' or current['detail'] != 'BROKER_REFUSED':

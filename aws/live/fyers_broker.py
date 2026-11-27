@@ -40,17 +40,28 @@ class FyersBroker:
             raise ValueError('FYERS_ORDERBOOK_INVALID')
         return [row for row in rows if row.get('orderTag') == tag]
 
-    def net_quantity(self, symbol):
+    def orders_for_symbol(self, symbol):
+        """Today's intraday orders for one option, including ones not sent here."""
+        rows = self._ok(self.client.orderbook()).get('orderBook')
+        if not isinstance(rows,list) or any(not isinstance(r,dict) for r in rows):
+            raise ValueError('FYERS_ORDERBOOK_INVALID')
+        found = [r for r in rows if r.get('symbol') == symbol and r.get('productType') == 'INTRADAY']
+        if any(r.get('side') not in (1,-1) or type(r.get('filledQty')) is not int or r['filledQty'] < 0
+               or type(r.get('status')) is not int for r in found):
+            raise ValueError('FYERS_ORDERBOOK_INVALID')
+        return found
+
+    def position_rows(self, symbol):
         rows = self._ok(self.client.positions()).get('netPositions')
-        if not isinstance(rows,list): raise ValueError('FYERS_POSITIONS_INVALID')
-        qty = 0
-        for row in rows:
-            if not isinstance(row,dict): raise ValueError('FYERS_POSITIONS_INVALID')
-            if row.get('symbol') == symbol and row.get('productType') == 'INTRADAY':
-                value = row.get('netQty')
-                if type(value) is not int: raise ValueError('FYERS_POSITIONS_INVALID')
-                qty += value
-        return qty
+        if not isinstance(rows,list) or any(not isinstance(r,dict) for r in rows):
+            raise ValueError('FYERS_POSITIONS_INVALID')
+        found = [r for r in rows if r.get('symbol') == symbol and r.get('productType') == 'INTRADAY']
+        if any(type(r.get('netQty')) is not int for r in found):
+            raise ValueError('FYERS_POSITIONS_INVALID')
+        return found
+
+    def net_quantity(self, symbol):
+        return sum(r['netQty'] for r in self.position_rows(symbol))
 
     def place_order(self, payload):
         if self.send_enabled is not True:
