@@ -144,14 +144,22 @@ class FailedSaleTests(Case):
         return sorted((r['limitPrice'] for r in rows.values()),reverse=True)
     def test_unfilled_sale_steps_down_below_the_fresh_bid(self):
         id,_,_=self.entry();self.shape(is_sale,status=6);self.tick(240);self.runtime.request_exit(id)
-        self.cycle(240,1);self.assertEqual(len(self.sells()),1)
-        self.cycle(240,5);self.cycle(240,6);self.cycle(240,10)
-        self.assertEqual(self.limits(),[240,237.6,235.2,228])
+        # First try: 2% below the best buying price.
+        self.cycle(240,1);self.assertEqual(self.limits(),[235.2])
+        # Still unsold after about 5 seconds: 5% below, and no further while the price holds.
+        self.cycle(240,5);self.assertEqual(self.limits(),[235.2,228])
+        self.cycle(240,6);self.cycle(240,10)
+        self.assertEqual(self.limits(),[235.2,228])
         self.assertEqual(sum(r['status']==6 for r in self.sells()),1)
         self.assertEqual(self.runtime.last_error,'OWNED_POSITION_REQUIRES_ATTENTION')
         self.broker.place_order=self.place;self.cycle(200)
         self.assertEqual((self.manager.get(id)['state'],self.held()),('CLOSED',0))
         self.assertEqual(self.journal.health()['trades'],1)
+    def test_after_a_further_fall_the_new_sale_is_5_percent_below_the_new_price(self):
+        id,_,_=self.entry();self.shape(is_sale,status=6);self.tick(240);self.runtime.request_exit(id)
+        self.cycle(240,5);self.cycle(220,6)
+        self.assertEqual(self.limits(),[235.2,228,209])
+        self.assertEqual(sum(r['status']==6 for r in self.sells()),1)
     def test_repeated_rejections_slow_down(self):
         id,_,_=self.entry();self.shape(is_sale,status=5);self.tick(240);self.runtime.request_exit(id)
         for _ in range(20):self.cycle(240)

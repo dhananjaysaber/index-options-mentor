@@ -11,10 +11,11 @@ from outside import OutsideWatch
 from protection import Protection
 
 # Failed-sale handling. Untested starting values, to be tuned on evidence.
-# Each replacement sale is a limit order this far below the fresh best bid.
+# Every sale is a limit order this far below the fresh best bid: the first at
+# the first step, every later one at the widest. Owner decision 27 Nov 2026.
 EXIT_REPRICE_SECONDS = 5
 EXIT_FAST_ATTEMPTS, EXIT_SLOW_SECONDS = 6, 30
-EXIT_STEPS = ('0', '0.01', '0.02')
+EXIT_STEPS = ('0.02',)
 # After this long (or after the small steps) use the widest allowance and raise
 # attention. It stands in for the broker's lowest allowed price, which this
 # code does not receive. There is never a market-order fallback.
