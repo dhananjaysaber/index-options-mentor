@@ -2,19 +2,20 @@ import { derivePositionMentor, deriveScalpPositionMentor, fmt, formatR } from '.
 import useLiveQuote from '../hooks/useLiveQuote.js';
 import { freshOptionMark } from '../services/optionQuoteFreshness.js';
 import { countedTrades } from '../engine/researchHours.js';
+import { totalGroup } from '../services/journalFilters.js';
 
 export default function LivePositionPanel({ position, onExit, history = [], snapshot = null, sticky = false }) {
   const liveQuote = useLiveQuote();
   if (!position) {
     const today = new Date().toDateString();
-    const todayTrades = countedTrades(history).filter(t => new Date(t.closedAt).toDateString() === today);
+    const todayTrades = countedTrades(history).filter(t => totalGroup(t) === 'practice' && new Date(t.closedAt).toDateString() === today);
     const pnl = todayTrades.reduce((sum, t) => sum + Number(t.pnl || 0), 0);
     const wins = todayTrades.filter(t => Number(t.pnl) > 0).length;
     const losses = todayTrades.filter(t => Number(t.pnl) < 0).length;
     return (
       <section className="panel compact-position-card">
         <div className="position-empty-left"><div className="eyebrow">POSITION</div><h2>No simulated position</h2><p>The Mentor can open eligible research positions automatically, or you can open one manually from the trade box.</p></div>
-        <div className="session-stat-row"><div><span>Trades today</span><strong>{todayTrades.length}</strong></div><div><span>Wins</span><strong>{wins}</strong></div><div><span>Losses</span><strong>{losses}</strong></div><div><span>Realised sim P&amp;L</span><strong className={pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>₹{pnl.toFixed(0)}</strong></div></div>
+        <div className="session-stat-row"><div><span>Practice trades today · not Research A or B</span><strong>{todayTrades.length}</strong></div><div><span>Wins</span><strong>{wins}</strong></div><div><span>Losses</span><strong>{losses}</strong></div><div><span>Realised sim P&amp;L</span><strong className={pnl >= 0 ? 'pnl-pos' : 'pnl-neg'}>₹{pnl.toFixed(0)}</strong></div></div>
       </section>
     );
   }

@@ -1,4 +1,5 @@
 import { countedTrades } from '../engine/researchHours.js';
+import { researchRecorder } from './researchAnalysis.js';
 const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'Asia/Kolkata',
   year: 'numeric',
@@ -97,7 +98,8 @@ export function buildReplayLab(history = [], fiveMinute = [], threeMinute = []) 
 export function buildJournalCounterfactual(history = [], fiveMinute = [], threeMinute = []) {
   const five = normaliseCandles(fiveMinute);
   const three = normaliseCandles(threeMinute);
-  const rows = countedTrades(dedupeTrades(history));
+  // Research records are left out: two recorders can save the same trade.
+  const rows = countedTrades(dedupeTrades(history)).filter(trade => !researchRecorder(trade));
   const cases = [];
   const fiveSessions = new Map(groupSessions(five).map(session => [session.date, session.rows]));
   const threeSessions = new Map(groupSessions(three).map(session => [session.date, session.rows]));

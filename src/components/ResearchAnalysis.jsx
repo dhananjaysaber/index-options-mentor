@@ -354,7 +354,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
           <JournalContext title="Tuesday records" stats={expiryJournal.tuesday} />
           <JournalContext title="Other weekdays" stats={expiryJournal.other} />
         </div>
-        <p className="analysis-method-note">This becomes meaningful only after enough recorded trades exist. A few trades can look excellent or poor purely by chance.</p>
+        <p className="analysis-method-note">Practice trades only; research and real-money trades are left out here. This becomes meaningful only after enough recorded trades exist. A few trades can look excellent or poor purely by chance.</p>
       </section>
 
       <section className="analysis-section replay-lab-section">
@@ -363,7 +363,7 @@ export default function ResearchAnalysis({ history, brokerStatus }) {
             <span>STAGE 2 · SAME-ENTRY COUNTERFACTUAL</span>
             <h2>What if the same recorded entry used a different exit manager?</h2>
           </div>
-          <small>R-based · NIFTY path only</small>
+          <small>R-based · NIFTY path only · research records left out</small>
         </div>
 
         {!brokerStatus?.authenticated ? (

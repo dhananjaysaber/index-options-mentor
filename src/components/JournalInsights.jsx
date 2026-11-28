@@ -1,6 +1,7 @@
 // Read-only summary of the trades currently shown in the journal.
 import { buildCohortAnalysis } from '../services/researchAnalysis.js';
 import { countedTrades } from '../engine/researchHours.js';
+import { moneyType, tradeLabel } from '../services/journalFilters.js';
 
 const rupees = value => `${value < 0 ? '−' : '+'}₹${Math.abs(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 const known = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -13,7 +14,7 @@ export default function JournalInsights({ trades, onNavigate }) {
   return <aside className="fyers-ref-journal-insights" aria-label="Journal insights">
     {latest && <section className="fyers-ref-card">
       <h3>Learning loop · latest shown trade</h3>
-      <p className="fyers-ref-insight-name">{latest.side} · {latest.symbol}</p>
+      <p className="fyers-ref-insight-name">{latest.side} · {latest.symbol} · {tradeLabel(latest)} · {moneyType(latest)}</p>
       <dl>
         <div><dt>Entry score</dt><dd>{show(latest.score)}</dd></div>
         <div><dt>Entry gates</dt><dd>{show(latest.entryMandatoryPassCount, n => `${n}/5`)}</dd></div>

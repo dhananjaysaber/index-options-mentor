@@ -2,11 +2,14 @@ import { countedTrades, resultExclusion } from '../engine/researchHours.js';
 
 export const COHORTS = [
   { id: 'legacy', label: 'Legacy Mentor', short: 'Legacy', copy: 'Earlier Mentor simulation records using the older target/target-zone position manager.' },
-  { id: 'shadow', label: '13-point Shadow Research', short: 'Shadow', copy: 'Background research positions opened by the research engine even when the visible Mentor did not fully approve the setup.' },
-  { id: 'core_auto', label: '13-point Auto Research', short: '13-point Auto', copy: 'Current 13-point research positions opened automatically by the Mentor under the active research-tier rules.' },
-  { id: 'core_manual', label: '13-point Manual Research', short: '13-point Manual', copy: 'Current 13-point research positions opened manually by the user and then managed by the Mentor.' },
-  { id: 'scalp_auto', label: 'Scalp Research · Auto', short: 'Scalp Auto', copy: 'Scalp research positions opened automatically only when the strict scalp entry checks pass.' },
-  { id: 'scalp_manual', label: 'Scalp Research · Manual', short: 'Scalp Manual', copy: 'Scalp research positions opened manually when manual scalp safety requirements are available.' }
+  { id: 'research_a', label: 'Research A · practice', short: 'Research A', copy: 'Practice trades saved by research recorder A. It has its own rules. Never added to Research B, because both can save the same trade.' },
+  { id: 'research_b', label: 'Research B · practice', short: 'Research B', copy: 'Practice trades saved by research recorder B. It has its own rules. Never added to Research A, because both can save the same trade.' },
+  { id: 'research_other', label: 'Research · recorder not saved', short: 'Research ?', copy: 'Older research records that do not say which recorder saved them.' },
+  { id: 'real', label: 'Real money', short: 'Real', copy: 'Trades recorded as real money. Kept apart from all practice trades.' },
+  { id: 'core_auto', label: '13-point Auto · practice', short: '13-point Auto', copy: 'Current 13-point research positions opened automatically by the Mentor under the active research-tier rules.' },
+  { id: 'core_manual', label: '13-point Manual · practice', short: '13-point Manual', copy: 'Current 13-point research positions opened manually by the user and then managed by the Mentor.' },
+  { id: 'scalp_auto', label: 'Scalp Auto · practice', short: 'Scalp Auto', copy: 'Scalp research positions opened automatically only when the strict scalp entry checks pass.' },
+  { id: 'scalp_manual', label: 'Scalp Manual · practice', short: 'Scalp Manual', copy: 'Scalp research positions opened manually when manual scalp safety requirements are available.' }
 ];
 
 export function classifyTradeCohort(trade) {
@@ -39,16 +42,39 @@ export function classifyTradeCohort(trade) {
   return 'core_auto';
 }
 
+export function isRealTrade(trade) {
+  return ['LIVE', 'REAL'].includes(trade?.executionMode) || trade?.mode === 'LIVE';
+}
+
+// Which of the two research recorders saved a record: 'A', 'B', 'OTHER', or null if not research.
+export function researchRecorder(trade) {
+  if (isRealTrade(trade) || classifyTradeCohort(trade) !== 'shadow') return null;
+  const names = [trade?.initiatedBy, trade?.closedBy].map(value => String(value || '').toUpperCase());
+  if (names[0] === 'SHADOW_RESEARCH') return 'A';
+  if (names[0] === 'RESEARCH_ENGINE') return 'B';
+  if (names[1] === 'SHADOW_RESEARCH') return 'A';
+  if (names[1] === 'RESEARCH_ENGINE' || String(trade?.id || '').startsWith('shadow:')) return 'B';
+  return 'OTHER';
+}
+
+function cohortKey(trade) {
+  if (isRealTrade(trade)) return 'real';
+  const recorder = researchRecorder(trade);
+  return recorder ? `research_${recorder.toLowerCase()}` : classifyTradeCohort(trade);
+}
+
+const cohortName = trade => COHORTS.find(row => row.id === cohortKey(trade))?.label || cohortKey(trade);
+
 export function buildCohortAnalysis(history = []) {
   const rows = dedupe(history);
   return COHORTS.map(definition => {
-    const trades = rows.filter(trade => classifyTradeCohort(trade) === definition.id);
+    const trades = rows.filter(trade => cohortKey(trade) === definition.id);
     return {
       ...definition,
       trades,
       stats: summariseTrades(trades)
     };
-  });
+  }).filter(row => row.trades.length || !['real', 'research_other'].includes(row.id));
 }
 
 export function summariseTrades(trades = []) {
@@ -90,7 +116,7 @@ export function explainTrade(trade) {
 
   const excluded = resultExclusion(trade);
   if (excluded) {
-    return { cohort, cohortLabel: COHORTS.find(row => row.id === cohort)?.label || cohort, reasons: [excluded === 'Missed close'
+    return { cohort, cohortLabel: cohortName(trade), reasons: [excluded === 'Missed close'
       ? 'No check closed this research trade in time, so it has no result and is left out of totals.'
       : 'This research trade was carried overnight, so its saved profit or loss is left out of totals. The record is not changed.'] };
   }
@@ -103,8 +129,8 @@ export function explainTrade(trade) {
 
   if (cohort === 'shadow') {
     const gates = trade?.entryMandatoryPassCount != null ? String(trade.entryMandatoryPassCount) + '/5 mandatory gates' : 'a partial mandatory-gate setup';
-    reasons.push('The background research engine opened this as Shadow Research with ' + gates + '.');
-    reasons.push('Shadow Research is deliberately broader than the visible Mentor recommendation: hard risk/liquidity safety must remain intact, a completed 5-minute close is required, and the setup is tracked for evidence even when full approval is absent.');
+    reasons.push('A background research recorder opened this practice trade with ' + gates + '.');
+    reasons.push('Background research is deliberately broader than the visible Mentor recommendation: hard risk/liquidity safety must remain intact, a completed 5-minute close is required, and the setup is tracked for evidence even when full approval is absent.');
     if (trade?.mentorApprovedAtEntry === false) reasons.push('The visible Mentor did not approve this entry at the time; the trade exists specifically to measure what happened anyway.');
   }
 
@@ -137,7 +163,7 @@ export function explainTrade(trade) {
 
   return {
     cohort,
-    cohortLabel: COHORTS.find(row => row.id === cohort)?.label || cohort,
+    cohortLabel: cohortName(trade),
     reasons
   };
 }
@@ -209,7 +235,7 @@ export function buildMarketEvidence(fiveMinute = [], threeMinute = []) {
 
 export function analyseExpiryProxy(trades = []) {
   const groups = { tuesday: [], other: [] };
-  for (const trade of countedTrades(dedupe(trades))) {
+  for (const trade of countedTrades(dedupe(trades)).filter(row => !isRealTrade(row) && !researchRecorder(row))) {
     const time = new Date(trade?.openedAt || trade?.closedAt || 0).getTime();
     if (!Number.isFinite(time) || time <= 0) continue;
     const key = weekdayIST(time) === 2 ? 'tuesday' : 'other';

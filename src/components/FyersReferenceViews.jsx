@@ -11,7 +11,7 @@ import PositionAlertBanner from './PositionAlertBanner.jsx';
 import LivePositionPanel from './LivePositionPanel.jsx';
 import { freshOptionMark } from '../services/optionQuoteFreshness.js';
 import History, { dedupeHistory } from './History.jsx';
-import { filterJournal, STRATEGY_FILTERS, SOURCE_FILTERS, TAG_FILTERS, isScalpRecord, tradeSource } from '../services/journalFilters.js';
+import { filterJournal, STRATEGY_FILTERS, SOURCE_FILTERS, TAG_FILTERS, isScalpRecord, moneyType, sourceName, totalGroup } from '../services/journalFilters.js';
 import JournalInsights from './JournalInsights.jsx';
 import { countedTrades, resultExclusion } from '../engine/researchHours.js';
 import SettingsPanel from './SettingsPanel.jsx';
@@ -119,7 +119,7 @@ function FyersPositionStrip({ corePosition, scalpPosition, coreMentor, scalpMent
       <div role="tablist" aria-label="Positions, trades and alerts">{[['open','Open positions',Number(Boolean(core)) + Number(Boolean(scalp))],['today',"Today's trades",today.length],['alerts','Alerts',alerts.length]].map(([id,text,total])=><button type="button" role="tab" aria-selected={tab===id} className={tab===id?'active':''} onClick={()=>setTab(id)} key={id}>{text} · {total}</button>)}</div>
       <button type="button" className="fyers-ref-open-all" onClick={onOpen}>All positions ›</button>
     </div>
-    {tab==='today' && (today.length ? today.map((row,index)=><div className="fyers-ref-list-row" key={row.id||index}><strong>{row.symbol}</strong><span>{isScalpRecord(row)?'Scalp':'13-Point'} · {tradeSource(row).toUpperCase()}</span>{resultExclusion(row) ? <span>{resultExclusion(row)} · not counted</span> : <span className={Number(row.pnl)>=0?'positive':'danger'}>{Number(row.pnl)>=0?'+':'−'}{money(Math.abs(Number(row.pnl)||0))}</span>}</div>) : <p className="fyers-ref-list-empty">No completed practice trades today.</p>)}
+    {tab==='today' && (today.length ? today.map((row,index)=><div className="fyers-ref-list-row" key={row.id||index}><strong>{row.symbol}</strong><span>{isScalpRecord(row)?'Scalp':'13-Point'} · {sourceName(row).toUpperCase()} · {moneyType(row).toUpperCase()}</span>{resultExclusion(row) ? <span>{resultExclusion(row)} · not counted</span> : <span className={Number(row.pnl)>=0?'positive':'danger'}>{Number(row.pnl)>=0?'+':'−'}{money(Math.abs(Number(row.pnl)||0))}</span>}</div>) : <p className="fyers-ref-list-empty">No completed practice trades today.</p>)}
     {tab==='alerts' && (alerts.length ? alerts.map(([name,position,mentor])=><div className="fyers-ref-list-row" key={name}><strong>{mentor.title}</strong><span>{name} · {position.symbol}</span><span>{mentor.reason || mentor.copy || ''}</span></div>) : <p className="fyers-ref-list-empty">No alerts for open practice positions.</p>)}
     {tab==='open' && <><div className="fyers-ref-position-columns"><span>Instrument</span><span>Strategy</span><span>Qty</span><span>Entry</span><span>Fresh LTP</span><span>Est. P&L</span><span></span></div>
     {rows.map(([name,position,strategy])=>{
@@ -235,7 +235,8 @@ export function FyersTicket({ snapshot, settings, liveQuote, onBack }) {
 }
 export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPosition, history, snapshot, coreMentor, scalpMentor, alertsEnabled, onExit }) {
   const [slot,setSlot] = useState(defaultSlot);
-  const completed = countedTrades(history).filter(x=>x.closedAt);
+  // Practice trades only: research (which can be saved twice) and real money are left out.
+  const completed = countedTrades(dedupeHistory(history)).filter(x=>x.closedAt && totalGroup(x)==='practice');
   const today = completed.filter(x=>new Date(x.closedAt).toDateString()===new Date().toDateString());
   const total = today.reduce((sum,x)=>sum+Number(x.pnl||0),0);
   return <div className="fyers-ref-page fyers-ref-positions"><h1>Positions</h1><p>Practice positions only · real trades are listed in Settings → Your trading connection</p>
@@ -243,6 +244,7 @@ export function FyersPositions({ defaultSlot = 'core', corePosition, scalpPositi
     <div className="fyers-ref-position-active">
       {slot==='core'?<><PositionAlertBanner position={corePosition} mentor={coreMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('core',{...meta,closedBy:'USER'})}/><LivePositionPanel position={corePosition} onExit={meta=>onExit('core',meta)} history={history} snapshot={snapshot}/></>:<><PositionAlertBanner position={scalpPosition} mentor={scalpMentor} alertsEnabled={alertsEnabled} onExit={meta=>onExit('scalp',{...meta,closedBy:'USER'})}/><LivePositionPanel position={scalpPosition} onExit={meta=>onExit('scalp',meta)} history={history} snapshot={snapshot}/></>}
     </div>
+    <p className="fyers-ref-today-note">Today · practice trades only. Research A, Research B and real trades are not in these figures.</p>
     <div className="fyers-ref-today"><Value label="Trades today" value={today.length}/><Value label="Wins" value={count(today,t=>Number(t.pnl)>0)} tone="positive"/><Value label="Losses" value={count(today,t=>Number(t.pnl)<0)} tone="danger"/><Value label="Net" value={money(total)} tone={total>=0?'positive':'danger'}/></div>
     <div className="fyers-ref-positions-secondary">{slot==='core'?'Scalp':'13-Point'} slot · {(slot==='core'?scalpPosition:corePosition)?'1 open position':'No position · watching'}</div>
   </div>;
@@ -256,13 +258,13 @@ export function FyersJournal({ history, onNavigate }) {
   const filtered=filterJournal(rows,{strategy,source,tag});
   const pills=(label,options,value,choose,countKey)=><div role="group" aria-label={label}><b>{label}</b>{options.map(([v,text])=>{
     const count=filterJournal(rows,{strategy,source,tag,[countKey]:v}).length;
-    if(v==='other'&&!count&&value!==v) return null;
+    if((v==='other'||v==='researchOther')&&!count&&value!==v) return null;
     return <button type="button" className={value===v?'active':''} aria-pressed={value===v} onClick={()=>choose(v)} key={v}>{text} <small>{count}</small></button>;
   })}</div>;
   return <div className="fyers-ref-page fyers-ref-journal"><div className="fyers-ref-journal-title"><h1>Trade journal</h1><p>Permanent learning loop</p></div>
     <div className="fyers-ref-segment"><button className="active" type="button">Journal</button><button type="button" onClick={()=>onNavigate('analysis')}>Analysis</button></div>
     <div className="fyers-ref-journal-filters">{pills('Strategy',STRATEGY_FILTERS,strategy,setStrategy,'strategy')}{pills('Source',SOURCE_FILTERS,source,setSource,'source')}{pills('Strategy tag',TAG_FILTERS,tag,setTag,'tag')}</div>
-    <div className="fyers-ref-journal-layout"><History history={filtered}/><JournalInsights trades={filtered} onNavigate={onNavigate}/></div>
+    <div className="fyers-ref-journal-layout"><History history={filtered} allRecords={rows}/><JournalInsights trades={filtered} onNavigate={onNavigate}/></div>
   </div>;
 }
 export function FyersSettings({ settings, onSave, brokerStatus, mode }) {

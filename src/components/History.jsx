@@ -1,19 +1,21 @@
 import { useState } from 'react';
-import { explainTrade } from '../services/researchAnalysis.js';
-import { tradeSource } from '../services/journalFilters.js';
+import { explainTrade, researchRecorder } from '../services/researchAnalysis.js';
+import { groupForTotals, matchingCopy, moneyType, sourceName, tradeLabel, tradeSource } from '../services/journalFilters.js';
 import { countedTrades, resultExclusion } from '../engine/researchHours.js';
 
-export default function History({ history }) {
+export default function History({ history, allRecords }) {
   const [filter, setFilter] = useState('all');
   const allHistory = dedupeHistory(history);
   const displayHistory = allHistory.filter(trade => filter === 'all' ? true : filter === 'scalp' ? isScalpTrade(trade) : !isScalpTrade(trade));
-  const summary = summariseHistory(displayHistory);
+  const groups = groupForTotals(displayHistory);
+  const countedNumber = countedTrades(displayHistory).length;
+  const everything = allRecords || allHistory;
 
   return (
     <section className="panel history-panel history-panel-v2">
       <div className="panel-heading compact">
         <div><div className="eyebrow">LEARNING LOOP</div><h2>Trade history</h2></div>
-        <span className="muted">{displayHistory.length} trades</span>
+        <span className="muted">{displayHistory.length} records</span>
       </div>
 
       <div className="history-filter-tabs" role="group" aria-label="Trade journal strategy filter">
@@ -22,16 +24,26 @@ export default function History({ history }) {
         <button type="button" className={filter === 'scalp' ? 'active' : ''} onClick={() => setFilter('scalp')}>Scalp</button>
       </div>
 
-      <div className="history-summary-grid" aria-label="Trade journal summary">
-        <SummaryMetric label="Total trades" value={summary.total} />
-        <SummaryMetric label="Net P&L" value={`₹${formatMoney(summary.pnl)}`} tone={summary.pnl >= 0 ? 'positive' : 'negative'} />
-        <SummaryMetric label="Wins" value={summary.wins} tone="positive" />
-        <SummaryMetric label="Losses" value={summary.losses} tone="negative" />
-        <SummaryMetric label="Win rate" value={`${summary.winRate.toFixed(0)}%`} />
-        <SummaryMetric label="Avg R" value={formatR(summary.avgR)} tone={summary.avgR >= 0 ? 'positive' : 'negative'} />
-      </div>
+      {displayHistory.some(trade => tradeSource(trade).startsWith('research')) && <p className="history-research-key" role="note"><b>Research A and Research B are practice only.</b> They use different rules and can both save the same trade, so their totals are never added together.</p>}
 
-      {displayHistory.length > summary.total && <p className="history-excluded-note" role="note">{displayHistory.length - summary.total} research {displayHistory.length - summary.total === 1 ? 'trade is' : 'trades are'} not counted in these totals (carried overnight or missed close). Saved records are not changed.</p>}
+      {groups.map(group => {
+        const summary = summariseHistory(group.rows);
+        return (
+          <section className="history-summary-group" data-group={group.id} key={group.id} aria-label={`${group.label} totals`}>
+            <h3>{group.label}</h3>
+            <div className="history-summary-grid">
+              <SummaryMetric label="Total trades" value={summary.total} />
+              <SummaryMetric label="Net P&L" value={`₹${formatMoney(summary.pnl)}`} tone={summary.pnl >= 0 ? 'positive' : 'negative'} />
+              <SummaryMetric label="Wins" value={summary.wins} tone="positive" />
+              <SummaryMetric label="Losses" value={summary.losses} tone="negative" />
+              <SummaryMetric label="Win rate" value={`${summary.winRate.toFixed(0)}%`} />
+              <SummaryMetric label="Avg R" value={formatR(summary.avgR)} tone={summary.avgR >= 0 ? 'positive' : 'negative'} />
+            </div>
+          </section>
+        );
+      })}
+
+      {displayHistory.length > countedNumber && <p className="history-excluded-note" role="note">{displayHistory.length - countedNumber} research {displayHistory.length - countedNumber === 1 ? 'trade is' : 'trades are'} not counted in these totals (carried overnight or missed close). Saved records are not changed.</p>}
 
       <div className="premium-history-columns" aria-hidden="true"><span>Strategy / contract</span><span>Entry / exit</span><span>Quantity / source</span><span>Profit / loss</span><span>Details</span></div>
       {displayHistory.length === 0 ? (
@@ -43,13 +55,13 @@ export default function History({ history }) {
               <details className="history-card-v2 history-card-expandable" key={trade.id || stableHistoryKey(trade)}>
                 <summary className="history-card-summary">
                   <div className="history-card-head">
-                    <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{trade.strategyTierLabel || trade.strategyTier || 'Legacy trade'}</span><strong>{trade.side} · {trade.symbol}</strong><small>{trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small></div>
+                    <div><span className={`history-tier tier-${String(trade.strategyTier || 'legacy').toLowerCase()}`}>{tradeLabel(trade)}</span><strong>{trade.side} · {trade.symbol}</strong><small>{tradeSource(trade).startsWith('research') ? `Saved by ${sourceName(trade)}` : trade.initiatedBy ? `Opened by ${trade.initiatedBy}` : 'Earlier simulation'} · {formatDateTime(trade.openedAt)}</small>{matchingCopy(trade, everything) && <em className="history-twin">Likely the same trade as one in {sourceName(matchingCopy(trade, everything))}</em>}</div>
                     {resultExclusion(trade)
                       ? <div className="history-pnl excluded"><span>{resultExclusion(trade)}</span><strong>Not counted</strong>{Number.isFinite(trade.pnl) && <small>Saved ₹{formatMoney(trade.pnl)} · {formatR(trade.rAchieved)}</small>}</div>
                       : <div className={`history-pnl ${Number(trade.pnl) >= 0 ? 'positive' : 'negative'}`}><span>P&amp;L</span><strong>₹{formatMoney(trade.pnl)}</strong><small>{formatR(trade.rAchieved)}</small></div>}
                   </div>
                   <div className="premium-history-prices"><span>₹{formatMoney(trade.entry)}</span><small>→ {resultExclusion(trade) === 'Missed close' ? 'no exit result' : `₹${formatMoney(trade.exit)}`}</small></div>
-                  <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{tradeSource(trade).toUpperCase()} · {trade.executionMode === 'LIVE' || trade.mode === 'LIVE' ? 'REAL' : 'PAPER'}</small></div>
+                  <div className="premium-history-quantity"><span>{trade.quantity ?? '—'} qty</span><small>{sourceName(trade).toUpperCase()} · {moneyType(trade).toUpperCase()}</small></div>
                   <div className="history-card-open-hint"><span>View position details</span><i aria-hidden="true" /></div>
                 </summary>
 
@@ -198,6 +210,7 @@ function historySignature(trade) {
   const closed = normaliseTime(trade?.closedAt);
   if (!symbol || !opened || !closed) return '';
   return [
+    researchRecorder(trade) || '',
     symbol,
     opened,
     closed,
